@@ -69,12 +69,23 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
+  const normalizedSrc = useMemo(() => {
+    if (src && src.includes('teradl.kingx.dev/index.m3u8')) {
+       // Convert teradl direct m3u8 to player iframe URL to bypass CORS blocks and allow iframe mode
+       const match = src.match(/teradl\.kingx\.dev\/index\.m3u8\?url=([^&]+)/);
+       if (match && match[1]) {
+           return `https://player.kingx.dev/?url=${match[1]}`;
+       }
+    }
+    return src;
+  }, [src]);
+
   const isIframeMode = useMemo(() => {
-    if (!src) return false;
-    const lowerSrc = src.toLowerCase();
+    if (!normalizedSrc) return false;
+    const lowerSrc = normalizedSrc.toLowerCase();
     
     // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.') || lowerSrc.includes('mega.nz') || lowerSrc.includes('terabox') || lowerSrc.includes('gdplayer') || lowerSrc.includes('youtube.com') || lowerSrc.includes('youtu.be')) {
+    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
       return true;
     }
     
@@ -84,18 +95,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return false;
-  }, [src]);
+  }, [normalizedSrc]);
 
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
-    if (isIframeMode) return { video_url: src, subtitle_url: subtitleUrl };
+    if (isIframeMode) return { video_url: normalizedSrc, subtitle_url: subtitleUrl };
 
-    let vToPlay = src;
+    let vToPlay = normalizedSrc;
     let sToPlay = subtitleUrl;
     
     try {
-      if (src && src.includes('video_url=')) {
-        const urlObj = new URL(src, window.location.origin);
+      if (normalizedSrc && normalizedSrc.includes('video_url=')) {
+        const urlObj = new URL(normalizedSrc, window.location.origin);
         
         // 1. Try standard searchParams
         let v = urlObj.searchParams.get('video_url');
@@ -132,7 +143,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         
         // 3. Fallback regex se tudo falhar - extraindo de forma mais robusta sem quebrar nos '&' do streaming embeddado
         if (!v) {
-          const matchVid = src.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+          const matchVid = normalizedSrc.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
           if (matchVid && matchVid[1]) {
              v = decodeURIComponent(matchVid[1]);
           }
@@ -147,7 +158,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [src, subtitleUrl]);
+  }, [normalizedSrc, subtitleUrl, isIframeMode]);
 
   const [activeSrc, setActiveSrc] = useState(parsedUrls.video_url);
   const [activeSubtitleUrl, setActiveSubtitleUrl] = useState(parsedUrls.subtitle_url);
@@ -600,25 +611,20 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           if (Hls.isSupported() && !isIOS) {
             const hls = new Hls({
               enableWorker: true,
-              lowLatencyMode: false,
+              lowLatencyMode: true,
               startFragPrefetch: true,
               capLevelToPlayerSize: true, // Limits initial quality based on player frame size to start faster
               autoStartLoad: true,
-              startLevel: 0, // Auto level can fail on slow servers, start slow
+              startLevel: -1, // Use auto level
               startPosition: startPoint > 0 ? startPoint : -1,
-              maxBufferLength: 20,
-              maxMaxBufferLength: 40,
-              manifestLoadingMaxRetry: 30,
-              levelLoadingMaxRetry: 30,
-              fragLoadingMaxRetry: 30,
-              manifestLoadingRetryDelay: 1000,
-              levelLoadingRetryDelay: 1000,
-              fragLoadingRetryDelay: 1000,
-              fragLoadingTimeOut: 20000,
-              manifestLoadingTimeOut: 20000,
-              xhrSetup: (xhr) => { 
-                xhr.withCredentials = false;
-              }
+              maxBufferLength: 30,
+              maxMaxBufferLength: 60,
+              manifestLoadingMaxRetry: 10,
+              levelLoadingMaxRetry: 10,
+              fragLoadingMaxRetry: 10,
+              manifestLoadingRetryDelay: 500,
+              levelLoadingRetryDelay: 500,
+              fragLoadingRetryDelay: 500,
             });
             hls.attachMedia(video);
             hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(videoToPlay));
