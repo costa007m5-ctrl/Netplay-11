@@ -182,13 +182,42 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     setIsLoading(true);
   };
 
-  // Sincroniza activeSrc apenas se a prop src mudar externamente
+  // Sincroniza activeSrc apenas se a prop src mudar externamente.
+  // Usado quando o usuário troca de episódio sem desmontar o player —
+  // resetamos o estado de playback para evitar que o HLS antigo trave o novo.
   useEffect(() => {
     if (parsedUrls.video_url !== activeSrc) {
+      // Destrói qualquer instância de HLS pendente ANTES de mudar o src
+      // para evitar que requisições antigas conflitem com as novas (causa do stuck em 25%).
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch (e) {}
+        hlsRef.current = null;
+      }
+      if (videoRef.current) {
+        try {
+          videoRef.current.pause();
+          videoRef.current.removeAttribute('src');
+          videoRef.current.load();
+        } catch (e) {}
+      }
       setActiveSrc(parsedUrls.video_url);
       setActiveSubtitleUrl(parsedUrls.subtitle_url);
       setSessionKey(Date.now());
       setShowStuckButton(false);
+      // Reseta estados de progresso para o novo conteúdo
+      setCurrentTime(0);
+      setDuration(0);
+      setBufferedPercentage(0);
+      setIsPlaying(false);
+      setIsBuffering(false);
+      setError(null);
+      setIsLoading(true);
+      setLoadingProgress(0);
+      hasStartedPlayedRef.current = false;
+      retryCountRef.current = 0;
+      lastTimeRef.current = 0;
+      recsTargetTimeRef.current = null;
+      recsDismissedRef.current = false;
     }
   }, [parsedUrls.video_url, parsedUrls.subtitle_url]);
 
@@ -1132,18 +1161,71 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const video = videoRef.current as any;
       if (!video) return;
 
+      // Se já está em PiP, sair
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
-      } else if (document.pictureInPictureEnabled) {
-        await video.requestPictureInPicture();
-      } else if (video.webkitSupportsPresentationMode && typeof video.webkitSetPresentationMode === "function") {
-        // Fallback para Safari (iOS/Mac)
-        const currentMode = video.webkitPresentationMode;
-        const newMode = currentMode === "picture-in-picture" ? "inline" : "picture-in-picture";
-        video.webkitSetPresentationMode(newMode);
+        return;
       }
+
+      // Verifica suporte real (alguns navegadores expõem disablePictureInPicture)
+      const supportsStandardPiP = !!document.pictureInPictureEnabled && !video.disablePictureInPicture;
+      const supportsWebkitPiP = !!video.webkitSupportsPresentationMode &&
+        typeof video.webkitSetPresentationMode === 'function';
+
+      if (!supportsStandardPiP && !supportsWebkitPiP) {
+        alert('Mini Player (Picture-in-Picture) não é suportado neste navegador.');
+        return;
+      }
+
+      // PiP não funciona enquanto o vídeo está em fullscreen do documento.
+      // Saímos do fullscreen primeiro e aguardamos antes de pedir o PiP.
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+        try {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if ((document as any).webkitExitFullscreen) {
+            await (document as any).webkitExitFullscreen();
+          }
+        } catch (e) {
+          console.warn('Falha ao sair do fullscreen antes do PiP:', e);
+        }
+        // Pequeno atraso para o navegador concluir a saída do fullscreen
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      // Garante que o vídeo tem áudio audível (PiP precisa de mídia ativa)
+      try { video.muted = false; } catch (e) {}
+
+      // Garante que o vídeo está tocando — algumas implementações
+      // exigem que o elemento esteja em playback para entrar em PiP.
+      if (video.paused) {
+        try { await video.play(); } catch (e) {}
+      }
+
+      try {
+        if (supportsStandardPiP) {
+          await video.requestPictureInPicture();
+        } else if (supportsWebkitPiP) {
+          // Fallback Safari (iOS/Mac)
+          video.webkitSetPresentationMode('picture-in-picture');
+        }
+      } catch (err: any) {
+        // NotAllowedError, InvalidStateError, etc.
+        console.error('Falha ao entrar em PiP:', err);
+        alert('Não foi possível ativar o Mini Player. Tente novamente após iniciar o vídeo.');
+        return;
+      }
+
+      // Após entrar com sucesso em PiP, fecha o player principal para que
+      // o usuário possa navegar pelo app enquanto o vídeo continua na janela flutuante.
+      // Pequeno atraso garante que o evento enterpictureinpicture já disparou.
+      setTimeout(() => {
+        if (document.pictureInPictureElement || (video.webkitPresentationMode === 'picture-in-picture')) {
+          if (onClose) onClose();
+        }
+      }, 250);
     } catch (error) {
-      console.error("PiP error:", error);
+      console.error('PiP error:', error);
     }
   };
 
