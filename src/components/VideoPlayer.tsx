@@ -341,21 +341,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(u)}`);
           if (res.ok) {
             const data = await res.json();
-            // Expected response format usually contains stream or download url.
-            // If the API returns video/subtitle, map them. Let's assume it returns { url: "...", subtitle: "..." } or { stream_url: "..." }
-            const vUrl = data.url || data.stream_url || data.video_url || data.src || (data.data && data.data.url);
-            if (vUrl) {
-              setExtractedVideoUrl(vUrl);
-              setFinalVideoUrl(vUrl);
-              if (data.subtitle || data.subtitle_url) {
-                setExtractedSubtitleUrl(data.subtitle || data.subtitle_url);
-              }
-            } else if (data.list && data.list.length > 0) {
-               // Terabox API from xapiverse might return list of files
-               const vid = data.list.find((i: any) => i.url || i.dlink);
-               if (vid) {
-                  setExtractedVideoUrl(vid.url || vid.dlink);
-                  setFinalVideoUrl(vid.url || vid.dlink);
+            
+            let vid = data.list && data.list.length > 0 ? data.list[0] : data;
+            
+            if (vid) {
+               const stUrl = vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
+               
+               if (stUrl) {
+                  setExtractedVideoUrl(stUrl);
+                  setFinalVideoUrl(stUrl);
+               }
+               
+               const subUrl = vid.subtitle_url || data.subtitle || data.subtitle_url;
+               if (subUrl) {
+                  setExtractedSubtitleUrl(subUrl);
                }
             }
           }

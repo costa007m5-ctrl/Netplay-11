@@ -44,8 +44,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
 
   const videoUrlToPlay = React.useMemo(() => {
     if (!testResult) return null;
-    return testResult.url || testResult.stream_url || testResult.video_url || testResult.src || (testResult.data && testResult.data.url) || 
-      (testResult.list && testResult.list.length > 0 && (testResult.list[0].url || testResult.list[0].dlink));
+    let vid = testResult.list && testResult.list.length > 0 ? testResult.list[0] : testResult;
+    return vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.stream_url || vid.url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
   }, [testResult]);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       const mapped = [];
       for (const item of list) {
         const filename = item.filename || item.name || 'Desconhecido';
-        const urlToSave = item.url || item.dlink || item.stream_url || folderUrl;
+        const urlToSave = item.fast_stream_url?.['1080p'] || item.fast_stream_url?.['720p'] || item.fast_stream_url?.['480p'] || item.fast_stream_url?.['360p'] || item.normal_dlink || item.url || item.dlink || item.stream_url || folderUrl;
 
         // Try to match with TMDB
         const searchName = filename.replace(/\.(mp4|mkv|avi|webm)$/i, '').replace(/[\.\-_]/g, ' ').trim();
@@ -164,7 +164,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    return data.url || data.stream_url || (data.list && data.list.length > 0 && (data.list[0].url || data.list[0].dlink)) || url;
+    let vid = data.list && data.list.length > 0 ? data.list[0] : data;
+    return vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.url || vid.stream_url || vid.dlink || url;
   };
 
   const processUpdateSingle = async (movie: Movie) => {
