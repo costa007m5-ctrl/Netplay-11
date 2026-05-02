@@ -973,8 +973,14 @@ if (Hls.isSupported() && !isIOS) {
 
     const handleCanPlay = () => {
       // O vídeo está pronto para tocar — empurra o target para 95%.
-      // Só escondemos o loading quando ele realmente começa a renderizar (handleTimeUpdate).
       setProgressTarget(95);
+      
+      // Se já estava tocando antes (ex: seek, buffering), esconde loading imediatamente
+      if (hasStartedPlayedRef.current) {
+        completeProgress();
+        setIsLoading(false);
+        setShowLogoOverlay(false);
+      }
 
       if (video.paused) {
         // Only autoplay if we are host, OR if we are not in a room, OR if we are supposed to be playing.
@@ -1007,18 +1013,6 @@ if (Hls.isSupported() && !isIOS) {
         }).catch(() => {});
       }
     };
-
-const handleCanPlay = () => {
-  // canplay é disparado quando há dados suficientes para começar a reproduzir
-  // Já mostramos progresso quase completo
-  setProgressTarget(95);
-  // Se o vídeo já começou a tocar antes, esconde loading imediatamente
-  if (hasStartedPlayedRef.current) {
-    completeProgress();
-    setIsLoading(false);
-    setShowLogoOverlay(false);
-  }
-  };
 
   const handleCanPlayThrough = () => {
   // canplaythrough = pode reproduzir até o fim sem parar
