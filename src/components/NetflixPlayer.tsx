@@ -782,16 +782,16 @@ if (Hls.isSupported() && !isIOS) {
   backBufferLength: 0,
   maxBufferSize: networkOptimizedConfig.maxBufferSize || 30 * 1000 * 1000,
   maxBufferHole: 0.8,
-  // Timeouts adaptativos baseados na qualidade da conexão
-  manifestLoadingMaxRetry: networkOptimizedConfig.manifestLoadingMaxRetry || 5,
-  levelLoadingMaxRetry: networkOptimizedConfig.levelLoadingMaxRetry || 5,
-  fragLoadingMaxRetry: networkOptimizedConfig.fragLoadingMaxRetry || 5,
-  manifestLoadingRetryDelay: networkOptimizedConfig.manifestLoadingRetryDelay || 100,
-  levelLoadingRetryDelay: networkOptimizedConfig.levelLoadingRetryDelay || 100,
-  fragLoadingRetryDelay: networkOptimizedConfig.fragLoadingRetryDelay || 100,
-  manifestLoadingTimeOut: networkOptimizedConfig.manifestLoadingTimeOut || 5000,
-  levelLoadingTimeOut: networkOptimizedConfig.levelLoadingTimeOut || 5000,
-  fragLoadingTimeOut: networkOptimizedConfig.fragLoadingTimeOut || 8000,
+  // Timeouts mais tolerantes para proxies que demoram a inicializar (ex: kingx.dev)
+  manifestLoadingMaxRetry: networkOptimizedConfig.manifestLoadingMaxRetry || 8,
+  levelLoadingMaxRetry: networkOptimizedConfig.levelLoadingMaxRetry || 8,
+  fragLoadingMaxRetry: networkOptimizedConfig.fragLoadingMaxRetry || 8,
+  manifestLoadingRetryDelay: networkOptimizedConfig.manifestLoadingRetryDelay || 500,
+  levelLoadingRetryDelay: networkOptimizedConfig.levelLoadingRetryDelay || 500,
+  fragLoadingRetryDelay: networkOptimizedConfig.fragLoadingRetryDelay || 300,
+  manifestLoadingTimeOut: networkOptimizedConfig.manifestLoadingTimeOut || 15000, // 15s para manifesto
+  levelLoadingTimeOut: networkOptimizedConfig.levelLoadingTimeOut || 15000,
+  fragLoadingTimeOut: networkOptimizedConfig.fragLoadingTimeOut || 20000, // 20s para fragmentos
   // Delays adaptativos baseados na rede
   maxStarvationDelay: networkOptimizedConfig.maxStarvationDelay || 1,
   maxLoadingDelay: networkOptimizedConfig.maxLoadingDelay || 1,
@@ -848,15 +848,23 @@ if (Hls.isSupported() && !isIOS) {
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                    // Fail fast for 403 Forbidden or 404 Not Found as retrying won't help
                    if (data.response?.code === 403 || data.response?.code === 404) {
-                     setError({ message: "Link expirado ou acesso negado. Feche e tente reproduzir novamente ou escollha outro player.", type: 'network' });
+                     setError({ message: "Link expirado ou acesso negado. Feche e tente reproduzir novamente ou escolha outro player.", type: 'format' });
                      setIsLoading(false);
                      return;
                    }
-                   if (retryCountRef.current < 10) { 
+                   // Proxies como kingx.dev/teradl podem precisar de mais tempo para inicializar
+                   // Aumentamos para 20 tentativas com delays mais longos
+                   const MAX_RETRIES = 20;
+                   if (retryCountRef.current < MAX_RETRIES) { 
                      retryCountRef.current++;
-                     setProgressTarget(Math.max(targetProgressRef.current, 20));
-                     // Retry rápido com backoff exponencial: 200ms, 400ms, 800ms...
-                     const retryDelay = Math.min(200 * Math.pow(2, retryCountRef.current - 1), 2000);
+                     // Atualiza progresso visual para mostrar que está tentando
+                     const progressIncrease = Math.min(5, (100 - targetProgressRef.current) / (MAX_RETRIES - retryCountRef.current + 1));
+                     setProgressTarget(Math.min(95, targetProgressRef.current + progressIncrease));
+                     
+                     // Delay mais longo para dar tempo ao proxy: 500ms, 1s, 1.5s, 2s, 2.5s, 3s (max)
+                     const retryDelay = Math.min(500 + (retryCountRef.current * 500), 3000);
+                     console.log(`[v0] HLS retry ${retryCountRef.current}/${MAX_RETRIES} em ${retryDelay}ms`);
+                     
                      setTimeout(() => {
                        // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
@@ -865,9 +873,9 @@ if (Hls.isSupported() && !isIOS) {
                        } else {
                            hls.startLoad();
                        }
-                     }, retryDelay); // Retry rápido com backoff
+                     }, retryDelay);
                    } else {
-                     setError({ message: "Falha contínua na conexão. O servidor pode estar offline ou bloqueado.", type: 'network' });
+                     setError({ message: "Não foi possível conectar ao servidor de vídeo após várias tentativas. Tente outro player ou verifique se o link ainda é válido.", type: 'format' });
                      setIsLoading(false);
                    }
                  }
