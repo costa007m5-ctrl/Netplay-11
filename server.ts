@@ -12,7 +12,7 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '3000', 10);
   
   // Initialize Supabase Admin strictly for backend operations
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/['"]/g, '').trim();
@@ -132,7 +132,7 @@ async function startServer() {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: http:; " + // Permitir imagens de qualquer lugar seguro
       "font-src 'self' https://fonts.gstatic.com; " +
-      "connect-src 'self' https://*.supabase.co https://*.googleapis.com wss://*.supabase.co; " +
+      "connect-src 'self' https://*.supabase.co https://*.googleapis.com wss://*.supabase.co https://*.kingx.dev https://teradl.kingx.dev https://worker.kingx.dev; " +
       "media-src 'self' https: http: blob:; " + // Permitir vídeos de qualquer lugar seguro
       "frame-src 'self' https://*.youtube.com https://*.vimeo.com https://drive.google.com;"
     );
@@ -519,6 +519,60 @@ async function startServer() {
         details: error.response?.data || error.message 
       });
     }
+  });
+
+  // Proxy para o manifesto HLS do KingX/TeraBox
+  // O servidor teradl.kingx.dev restringe CORS apenas para https://player.kingx.dev,
+  // então é preciso buscar o manifesto server-side e repassar com CORS aberto.
+  // Os segmentos (worker.kingx.dev) já têm CORS aberto, não precisam de proxy.
+  app.get('/api/proxy/m3u8', async (req, res) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) {
+      return res.status(400).send('Missing url parameter');
+    }
+
+    try {
+      const decodedUrl = decodeURIComponent(targetUrl);
+      const isKingX = decodedUrl.includes('kingx.dev') || decodedUrl.includes('teradl');
+
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+      };
+      if (isKingX) {
+        headers['Origin'] = 'https://player.kingx.dev';
+        headers['Referer'] = 'https://player.kingx.dev/';
+      }
+
+      const response = await axios.get(decodedUrl, {
+        headers,
+        responseType: 'text',
+        timeout: 15000,
+        validateStatus: () => true,
+      });
+
+      if (response.status >= 400) {
+        console.error(`Proxy m3u8 erro ${response.status} para: ${decodedUrl}`);
+        return res.status(response.status).send(`Falha ao buscar manifesto (${response.status})`);
+      }
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Content-Type', response.headers['content-type'] || 'application/vnd.apple.mpegurl');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.status(200).send(response.data);
+    } catch (error: any) {
+      console.error('Erro no proxy m3u8:', error.message);
+      return res.status(500).send(`Proxy error: ${error.message}`);
+    }
+  });
+
+  app.options('/api/proxy/m3u8', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.status(204).end();
   });
 
   // Proxy para streaming do Google Drive
