@@ -72,17 +72,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const isIframeMode = useMemo(() => {
     if (!src) return false;
     const lowerSrc = src.toLowerCase();
-    
-    // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
-      return true;
-    }
-    
-    // Outros casos contendo video_url podem ser testados nativamente, a menos que sejam das fontes iframe acima
+
+    // Links agregadores com video_url/subtitle_url funcionam melhor no player nativo
+    // para dar autoplay real (clicou, começou) e permitir retry/proxy interno.
     if (lowerSrc.includes('video_url=')) {
       return false;
     }
-    
+
+    // Mantém iframe apenas para embeds puros sem URL de mídia extraível.
+    if (lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+      return true;
+    }
+
     return false;
   }, [src]);
 
