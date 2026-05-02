@@ -25,11 +25,14 @@ const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie:
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    // If it's the play button specifically, or just anywhere on the card based on user preference
-    // User asked for "already load the video direct"
-    const savedUrl = localStorage.getItem(`netplay_progress_url_${movie.id}`);
-    const urlToPlay = savedUrl || (movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl);
-    onPlayMovie(movie, urlToPlay, position);
+    // Para resolver o bug de "Falha contínua na conexão" por causa de links que expiram no Continuar Assistindo:
+    // Se for filme (links em geral mais longos ou fixos), tenta tocar direto com a URL fresca (movie.videoUrl).
+    // Se for série, abrimos o Modal onde as URLs dos episódios são buscadas em tempo real do banco.
+    if (movie.type === 'series') {
+       onSelectMovie(movie);
+    } else {
+       onPlayMovie(movie, movie.videoUrl, position);
+    }
   };
 
   const handleInfoClick = (e: React.MouseEvent) => {

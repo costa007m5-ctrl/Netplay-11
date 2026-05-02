@@ -73,15 +73,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (!src) return false;
     const lowerSrc = src.toLowerCase();
     
-    // Se tiver video_url dentro, tentamos extrair e tocar nativamente em vez de iframe
+    // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
+    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+      return true;
+    }
+    
+    // Outros casos contendo video_url podem ser testados nativamente, a menos que sejam das fontes iframe acima
     if (lowerSrc.includes('video_url=')) {
       return false;
     }
     
-    // Se o link já indica ser um player embutido (ex: Vidoza embed),
-    if (lowerSrc.includes('/embed/') || lowerSrc.includes('iframe')) {
-      return true;
-    }
     return false;
   }, [src]);
 
@@ -634,14 +635,19 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               if (data.fatal) {
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                   if (retryCountRef.current < 50) { 
+                   // Fail fast for 403 Forbidden or 404 Not Found as retrying won't help
+                   if (data.response?.code === 403 || data.response?.code === 404) {
+                     setError({ message: "Link expirado ou acesso negado. Feche e tente reproduzir novamente ou escollha outro player.", type: 'network' });
+                     setIsLoading(false);
+                     return;
+                   }
+                   if (retryCountRef.current < 10) { 
                      retryCountRef.current++;
                      setLoadingProgress(prev => Math.max(prev, 10));
                      setTimeout(() => {
                        // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
-                           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
-                           data.response?.code === 403 || data.response?.code === 404) {
+                           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
                            hls.loadSource(videoToPlay);
                        } else {
                            hls.startLoad();
@@ -656,8 +662,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                    hls.recoverMediaError();
                  }
                  else {
-                   // We ignore other fatal errors to allow auto-recovery without blocking the user
-                   console.error("Ignored fatal error for seamless playback attempt", data);
+                   setError({ message: "Ocorreu um erro no player. O formato de vídeo pode não ser suportado.", type: 'network' });
+                   setIsLoading(false);
                  }
               }
             });
@@ -1522,6 +1528,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             setIsLoading(false);
             setLoadingProgress(100);
             setShowLogoOverlay(false);
+            setIsPlaying(true);
+            hasStartedPlayedRef.current = true;
           }}
         />
       ) : (
