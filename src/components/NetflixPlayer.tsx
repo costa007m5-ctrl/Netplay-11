@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock, Signal } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock } from 'lucide-react';
 import screenfull from 'screenfull';
 import Hls from 'hls.js';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
 import { useNetworkDiagnostics } from '../hooks/useNetworkDiagnostics';
-import { NetworkStatusIndicator, NetworkQualityToast } from './NetworkStatusIndicator';
 
 interface NetflixPlayerProps {
   src: string;
@@ -372,17 +371,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [canCast, setCanCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
 const [qualityToast, setQualityToast] = useState<string | null>(null);
-  const [showNetworkToast, setShowNetworkToast] = useState(false);
-  const [networkQualityChanged, setNetworkQualityChanged] = useState<'excellent' | 'good' | 'fair' | 'poor' | 'offline'>('good');
   
   // Hook de diagnóstico de rede para otimização adaptativa
-  const { stats: networkStats, getOptimizedHlsConfig, prefetchUrl, connectionQuality } = useNetworkDiagnostics({
-    checkInterval: 15000, // Verifica a cada 15s
-    enablePrefetch: true,
-    onQualityChange: (quality) => {
-      setNetworkQualityChanged(quality);
-      setShowNetworkToast(true);
-    },
+  // Nota: callback removido para evitar re-renders durante loading
+  const { getOptimizedHlsConfig } = useNetworkDiagnostics({
+    checkInterval: 60000, // Verifica a cada 60s (menos frequente para evitar interferência)
+    enablePrefetch: false,
   });
   
   const [autoRotate, setAutoRotate] = useState(() => {
@@ -2956,27 +2950,7 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
          </button>
       )}
 
-      {/* Indicador de Status de Rede (compacto, no canto superior direito) */}
-      <AnimatePresence>
-        {showControls && !isLoading && !error && connectionQuality !== 'excellent' && connectionQuality !== 'good' && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-6 right-24 z-[350] pointer-events-none"
-          >
-            <NetworkStatusIndicator stats={networkStats} compact />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Toast de Mudança de Qualidade de Rede */}
-      <NetworkQualityToast
-        quality={networkQualityChanged}
-        show={showNetworkToast}
-        onHide={() => setShowNetworkToast(false)}
-      />
-    </div>
+      </div>
   );
 };
 
