@@ -29,7 +29,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
-    if (isKing) {
+    // KingX (via Xapiverse/Terabox) now requires Captcha on direct M3U8 links. 
+    // We MUST pass the player.kingx.dev wrapper down to NetflixPlayer to trigger isIframeMode.
+    if (isKing && false) {
       try {
         let searchString = '';
         if (url.includes('#')) {
@@ -332,10 +334,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   useEffect(() => {
     const runExtraction = async () => {
       const u = movie.videoUrl || '';
-      const isTera = u.includes('terabox.com') || u.includes('teraboxapp.com') || u.includes('dubox.com') || u.includes('nephobox.com');
-      const isKing = u.includes('player.kingx.dev') || u.includes('teradl.kingx.dev');
+      const isTera = u.includes('terabox.com') || u.includes('teraboxapp.com') || u.includes('dubox.com') || u.includes('nephobox.com') || u.includes('1024terabox.com') || u.includes('freeterabox.com') || u.includes('4funbox.com') || u.includes('mirrobox.com') || u.includes('momerybox.com') || u.includes('teraboxlink.com') || u.includes('terafileshare.com');
       
-      if (isTera || isKing) {
+      if (isTera) {
         setIsExtractingTerabox(true);
         try {
           const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(u)}`);
@@ -359,7 +360,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
           }
         } catch (e) {
-          console.error("Failed to extract Terabox/KingX via API", e);
+          console.error("Failed to extract Terabox via API", e);
         } finally {
           setIsExtractingTerabox(false);
         }
@@ -563,7 +564,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       <div className="relative w-full h-full">
         <NetflixPlayer 
           src={extractedVideoUrl || finalVideoUrl || ""}
-          verificationUrl={isKingX ? (finalVideoUrl || movie.videoUrl) : undefined}
+          // verificationUrl removed since KingX now plays natively via iframe mode
           subtitleUrl={extractedSubtitleUrl || undefined}
           title={displayTitle}
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}

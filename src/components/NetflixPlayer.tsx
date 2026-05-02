@@ -89,7 +89,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     let sToPlay = subtitleUrl;
     
     try {
-      if (src) {
+      // KingX links have Captcha protection, so they must be played via native iframe
+      if (src && !src.includes('kingx.dev')) {
         if (src.includes('video_url=')) {
           const urlObj = new URL(src, window.location.origin);
           

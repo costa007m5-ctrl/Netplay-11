@@ -33,7 +33,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     try {
       const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(testUrl)}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro na requisição');
+      if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
       setTestResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -82,7 +82,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     try {
       const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(folderUrl)}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao extrair pasta');
+      if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
       
       let list = data.list || [];
       if (!list.length && data.url) {
@@ -96,9 +96,15 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
         const filename = item.filename || item.name || 'Desconhecido';
         const urlToSave = item.fast_stream_url?.['1080p'] || item.fast_stream_url?.['720p'] || item.fast_stream_url?.['480p'] || item.fast_stream_url?.['360p'] || item.normal_dlink || item.url || item.dlink || item.stream_url || folderUrl;
 
-        // Try to match with TMDB
-        const searchName = filename.replace(/\.(mp4|mkv|avi|webm)$/i, '').replace(/[\.\-_]/g, ' ').trim();
-        const searchRes = await tmdb.searchMulti(searchName);
+        // Improve TMDB matching by removing years, qualities, and extensions
+        let searchName = filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, '');
+        searchName = searchName.replace(/[\(\[]\d{4}[\)\]]/g, ''); // Removes (2024) or [2024]
+        searchName = searchName.replace(/720p|1080p|4k|2160p/gi, '');
+        searchName = searchName.replace(/WEB-DL|WEBRip|BluRay|HDRip|x264|x265|HEVC/gi, '');
+        searchName = searchName.replace(/[\.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        const resSearch = await tmdb.get(`/search/multi?query=${encodeURIComponent(searchName)}`);
+        const searchRes = resSearch.data.results || [];
         let bestMatch = searchRes && searchRes.length > 0 ? searchRes[0] : null;
 
         mapped.push({
@@ -120,32 +126,58 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   };
 
   const handleSaveScanned = async () => {
-    const toSave = folderResults.filter(r => r.selected && r.tmdb_match);
-    if (!toSave.length) return alert('Nenhum item válido selecionado.');
+    const GENRE_MAP: { [key: number]: string } = {
+      28: "Ação", 12: "Aventura", 16: "Animação", 35: "Comédia", 80: "Crime",
+      99: "Documentário", 18: "Drama", 10751: "Família", 14: "Fantasia",
+      36: "História", 27: "Terror", 10402: "Música", 9648: "Mistério",
+      10749: "Romance", 878: "Ficção Científica", 10770: "Cinema TV",
+      53: "Suspense", 10752: "Guerra", 37: "Faroeste",
+      10759: "Action & Adventure", 10762: "Kids", 10763: "News",
+      10764: "Reality", 10765: "Sci-Fi & Fantasy", 10766: "Soap",
+      10767: "Talk", 10768: "War & Politics"
+    };
+
+    const toSave = folderResults.filter(r => r.selected);
+    if (!toSave.length) return alert('Nenhum item selecionado.');
     
     setSaveLoading(true);
+    let errorCount = 0;
     try {
       for (const item of toSave) {
         const t = item.tmdb_match;
-        const type = t.media_type === 'tv' ? 'series' : 'movie';
+        const type = t ? (t.media_type === 'tv' ? 'series' : 'movie') : 'movie';
         
+        let genreNames = 'Outros';
+        if (t && t.genre_ids) {
+          genreNames = t.genre_ids.map((id: number) => GENRE_MAP[id]).filter(Boolean).join(', ') || 'Outros';
+        }
+
         const newMovie: Partial<Movie> = {
-          title: t.title || t.name,
-          name: t.name || t.title,
-          original_name: t.original_name || t.original_title,
-          overview: t.overview || '',
-          backdrop_path: t.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : '',
-          poster_path: t.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : '',
+          title: t ? (t.title || t.name) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, ''),
+          name: t ? (t.name || t.title) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, ''),
+          original_name: t ? (t.original_name || t.original_title) : undefined,
+          overview: t ? t.overview : 'Adicionado via Terabox API (Info não encontrada)',
+          backdrop_path: t?.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : 'https://picsum.photos/seed/terabox/1920/1080',
+          poster_path: t?.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : 'https://picsum.photos/seed/terabox/500/750',
           type,
+          genres: genreNames,
           videoUrl: item.url,
           videoUrl2: item.url,
           file_name: item.imported_filename
         };
-        await onAddMovie(newMovie);
+        try {
+          await onAddMovie(newMovie);
+        } catch(e) {
+          errorCount++;
+        }
       }
-      alert("Conteúdos adicionados com sucesso!");
-      setFolderResults([]);
-      setFolderUrl('');
+      if (errorCount === 0) {
+        alert("Conteúdos adicionados com sucesso!");
+        setFolderResults([]);
+        setFolderUrl('');
+      } else {
+        alert(`${toSave.length - errorCount} adicionados, ${errorCount} erros (alguns podem ser duplicados).`);
+      }
     } catch (err: any) {
       alert("Erro ao salvar: " + err.message);
     } finally {
@@ -155,15 +187,18 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
 
   // Mass Update Links
   const teraboxMovies = movies.filter(m => {
-    const isTera = m.videoUrl?.includes('terabox') || m.videoUrl?.includes('teradl') || m.videoUrl?.includes('kingx') || m.videoUrl?.includes('xapiverse');
-    const hasTeraEpisodes = m.episodes?.some(ep => ep.videoUrl?.includes('terabox') || ep.videoUrl?.includes('teradl') || ep.videoUrl?.includes('kingx') || ep.videoUrl?.includes('xapiverse'));
+    const isRawTerabox = (url: string | undefined): boolean => {
+      return !!url && (url.includes('terabox.com') || url.includes('teraboxapp.com') || url.includes('dubox.com') || url.includes('nephobox.com') || url.includes('1024terabox.com') || url.includes('freeterabox.com') || url.includes('4funbox.com') || url.includes('mirrobox.com') || url.includes('momerybox.com') || url.includes('teraboxlink.com') || url.includes('terafileshare.com'));
+    };
+    const isTera = isRawTerabox(m.videoUrl);
+    const hasTeraEpisodes = m.episodes?.some(ep => isRawTerabox(ep.videoUrl));
     return isTera || hasTeraEpisodes;
   });
 
   const getDirectLinkFromApi = async (url: string) => {
     const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(url)}`);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
     let vid = data.list && data.list.length > 0 ? data.list[0] : data;
     return vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.url || vid.stream_url || vid.dlink || url;
   };
@@ -175,24 +210,36 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       let newEpisodes = movie.episodes ? [...movie.episodes] : [];
       let updatedCount = 0;
 
-      if (movie.videoUrl && (movie.videoUrl.includes('terabox') || movie.videoUrl.includes('teradl') || movie.videoUrl.includes('kingx') || movie.videoUrl.includes('xapiverse'))) {
-         const newUrl = await getDirectLinkFromApi(movie.videoUrl);
-         if (newUrl && newUrl !== movie.videoUrl) {
-            newVideoUrl = newUrl;
-            needsUpdate = true;
-            updatedCount++;
+      const isRawTerabox = (url: string | undefined): boolean => {
+        return !!url && (url.includes('terabox.com') || url.includes('teraboxapp.com') || url.includes('dubox.com') || url.includes('nephobox.com') || url.includes('1024terabox.com') || url.includes('freeterabox.com') || url.includes('4funbox.com') || url.includes('mirrobox.com') || url.includes('momerybox.com') || url.includes('teraboxlink.com') || url.includes('terafileshare.com'));
+      };
+
+      if (isRawTerabox(movie.videoUrl)) {
+         try {
+           const newUrl = await getDirectLinkFromApi(movie.videoUrl!);
+           if (newUrl && newUrl !== movie.videoUrl) {
+              newVideoUrl = newUrl;
+              needsUpdate = true;
+              updatedCount++;
+           }
+         } catch(e: any) {
+           console.log(`Pulo (Filme): ${movie.title} - ${e.message}`);
          }
       }
 
       if (movie.episodes) {
          for (let i = 0; i < newEpisodes.length; i++) {
            const ep = newEpisodes[i];
-           if (ep.videoUrl && (ep.videoUrl.includes('terabox') || ep.videoUrl.includes('teradl') || ep.videoUrl.includes('kingx') || ep.videoUrl.includes('xapiverse'))) {
-              const newUrl = await getDirectLinkFromApi(ep.videoUrl);
-              if (newUrl && newUrl !== ep.videoUrl) {
-                  newEpisodes[i] = { ...ep, videoUrl: newUrl };
-                  needsUpdate = true;
-                  updatedCount++;
+           if (isRawTerabox(ep.videoUrl)) {
+              try {
+                const newUrl = await getDirectLinkFromApi(ep.videoUrl!);
+                if (newUrl && newUrl !== ep.videoUrl) {
+                    newEpisodes[i] = { ...ep, videoUrl: newUrl };
+                    needsUpdate = true;
+                    updatedCount++;
+                }
+              } catch(e: any) {
+                console.log(`Pulo (Ep ${ep.episode}): ${movie.title} - ${e.message}`);
               }
            }
          }
@@ -216,8 +263,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     setUpdateLog([]);
     for (const movie of teraboxMovies) {
        await processUpdateSingle(movie);
-       // Add a small delay to avoid rate limiting
-       await new Promise(r => setTimeout(r, 1000));
+       // Add a delay to avoid rate limiting
+       await new Promise(r => setTimeout(r, 2500));
     }
     setUpdating(false);
   };

@@ -156,7 +156,12 @@ async function startServer() {
       return res.json(response.data);
     } catch (error: any) {
       console.error('Terabox backend error:', error?.response?.data || error.message);
-      return res.status(500).json({ error: 'Failed to fetch from Terabox API', details: error?.response?.data || error.message });
+      
+      let detailsFormat = error.message;
+      if (error?.response?.data) {
+          detailsFormat = typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data);
+      }
+      return res.status(500).json({ error: 'Failed to fetch from Terabox API', details: detailsFormat });
     }
   });
 

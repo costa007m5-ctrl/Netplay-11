@@ -3301,13 +3301,13 @@ export default function App() {
       if (error) {
         console.error('Erro detalhado do Supabase na criação:', error);
         alert(`Erro ao cadastrar novo conteúdo: ${error.message}`);
-        return;
+        throw error;
       }
 
       fetchMyMovies();
     } catch (err) {
       console.error('Erro ao criar filme:', err);
-      alert('Ocorreu um erro ao cadastrar o conteúdo.');
+      throw err;
     }
   };
 
