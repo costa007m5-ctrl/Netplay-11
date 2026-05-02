@@ -234,7 +234,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingState, setIsLoadingStateRaw] = useState(true);
+  const isLoadingRef = useRef(true);
+  // Wrapper que sincroniza state + ref para leituras em tempo real
+  const setIsLoading = (val: boolean) => {
+    console.log("[v0] setIsLoading:", val);
+    isLoadingRef.current = val;
+    setIsLoadingStateRaw(val);
+  };
+  const isLoading = isLoadingState; // alias para compatibilidade
   const [isBuffering, setIsBuffering] = useState(false);
 
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -264,10 +272,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       });
     }, 30);
   };
+  const loadingProgressRef = useRef(0);
   const setProgressTarget = (value: number) => {
     targetProgressRef.current = Math.max(targetProgressRef.current, Math.min(100, value));
     startProgressAnimation();
   };
+  // Sincroniza a ref com o state para leituras em tempo real dentro de closures
+  useEffect(() => {
+    loadingProgressRef.current = loadingProgress;
+  }, [loadingProgress]);
   const resetProgress = () => {
     stopProgressAnimation();
     targetProgressRef.current = 0;
@@ -682,43 +695,59 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               // startLevel: 0 → começa pela QUALIDADE MAIS BAIXA (menor fragmento, download rápido)
               // O HLS.js sobe a qualidade automaticamente após medir a banda.
               startLevel: 0,
+              abrEwmaDefaultEstimate: 500000, // Assume 500 kbps para iniciar imediatamente
               testBandwidth: false, // não desperdiça tempo medindo banda antes de tocar
               startPosition: startPoint > 0 ? startPoint : -1,
-              // Buffer mínimo para iniciar o playback o mais rápido possível
-              maxBufferLength: 10,
-              maxMaxBufferLength: 30,
+              // Buffer mínimo para iniciar o playback o MAIS RÁPIDO possível
+              maxBufferLength: 5, // Só precisa de 5s de buffer
+              maxMaxBufferLength: 15,
               backBufferLength: 0,
-              maxBufferSize: 20 * 1000 * 1000,
-              // Timeouts e retries agressivos
-              manifestLoadingMaxRetry: 6,
-              levelLoadingMaxRetry: 6,
-              fragLoadingMaxRetry: 6,
-              manifestLoadingRetryDelay: 300,
-              levelLoadingRetryDelay: 300,
-              fragLoadingRetryDelay: 300,
-              manifestLoadingTimeOut: 10000,
-              levelLoadingTimeOut: 10000,
-              fragLoadingTimeOut: 20000,
-              // Deixa o HLS começar a tocar com apenas alguns segundos de buffer
-              maxStarvationDelay: 4,
-              maxLoadingDelay: 4,
-              nudgeMaxRetry: 5,
+              maxBufferSize: 10 * 1000 * 1000, // 10MB
+              maxBufferHole: 0.5,
+              // Timeouts agressivos — se demorar, falhe rápido e tente novamente
+              manifestLoadingMaxRetry: 3,
+              levelLoadingMaxRetry: 3,
+              fragLoadingMaxRetry: 3,
+              manifestLoadingRetryDelay: 200,
+              levelLoadingRetryDelay: 200,
+              fragLoadingRetryDelay: 200,
+              manifestLoadingTimeOut: 8000,
+              levelLoadingTimeOut: 8000,
+              fragLoadingTimeOut: 15000,
+              // Deixa o HLS começar a tocar com pouquíssimo buffer
+              maxStarvationDelay: 2,
+              maxLoadingDelay: 2,
+              nudgeMaxRetry: 3,
+              // Reduz threshold para começar playback mais cedo
+              highBufferWatchdogPeriod: 1,
             });
             hls.attachMedia(video);
             hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+              console.log("[v0] HLS MEDIA_ATTACHED - loading source:", videoToPlay.substring(0, 100));
               setProgressTarget(20);
               hls.loadSource(videoToPlay);
             });
             hls.on(Hls.Events.MANIFEST_LOADING, () => {
+              console.log("[v0] HLS MANIFEST_LOADING");
               setProgressTarget(30);
             });
             hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+              console.log("[v0] HLS MANIFEST_PARSED - levels:", data.levels.length);
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
               setProgressTarget(45);
               
               if (video) {
-                 video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+                 video.play().catch(e => { 
+                   console.warn("Autoplay block", e); 
+                   setAutoplayBlocked(true); 
+                   setShowControls(true); 
+                   setIsPlaying(false);
+                   // Se autoplay foi bloqueado, esconde o loading para mostrar o botão de play
+                   completeProgress();
+                   setIsLoading(false);
+                   setShowLogoOverlay(false);
+                 });
               }
             });
             // Progresso real baseado em eventos do HLS.js
@@ -726,12 +755,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             // FRAG_LOADED → terminou (60→85)
             // FRAG_BUFFERED → bufferizado (85→95)
             hls.on(Hls.Events.FRAG_LOADING, () => {
+              console.log("[v0] HLS FRAG_LOADING");
               setProgressTarget(Math.max(targetProgressRef.current, 60));
             });
             hls.on(Hls.Events.FRAG_LOADED, () => {
+              console.log("[v0] HLS FRAG_LOADED");
               setProgressTarget(Math.max(targetProgressRef.current, 85));
             });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
+              console.log("[v0] HLS FRAG_BUFFERED");
               setProgressTarget(Math.min(95, Math.max(targetProgressRef.current, 92)));
             });
 
@@ -825,32 +857,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const didSeek = Math.abs(time - lastTimeRef.current) > 2;
       lastTimeRef.current = time;
 
-      // O vídeo já está renderizando frames — empurra o target para 100.
-      // Só escondemos o loading quando:
-      //  1) o vídeo está rodando de verdade (time > 0.3s)
-      //  2) tem buffer suficiente à frente (>= 1.5s)
-      //  3) a barra visual chegou em 100%
-      // Isso elimina o "segundo spinner" (buffering aparecer logo depois).
-      if (time > 0.3 && video.readyState >= 3 && !video.seeking && !video.paused) {
-        // Verifica se há buffer suficiente à frente do ponto atual
-        let hasEnoughBuffer = false;
-        if (video.buffered.length > 0) {
-          for (let i = 0; i < video.buffered.length; i++) {
-            const start = video.buffered.start(i);
-            const end = video.buffered.end(i);
-            if (time >= start && time <= end && end - time >= 1.5) {
-              hasEnoughBuffer = true;
-              break;
-            }
-          }
-        }
-        if (isLoading && hasEnoughBuffer) {
-          setProgressTarget(100);
-          if (loadingProgress >= 99) {
-            completeProgress();
-            setIsLoading(false);
-            setShowLogoOverlay(false);
-          }
+      // O vídeo já está renderizando frames — empurra o target para 100 e esconde loading.
+      // Condição simplificada: se o vídeo está tocando (time > 0.2s, readyState >= 3, não pausado),
+      // então o loading deve sair para que o usuário veja o vídeo imediatamente.
+      if (time > 0.2 && video.readyState >= 3 && !video.seeking && !video.paused) {
+        console.log("[v0] handleTimeUpdate - playing, time:", time.toFixed(2), "progressRef:", loadingProgressRef.current, "isLoadingRef:", isLoadingRef.current);
+        if (isLoadingRef.current) {
+          console.log("[v0] Video playing - exiting loading state immediately");
+          completeProgress();
+          setIsLoading(false);
+          setShowLogoOverlay(false);
         }
       }
 
@@ -913,6 +929,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handleCanPlay = () => {
+      console.log("[v0] handleCanPlay - video ready to play");
       // O vídeo está pronto para tocar — empurra o target para 95%.
       // Só escondemos o loading quando ele realmente começa a renderizar (handleTimeUpdate).
       setProgressTarget(95);
@@ -963,6 +980,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handlePlaying = () => {
+      console.log("[v0] handlePlaying - video started playing");
       hasStartedPlayedRef.current = true;
       // O vídeo começou a reproduzir de fato — sobe o target para 100.
       // NÃO escondemos o loading aqui ainda — esperamos o handleTimeUpdate
@@ -1021,13 +1039,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const handleError = (e: any) => {
       // Ignora evento abort (1), que acontece ao desmontar o player ou mudar o src
       if (video.error && video.error.code === 1) return;
-
+      
       // Se HLS.js estiver ativo, ele possui seu próprio tratador de erros ultra-robusto (Hls.Events.ERROR).
       // Evitamos conflito com erros nativos prematuros do HTMLMediaElement.
       if (activeSrc && activeSrc.toLowerCase().includes('.m3u8') && Hls.isSupported() && hlsRef.current) {
-        return; 
+        return;
       }
-
+      
       if (retryCountRef.current < 15) { // increased to 15 for slower cold starts in Safari / iOS
         retryCountRef.current++;
         setTimeout(() => {
@@ -1038,7 +1056,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         }, 2000);
         return;
       }
-
+      
+      // Só chegamos aqui quando os 15 retries falharam — é um erro fatal.
       if (!error) {
         const lowerSrc = (activeSrc || '').toLowerCase();
         let errorMsg = "Não foi possível carregar o vídeo.";
@@ -1053,8 +1072,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           message: errorMsg, 
           type: lowerSrc.includes('drive.google.com') ? 'format' : 'network' 
         });
+        // Só desliga loading quando há erro fatal exibido
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
