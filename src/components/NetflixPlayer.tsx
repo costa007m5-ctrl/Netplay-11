@@ -80,12 +80,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
 
     // player.kingx sem video_url extraível precisa abrir como página embed.
+    // (mantém compatibilidade com links que só funcionam no iframe remoto)
     if (lowerSrc.includes('player.kingx.dev')) {
       return true;
     }
 
     // Mantém iframe apenas para embeds puros sem URL de mídia extraível.
-    if (lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+    if (
+      lowerSrc.includes('/embed/') ||
+      lowerSrc.includes('iframe') ||
+      lowerSrc.includes('superflix') ||
+      lowerSrc.includes('embed.')
+    ) {
       return true;
     }
 
