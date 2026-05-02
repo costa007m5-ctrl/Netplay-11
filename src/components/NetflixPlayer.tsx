@@ -85,25 +85,44 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         // 2. Try hashParams if not found
         if (!v && urlObj.hash && urlObj.hash.includes('video_url=')) {
            let hashStr = urlObj.hash.substring(1);
-           if (hashStr.includes('?')) {
+           // Remove prefix se o hash for formatado estranho (ex: #/nav?video_url=...)
+           if (hashStr.startsWith('/') && hashStr.includes('?')) {
              hashStr = hashStr.substring(hashStr.indexOf('?') + 1);
            }
-           const hashParams = new URLSearchParams(hashStr);
-           v = hashParams.get('video_url');
-           sub = hashParams.get('subtitle_url') || sub;
+           
+           // Se a hash string não for urlencoded corretamente e tiver um link cru ali:
+           // A classe URLSearchParams pode engolir parâmetros do link embeddado se houver múltiplos '&'.
+           // Para extrair manual de string bruta de forma segura sem ser corrompido:
+           const vMatch = hashStr.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/);
+           if (vMatch && vMatch[1]) {
+             v = decodeURIComponent(vMatch[1]).replace(/&amp;/g, '&');
+           } else {
+             // Fallback
+             const hashParams = new URLSearchParams(hashStr);
+             v = hashParams.get('video_url');
+           }
+           
+           const subMatch = hashStr.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/);
+           if (subMatch && subMatch[1]) {
+              sub = decodeURIComponent(subMatch[1]).replace(/&amp;/g, '&');
+           } else {
+              const hashParams = new URLSearchParams(hashStr);
+              sub = hashParams.get('subtitle_url') || sub;
+           }
         }
         
-        // 3. Fallback regex se tudo falhar
+        // 3. Fallback regex se tudo falhar - extraindo de forma mais robusta sem quebrar nos '&' do streaming embeddado
         if (!v) {
-          const match = src.match(/[?&#]video_url=([^&#]*)/);
-          if (match && match[1]) {
-             v = decodeURIComponent(match[1]);
+          const matchVid = src.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+          if (matchVid && matchVid[1]) {
+             v = decodeURIComponent(matchVid[1]);
           }
         }
         
         if (v) vToPlay = v;
         if (sub) sToPlay = sub;
       }
+      console.log('URL EXTRACTED:', vToPlay);
     } catch (e) {
       console.warn("URL Extraction failed", e);
     }
@@ -590,6 +609,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             hls.on(Hls.Events.ERROR, (event, data) => {
               console.warn("HLS Error:", data);
               if (data.fatal) {
+                 console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                    if (retryCountRef.current < 50) { 
                      retryCountRef.current++;
