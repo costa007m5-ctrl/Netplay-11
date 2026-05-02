@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
-import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play, Video } from 'lucide-react';
+import Hls from 'hls.js';
 
 export default function AdminTeraboxTab() {
   const [testUrl, setTestUrl] = useState('');
   const [testResult, setTestResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const handleTest = async () => {
     if (!testUrl) return;
@@ -24,6 +27,36 @@ export default function AdminTeraboxTab() {
       setLoading(false);
     }
   };
+
+  const videoUrlToPlay = React.useMemo(() => {
+    if (!testResult) return null;
+    return testResult.url || testResult.stream_url || testResult.video_url || testResult.src || (testResult.data && testResult.data.url) || 
+      (testResult.list && testResult.list.length > 0 && (testResult.list[0].url || testResult.list[0].dlink));
+  }, [testResult]);
+
+  useEffect(() => {
+    if (!videoUrlToPlay || !videoRef.current) return;
+    
+    let hls: Hls | null = null;
+    
+    if (videoUrlToPlay.includes('.m3u8')) {
+      if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(videoUrlToPlay);
+        hls.attachMedia(videoRef.current);
+      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+        videoRef.current.src = videoUrlToPlay;
+      }
+    } else {
+      videoRef.current.src = videoUrlToPlay;
+    }
+    
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [videoUrlToPlay]);
 
   return (
     <div className="max-w-4xl mx-auto py-8">
@@ -78,6 +111,21 @@ export default function AdminTeraboxTab() {
         {error && (
           <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
             {error}
+          </div>
+        )}
+        
+        {videoUrlToPlay && (
+          <div className="mt-8 rounded-xl overflow-hidden border border-white/10 bg-black">
+            <div className="bg-white/5 p-3 flex items-center gap-2 border-b border-white/10">
+              <Video size={16} className="text-cyan-400" />
+              <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">Preview do Vídeo</span>
+            </div>
+            <video 
+              ref={videoRef}
+              controls 
+              className="w-full aspect-video outline-none"
+              autoPlay
+            />
           </div>
         )}
 
