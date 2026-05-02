@@ -238,7 +238,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const isLoadingRef = useRef(true);
   // Wrapper que sincroniza state + ref para leituras em tempo real
   const setIsLoading = (val: boolean) => {
-    console.log("[v0] setIsLoading:", val);
     isLoadingRef.current = val;
     setIsLoadingStateRaw(val);
   };
@@ -723,16 +722,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             });
             hls.attachMedia(video);
             hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-              console.log("[v0] HLS MEDIA_ATTACHED - loading source:", videoToPlay.substring(0, 100));
               setProgressTarget(20);
               hls.loadSource(videoToPlay);
             });
             hls.on(Hls.Events.MANIFEST_LOADING, () => {
-              console.log("[v0] HLS MANIFEST_LOADING");
               setProgressTarget(30);
             });
             hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-              console.log("[v0] HLS MANIFEST_PARSED - levels:", data.levels.length);
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
               setProgressTarget(45);
@@ -755,15 +751,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             // FRAG_LOADED → terminou (60→85)
             // FRAG_BUFFERED → bufferizado (85→95)
             hls.on(Hls.Events.FRAG_LOADING, () => {
-              console.log("[v0] HLS FRAG_LOADING");
               setProgressTarget(Math.max(targetProgressRef.current, 60));
             });
             hls.on(Hls.Events.FRAG_LOADED, () => {
-              console.log("[v0] HLS FRAG_LOADED");
               setProgressTarget(Math.max(targetProgressRef.current, 85));
             });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
-              console.log("[v0] HLS FRAG_BUFFERED");
               setProgressTarget(Math.min(95, Math.max(targetProgressRef.current, 92)));
             });
 
@@ -861,9 +854,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       // Condição simplificada: se o vídeo está tocando (time > 0.2s, readyState >= 3, não pausado),
       // então o loading deve sair para que o usuário veja o vídeo imediatamente.
       if (time > 0.2 && video.readyState >= 3 && !video.seeking && !video.paused) {
-        console.log("[v0] handleTimeUpdate - playing, time:", time.toFixed(2), "progressRef:", loadingProgressRef.current, "isLoadingRef:", isLoadingRef.current);
         if (isLoadingRef.current) {
-          console.log("[v0] Video playing - exiting loading state immediately");
           completeProgress();
           setIsLoading(false);
           setShowLogoOverlay(false);
@@ -929,7 +920,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handleCanPlay = () => {
-      console.log("[v0] handleCanPlay - video ready to play");
       // O vídeo está pronto para tocar — empurra o target para 95%.
       // Só escondemos o loading quando ele realmente começa a renderizar (handleTimeUpdate).
       setProgressTarget(95);
@@ -980,7 +970,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handlePlaying = () => {
-      console.log("[v0] handlePlaying - video started playing");
       hasStartedPlayedRef.current = true;
       // O vídeo começou a reproduzir de fato — sobe o target para 100.
       // NÃO escondemos o loading aqui ainda — esperamos o handleTimeUpdate
@@ -1195,12 +1184,56 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
   }, [movieId]);
 
+  // Auto-repair: detecta quando o loading trava e automaticamente reinicia o HLS.
+  // Isso resolve o problema onde a primeira tentativa falha mas clicar em "Reparar" funciona.
+  const autoRepairAttemptRef = useRef(0);
+  const lastProgressCheckRef = useRef(0);
+  
+  useEffect(() => {
+    let checkTimer: any;
+    
+    if (isLoading && !hasStartedPlayedRef.current) {
+      // Verifica a cada 4 segundos se houve progresso
+      checkTimer = setInterval(() => {
+        const currentProgress = loadingProgressRef.current;
+        const progressDelta = currentProgress - lastProgressCheckRef.current;
+        
+        // Se o progresso avançou menos de 5% em 4 segundos e ainda não passou de 80%,
+        // e ainda não fizemos mais de 2 tentativas de auto-repair
+        if (progressDelta < 5 && currentProgress < 80 && autoRepairAttemptRef.current < 2) {
+          autoRepairAttemptRef.current++;
+          
+          // Executa o mesmo código do toggleReparar (reinicia o HLS)
+          setSessionKey(Date.now());
+          setShowStuckButton(false);
+          setError(null);
+          resetProgress();
+          setProgressTarget(15);
+          lastProgressCheckRef.current = 0;
+        } else {
+          lastProgressCheckRef.current = currentProgress;
+        }
+      }, 4000);
+    } else {
+      // Reset quando o vídeo começar a tocar ou loading terminar
+      autoRepairAttemptRef.current = 0;
+      lastProgressCheckRef.current = 0;
+    }
+    
+    return () => {
+      if (checkTimer) clearInterval(checkTimer);
+    };
+  }, [isLoading]);
+
+  // Mostra botão manual de Reparar após 12s (caso auto-repair não resolva)
   useEffect(() => {
     let timer: any;
     if (isLoading) {
       timer = setTimeout(() => {
         setShowStuckButton(true);
-      }, 30000); // 30s para mostrar botão de "Reparar" em casos de grande lentidão
+      }, 12000);
+    } else {
+      setShowStuckButton(false);
     }
     return () => clearTimeout(timer);
   }, [isLoading]);
