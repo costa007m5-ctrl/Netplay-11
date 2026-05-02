@@ -175,12 +175,32 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   // Independent Mode Detection
   const playerMode = useMemo(() => (initialTime > 0 ? 'resume' : 'fresh'), [initialTime]);
 
-  const toggleReparar = () => {
+  const toggleReparar = useCallback(() => {
+    // Destroy existing HLS instance to ensure clean slate
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch (e) {}
+      hlsRef.current = null;
+    }
+    // Reset video element
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      } catch (e) {}
+    }
+    // Reset all state for fresh retry
     setSessionKey(Date.now());
     setShowStuckButton(false);
     setError(null);
     setIsLoading(true);
-  };
+    resetProgress();
+    setProgressTarget(15);
+    hasStartedPlayedRef.current = false;
+    retryCountRef.current = 0;
+    autoRepairAttemptRef.current = 0;
+    lastProgressCheckRef.current = 0;
+  }, []);
 
   // Sincroniza activeSrc apenas se a prop src mudar externamente.
   // Usado quando o usuário troca de episódio sem desmontar o player —
@@ -211,6 +231,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       setIsPlaying(false);
       setIsBuffering(false);
       setError(null);
+      setErrorRetryCount(0);
+      setErrorRetryCountdown(null);
       setIsLoading(true);
       resetProgress();
       hasStartedPlayedRef.current = false;
@@ -298,6 +320,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showStuckButton, setShowStuckButton] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [error, setError] = useState<{ message: string; type: 'network' | 'format' | 'unknown' } | null>(null);
+  const [errorRetryCount, setErrorRetryCount] = useState(0);
+  const [errorRetryCountdown, setErrorRetryCountdown] = useState<number | null>(null);
   const [bufferedPercentage, setBufferedPercentage] = useState(0);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
 
@@ -980,6 +1004,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       setIsPlaying(true);
       setShowStuckButton(false);
       setError(null);
+      // Reset error retry state on successful playback
+      setErrorRetryCount(0);
+      setErrorRetryCountdown(null);
       retryCountRef.current = 0;
       
       lockOrientation();
@@ -1225,7 +1252,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
   }, [isLoading]);
 
-  // Mostra botão manual de Reparar após 12s (caso auto-repair não resolva)
+// Mostra botão manual de Reparar após 12s (caso auto-repair não resolva)
   useEffect(() => {
     let timer: any;
     if (isLoading) {
@@ -1238,6 +1265,44 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     return () => clearTimeout(timer);
   }, [isLoading]);
 
+  // Auto-retry na tela de erro com backoff exponencial
+  // Tenta recuperar automaticamente sem exigir refresh da página
+  useEffect(() => {
+    if (!error) {
+      // Reset retry state quando o erro é limpo
+      setErrorRetryCount(0);
+      setErrorRetryCountdown(null);
+      return;
+    }
+
+    // Limite de 3 tentativas automaticas antes de exigir ação manual
+    const MAX_ERROR_RETRIES = 3;
+    if (errorRetryCount >= MAX_ERROR_RETRIES) {
+      setErrorRetryCountdown(null);
+      return;
+    }
+
+    // Backoff exponencial: 5s, 10s, 20s
+    const delaySeconds = 5 * Math.pow(2, errorRetryCount);
+    let countdown = delaySeconds;
+    setErrorRetryCountdown(countdown);
+
+    const countdownInterval = setInterval(() => {
+      countdown -= 1;
+      setErrorRetryCountdown(countdown);
+      
+      if (countdown <= 0) {
+        clearInterval(countdownInterval);
+        setErrorRetryCount(prev => prev + 1);
+        toggleReparar();
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(countdownInterval);
+    };
+  }, [error, errorRetryCount, toggleReparar]);
+  
   const togglePlay = () => {
     const video = videoRef.current;
     if (video) {
@@ -2038,16 +2103,42 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           <h3 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic font-display">
             {error.type === 'network' ? 'Problema de Conexão' : 'Erro de Carregamento'}
           </h3>
-          <p className="text-gray-400 mb-10 max-w-md leading-relaxed font-medium">
+          <p className="text-gray-400 mb-6 max-w-md leading-relaxed font-medium">
             {error.message}
           </p>
           
+          {/* Auto-retry countdown indicator */}
+          {errorRetryCountdown !== null && errorRetryCount < 3 && (
+            <div className="mb-6 flex flex-col items-center">
+              <div className="flex items-center gap-2 text-white/60 text-sm">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <RotateCw size={14} />
+                </motion.div>
+                <span className="font-medium">Tentando novamente em <span className="text-white font-bold">{errorRetryCountdown}s</span></span>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">Tentativa {errorRetryCount + 1} de 3</p>
+            </div>
+          )}
+          
+          {errorRetryCount >= 3 && (
+            <p className="text-yellow-500/80 text-xs mb-6 font-medium">
+              Tentativas automáticas esgotadas. Use os botões abaixo.
+            </p>
+          )}
+          
           <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
             <button 
-              onClick={() => window.location.reload()}
-              className="flex-1 bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all shadow-xl hover:scale-105 active:scale-95"
+              onClick={(e) => {
+                e.stopPropagation();
+                setErrorRetryCount(0); // Reset retry count for manual retry
+                toggleReparar();
+              }}
+              className="flex-1 bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all shadow-xl hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
             >
-              Recarregar
+              <RotateCw size={16} /> Tentar Novamente
             </button>
             <button 
               onClick={onSwitchPlayer || onClose}
