@@ -69,27 +69,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
+  const normalizedSrc = useMemo(() => {
+    if (src && src.includes('teradl.kingx.dev/index.m3u8')) {
+       // Convert teradl direct m3u8 to player iframe URL to bypass CORS blocks and allow iframe mode
+       const match = src.match(/teradl\.kingx\.dev\/index\.m3u8\?url=([^&]+)/);
+       if (match && match[1]) {
+           return `https://player.kingx.dev/?url=${match[1]}`;
+       }
+    }
+    return src;
+  }, [src]);
+
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
-    let vToPlay = src;
+    let vToPlay = normalizedSrc;
     let sToPlay = subtitleUrl;
     
     try {
-      if (src) {
-        // Intercept player.kingx.dev wrappers to play natively instead of in iframe
-        if (src.includes('player.kingx.dev/?url=')) {
-           const match = src.match(/[\?&]url=(.+)$/i);
-           if (match && match[1]) {
-              let innerUrl = match[1];
-              if (innerUrl.includes('&subtitle_url=')) {
-                 sToPlay = decodeURIComponent(innerUrl.split('&subtitle_url=')[1]);
-                 innerUrl = innerUrl.split('&subtitle_url=')[0];
-              }
-              vToPlay = decodeURIComponent(innerUrl);
-           }
-        }
-        else if (src.includes('video_url=')) {
-          const urlObj = new URL(src, window.location.origin);
+      if (normalizedSrc) {
+        if (normalizedSrc.includes('video_url=')) {
+          const urlObj = new URL(normalizedSrc, window.location.origin);
           
           // 1. Try standard searchParams
           let v = urlObj.searchParams.get('video_url');
@@ -121,7 +120,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           
           // 3. Fallback regex
           if (!v) {
-            const matchVid = src.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+            const matchVid = normalizedSrc.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
             if (matchVid && matchVid[1]) {
                v = decodeURIComponent(matchVid[1]);
             }
@@ -137,7 +136,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [src, subtitleUrl]);
+  }, [normalizedSrc, subtitleUrl]);
 
   const isIframeMode = useMemo(() => {
     if (!parsedUrls.video_url) return false;
