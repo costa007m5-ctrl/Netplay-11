@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import screenfull from 'screenfull';
 import NetflixPlayer from './NetflixPlayer';
+import KingXPlayer from './KingXPlayer';
 import { X, Maximize, ExternalLink, Users, Smile, Send, Play, WifiOff } from 'lucide-react';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
@@ -23,8 +24,10 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
-  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>('netflix');
+  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'kingx' | null>('netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
+  // Estado para controlar se deve usar o player embeddado do KingX ou o player nativo
+  const [useKingXEmbed, setUseKingXEmbed] = useState(false);
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
@@ -487,6 +490,40 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
+  // Renderiza o KingXPlayer embeddado (iframe do player.kingx.dev)
+  if (isKingX && useKingXEmbed && playerStyle === 'kingx') {
+    const currentIndex = movie.type === 'series' && movie.episodes 
+      ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
+      : -1;
+    const currentEpisode = currentIndex !== -1 && movie.episodes ? movie.episodes[currentIndex] : null;
+    const episodeTitle = currentEpisode ? (currentEpisode.title || `Episódio ${currentEpisode.episode}`) : "";
+    const displayTitle = movie.type === 'series' && episodeTitle 
+       ? `${movie.title || movie.name} - ${episodeTitle}` 
+       : (movie.title || movie.name || "");
+
+    return (
+      <div className="relative w-full h-full">
+        <KingXPlayer
+          src={url} // URL original do player.kingx.dev
+          title={displayTitle}
+          seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}
+          backdropUrl={movie.backdrop_path}
+          logoUrl={movieLogo || undefined}
+          onClose={onClose}
+          initialTime={initialTime ?? movie.last_position ?? 0}
+          isMovie={movie.type !== 'series'}
+          onSwitchPlayer={() => {
+            // Volta para o player nativo (NetflixPlayer)
+            setUseKingXEmbed(false);
+            setPlayerStyle('netflix');
+          }}
+          isBackgroundMode={isBackgroundMode}
+          onClickBackground={onClickBackground}
+        />
+      </div>
+    );
+  }
+
   if (isMP4 && (finalVideoUrl || extractedVideoUrl) && playerStyle === 'netflix') {
     const currentIndex = movie.type === 'series' && movie.episodes 
       ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
@@ -539,7 +576,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           profile={profile}
           maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
           onSwitchPlayer={() => {
-            if (isDriveVideo) {
+            if (isKingX) {
+              // Para links do KingX, oferece o player embeddado
+              setUseKingXEmbed(true);
+              setPlayerStyle('kingx');
+            } else if (isDriveVideo) {
               setDrivePlayMethod('iframe');
               setPlayerStyle('standard');
             } else {
