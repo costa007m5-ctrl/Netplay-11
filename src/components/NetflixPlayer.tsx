@@ -96,9 +96,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (!rawUrl) return rawUrl || '';
     try {
       const decoded = decodeURIComponent(rawUrl).replace(/&amp;/g, '&');
+      const lower = decoded.toLowerCase();
       const needsProxy =
-        decoded.includes('teradl.kingx.dev') ||
-        (decoded.includes('kingx.dev') && decoded.includes('.m3u8'));
+        lower.includes('.m3u8') &&
+        (lower.includes('teradl.kingx.dev') || lower.includes('kingx.dev'));
 
       if (!needsProxy || decoded.startsWith('/api/proxy/m3u8')) return decoded;
       return `/api/proxy/m3u8?url=${encodeURIComponent(decoded)}`;
