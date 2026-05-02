@@ -17,13 +17,14 @@ interface VideoPlayerProps {
   onProgress?: (movieId: string | number, time: number, episodeUrl?: string) => void;
   appSettings?: AppSettings;
   initialTime?: number;
+  initialPlayerStyle?: 'netflix' | 'standard' | 'special' | string;
   isBackgroundMode?: boolean;
   onClickBackground?: () => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, isBackgroundMode, onClickBackground }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, initialPlayerStyle, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
-  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>('netflix');
+  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
@@ -38,31 +39,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         }
         
         if (searchString) {
-          // Do not use URLSearchParams as it completely destroys nested unencoded ampersands
-          if (type === 'video') {
-             // 1. Check for ?url=...
-             if (url.includes('player.kingx.dev/?url=')) {
-                 const match = url.match(/[\?&]url=(.+)$/i);
-                 if (match && match[1]) {
-                    // Se houver subtitle_url depois, recorta
-                    let v = match[1];
-                    if (v.includes('&subtitle_url=')) {
-                       v = v.split('&subtitle_url=')[0];
-                    }
-                    return decodeURIComponent(v);
-                 }
-             }
-             // 2. Check for video_url=
-             const vMatch = searchString.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
-             if (vMatch && vMatch[1]) {
-                return decodeURIComponent(vMatch[1]).replace(/&amp;/g, '&');
-             }
-          } else if (type === 'subtitle') {
-             const subMatch = searchString.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/i);
-             if (subMatch && subMatch[1]) {
-                return decodeURIComponent(subMatch[1]).replace(/&amp;/g, '&');
-             }
-          }
+           const normalizedSearch = searchString.replace(/%26/g, '&').replace(/&amp;/g, '&');
+           if (type === 'video') {
+              if (url.includes('player.kingx.dev/?url=')) {
+                  const match = url.match(/[\?&]url=(.+)$/i);
+                  if (match && match[1]) {
+                     let v = match[1];
+                     if (v.includes('&subtitle_url=')) {
+                        v = v.split('&subtitle_url=')[0];
+                     }
+                     return decodeURIComponent(v);
+                  }
+              }
+              const vMatch = normalizedSearch.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+              if (vMatch && vMatch[1]) {
+                 return decodeURIComponent(vMatch[1]);
+              }
+           } else if (type === 'subtitle') {
+              const subMatch = normalizedSearch.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/i);
+              if (subMatch && subMatch[1]) {
+                 return decodeURIComponent(subMatch[1]);
+              }
+           }
         }
       } catch (e) {}
     }

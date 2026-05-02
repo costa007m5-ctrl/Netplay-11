@@ -521,6 +521,74 @@ async function startServer() {
     }
   });
 
+  app.get('/api/hls-proxy', async (req, res) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) return res.status(400).send('URL is required');
+
+    try {
+      // Forward the request to the target URL
+      const response = await axios({
+        method: req.method,
+        url: targetUrl,
+        responseType: 'stream',
+        headers: {
+          ...req.headers,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://player.kingx.dev/',
+          'Origin': 'https://player.kingx.dev',
+          host: new URL(targetUrl).host,
+        },
+        validateStatus: () => true, // Don't throw on error status codes
+      });
+
+      // Transfer headers
+      for (const [key, value] of Object.entries(response.headers)) {
+        if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(key.toLowerCase())) {
+           res.setHeader(key, value as any);
+        }
+      }
+
+      // Allow CORS
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.status(response.status);
+
+      // We need to rewrite the M3U8 payload if it's a playlist so the chunks also go through our proxy
+      // since the chunks might also check the Referer!
+      if (targetUrl.includes('.m3u8') || response.headers['content-type']?.includes('mpegurl')) {
+        let m3u8Data = '';
+        response.data.on('data', (chunk: Buffer) => {
+            m3u8Data += chunk.toString();
+        });
+        response.data.on('end', () => {
+             // Rewrite lines
+             const lines = m3u8Data.split('\n');
+             const rewrittenLines = lines.map(line => {
+                if (line.trim() && !line.startsWith('#')) {
+                    // It's a URI!
+                    let absoluteUri = line.trim();
+                    if (!absoluteUri.startsWith('http')) {
+                         const baseUrl = new URL(targetUrl);
+                         absoluteUri = new URL(absoluteUri, baseUrl).toString();
+                    }
+                    // Replace with proxy
+                    return `/api/hls-proxy?url=${encodeURIComponent(absoluteUri)}`;
+                }
+                return line;
+             });
+             const rewrittenData = rewrittenLines.join('\n');
+             res.send(rewrittenData);
+        });
+      } else {
+        // It's a binary chunk (.ts) or something else, pipe it directly
+        response.data.pipe(res);
+      }
+
+    } catch (e: any) {
+      console.error('HLS Proxy error:', e.message);
+      if (!res.headersSent) res.status(500).send('Proxy error');
+    }
+  });
+
   // Proxy para streaming do Google Drive
   // Isso ajuda a evitar problemas de CORS e esconde a API Key
   app.get('/api/stream/:fileId', async (req, res) => {

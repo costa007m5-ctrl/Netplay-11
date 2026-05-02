@@ -1445,12 +1445,13 @@ const MovieDetailRouteWrapper = ({
   );
 };
 
-const PlayerRouteWrapper = ({ myMovies, profile, closePlayer, handleSelectMovie, handlePlayMovie, onProgress, activeRoomId, isAppHost, appSettings }: any) => {
+  const PlayerRouteWrapper = ({ myMovies, profile, closePlayer, handleSelectMovie, handlePlayMovie, onProgress, activeRoomId, isAppHost, appSettings }: any) => {
   const { movieId } = useParams();
   const location = useLocation();
   const movieFromState = location.state?.movie;
   const startTimeFromState = location.state?.startTime;
   const episodeUrlFromState = location.state?.episodeUrl;
+  const playerStyleFromState = location.state?.playerStyle;
   
   const searchParams = new URLSearchParams(location.search);
   const urlRoomId = searchParams.get('room');
@@ -1521,6 +1522,7 @@ const PlayerRouteWrapper = ({ myMovies, profile, closePlayer, handleSelectMovie,
       isHost={isHost}
       appSettings={appSettings}
       initialTime={startTimeFromState !== undefined ? startTimeFromState : savedProgress}
+      initialPlayerStyle={playerStyleFromState}
     />
   );
 };
@@ -3907,7 +3909,7 @@ export default function App() {
     navigate(`/movie/${movie.id}`, { state: { backgroundLocation: location.pathname } });
   }, [navigate, location.pathname]);
 
-  const handlePlayMovie = useCallback((movie: Movie, episodeUrl?: string, startTime?: number) => {
+  const handlePlayMovie = useCallback((movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string) => {
     // Travamos a orientação e navegamos de forma síncrona
     try {
       if (document.documentElement.requestFullscreen) {
@@ -3934,7 +3936,7 @@ export default function App() {
     
     // Navegação síncrona permite que o autoplay passe no browser sem block
     const search = window.location.search;
-    navigate(`/watch/${movie.id}${search}`, { state: { movie, episodeUrl, startTime, backgroundLocation: location.state?.backgroundLocation } });
+    navigate(`/watch/${movie.id}${search}`, { state: { movie, episodeUrl, startTime, playerStyle, backgroundLocation: location.state?.backgroundLocation } });
   }, [navigate, location.state]);
 
   const closeMovieDetails = () => {

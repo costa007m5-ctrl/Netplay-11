@@ -10,7 +10,7 @@ interface MovieDetailsModalProps {
   movie: Movie;
   similarMovies: Movie[];
   onClose: () => void;
-  onPlay: (movie: Movie, episodeUrl?: string, startTime?: number) => void;
+  onPlay: (movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string) => void;
   onSelectSimilar: (movie: Movie) => void;
   onWatchParty: (movie: Movie) => void;
   onToggleMyList: (movie: Movie) => void;
@@ -574,35 +574,52 @@ const MovieDetailsModal = React.memo(({
               ) : (
                 <>
                   {movie.videoUrl || movie.videoUrl2 || (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) ? (
-                    <motion.button 
-                      whileHover={{ scale: 1.05, boxShadow: isLocked ? '0 0 40px rgba(220,38,38,0.3)' : '0 0 40px rgba(255,255,255,0.3)' }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        if (isLocked) {
-                          document.dispatchEvent(new CustomEvent('open-plans'));
-                          return;
-                        }
-                        if (isYouTube || isKingX) {
-                          const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
-                          onPlay(movie, urlToPlay, 0);
-                        } else {
-                          setIsPlayingFullscreen(true);
-                        }
-                      }}
-                      className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
-                    >
-                      {isLocked ? (
-                        <>
-                           <Lock size={14} className="md:w-6 md:h-6 text-yellow-500" />
-                           <span className="whitespace-nowrap text-yellow-500">Upgrade (Plus/Max)</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play fill="currentColor" size={14} className="md:w-6 md:h-6" /> 
-                          <span className="whitespace-nowrap">Assistir</span>
-                        </>
+                    <div className="flex flex-wrap gap-3 md:gap-4">
+                      <motion.button 
+                        whileHover={{ scale: 1.05, boxShadow: isLocked ? '0 0 40px rgba(220,38,38,0.3)' : '0 0 40px rgba(255,255,255,0.3)' }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          if (isLocked) {
+                            document.dispatchEvent(new CustomEvent('open-plans'));
+                            return;
+                          }
+                          if (isYouTube || isKingX) {
+                            const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
+                            onPlay(movie, urlToPlay, 0, 'netflix');
+                          } else {
+                            setIsPlayingFullscreen(true);
+                          }
+                        }}
+                        className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
+                      >
+                        {isLocked ? (
+                          <>
+                             <Lock size={14} className="md:w-6 md:h-6 text-yellow-500" />
+                             <span className="whitespace-nowrap text-yellow-500">Upgrade (Plus/Max)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play fill="currentColor" size={14} className="md:w-6 md:h-6" /> 
+                            <span className="whitespace-nowrap">{isKingX ? 'Play Netflix' : 'Assistir'}</span>
+                          </>
+                        )}
+                      </motion.button>
+                      
+                      {isKingX && !isLocked && (
+                        <motion.button 
+                          whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(147,51,234,0.3)' }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
+                            onPlay(movie, urlToPlay, 0, 'special');
+                          }}
+                          className={`bg-purple-600 text-white hover:bg-purple-500 px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-all`}
+                        >
+                          <Play fill="currentColor" size={14} className="md:w-6 md:h-6" />
+                          <span className="whitespace-nowrap">Play Terabox</span>
+                        </motion.button>
                       )}
-                    </motion.button>
+                    </div>
                   ) : (
                     <motion.button 
                       whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(220,38,38,0.3)' }}

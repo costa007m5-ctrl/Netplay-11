@@ -69,57 +69,47 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
-  const normalizedSrc = useMemo(() => {
-    if (src && src.includes('teradl.kingx.dev/index.m3u8')) {
-       // Convert teradl direct m3u8 to player iframe URL to bypass CORS blocks and allow iframe mode
-       const match = src.match(/teradl\.kingx\.dev\/index\.m3u8\?url=([^&]+)/);
-       if (match && match[1]) {
-           return `https://player.kingx.dev/?url=${match[1]}`;
-       }
-    }
-    return src;
-  }, [src]);
-
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
-    let vToPlay = normalizedSrc;
+    let vToPlay = src;
     let sToPlay = subtitleUrl;
     
     try {
-      if (normalizedSrc) {
-        if (normalizedSrc.includes('video_url=')) {
-          const urlObj = new URL(normalizedSrc, window.location.origin);
+      if (src) {
+        if (src.includes('video_url=')) {
+          const urlObj = new URL(src, window.location.origin);
           
-          // 1. Try standard searchParams
           let v = urlObj.searchParams.get('video_url');
           let sub = urlObj.searchParams.get('subtitle_url');
           
-          // 2. Try hashParams if not found
           if (!v && urlObj.hash && urlObj.hash.includes('video_url=')) {
              let hashStr = urlObj.hash.substring(1);
              if (hashStr.startsWith('/') && hashStr.includes('?')) {
                hashStr = hashStr.substring(hashStr.indexOf('?') + 1);
              }
              
-             const vMatch = hashStr.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/);
+             // First, globally replace URL-encoded ampersands so regex can split them
+             const normalizedHashStr = hashStr.replace(/%26/g, '&').replace(/&amp;/g, '&');
+             
+             const vMatch = normalizedHashStr.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
              if (vMatch && vMatch[1]) {
-               v = decodeURIComponent(vMatch[1]).replace(/&amp;/g, '&');
+               v = decodeURIComponent(vMatch[1]);
              } else {
-               const hashParams = new URLSearchParams(hashStr);
+               const hashParams = new URLSearchParams(normalizedHashStr);
                v = hashParams.get('video_url');
              }
              
-             const subMatch = hashStr.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/);
+             const subMatch = normalizedHashStr.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/i);
              if (subMatch && subMatch[1]) {
-                sub = decodeURIComponent(subMatch[1]).replace(/&amp;/g, '&');
+                sub = decodeURIComponent(subMatch[1]);
              } else {
-                const hashParams = new URLSearchParams(hashStr);
+                const hashParams = new URLSearchParams(normalizedHashStr);
                 sub = hashParams.get('subtitle_url') || sub;
              }
           }
           
-          // 3. Fallback regex
           if (!v) {
+            const normalizedSrc = src.replace(/%26/g, '&').replace(/&amp;/g, '&');
             const matchVid = normalizedSrc.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
             if (matchVid && matchVid[1]) {
                v = decodeURIComponent(matchVid[1]);
@@ -135,8 +125,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       console.warn("URL Extraction failed", e);
     }
     
+    console.log("NETFLIX_PLAYER_URLS:", { inputSrc: src, vToPlay, sToPlay });
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [normalizedSrc, subtitleUrl]);
+  }, [src, subtitleUrl]);
 
   const isIframeMode = useMemo(() => {
     if (!parsedUrls.video_url) return false;
@@ -640,11 +631,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               if (data.fatal) {
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                   // Retry less times to not get stuck endlessly on dead proxies
-                   if (retryCountRef.current < 5) { 
+                   if (retryCountRef.current < 15) { 
                      retryCountRef.current++;
                      setLoadingProgress(prev => Math.max(prev, 10));
+                     // Exponential backoff for retries: 500ms, 1000ms, 2000ms, max 5000ms
+                     const retryDelay = Math.min(500 * Math.pow(1.5, retryCountRef.current - 1), 5000);
                      setTimeout(() => {
+                       // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
                            data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
                            data.response?.code === 403 || data.response?.code === 404) {
@@ -652,9 +645,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                        } else {
                            hls.startLoad();
                        }
-                     }, 1500);
+                     }, retryDelay);
                    } else {
-                     setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado (Need Verify). Tente usar o player nativo.", type: 'network' });
+                     setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado ou o servidor está bloqueado. Tente o player nativo.", type: 'network' });
                      setIsLoading(false);
                    }
                  }
@@ -833,7 +826,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
     const handlePlaying = () => {
       hasStartedPlayedRef.current = true;
-      // Removed setIsLoading(false) and friends here to allow timeUpdate/progress to hide it, preventing black flashes
+      setIsLoading(false);
+      setLoadingProgress(100);
+      setShowLogoOverlay(false);
       setIsBuffering(false);
       setIsPlaying(true);
       setShowStuckButton(false);
