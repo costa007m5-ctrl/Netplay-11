@@ -80,8 +80,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (lowerSrc.includes('video_url=')) {
       return false;
     }
-      return true;
-    }
 
     return false;
   }, [src]);
