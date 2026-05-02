@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import screenfull from 'screenfull';
 import NetflixPlayer from './NetflixPlayer';
-import KingXPlayer from './KingXPlayer';
 import { X, Maximize, ExternalLink, Users, Smile, Send, Play, WifiOff } from 'lucide-react';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
@@ -24,10 +23,8 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
-  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'kingx' | null>('netflix');
+  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>('netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
-  // Estado para controlar se deve usar o player embeddado do KingX ou o player nativo
-  const [useKingXEmbed, setUseKingXEmbed] = useState(false);
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
@@ -49,24 +46,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     return null;
   };
 
-  // Envelopa a URL pelo proxy /api/proxy/m3u8 quando ela aponta para um manifesto restrito
-  // (teradl.kingx.dev tem CORS limitado a https://player.kingx.dev).
-  const wrapWithProxy = (extractedUrl: string | null): string | null => {
-    if (!extractedUrl) return extractedUrl;
-    try {
-      const needsProxy =
-        extractedUrl.includes('teradl.kingx.dev') ||
-        (extractedUrl.includes('kingx.dev') && extractedUrl.includes('.m3u8'));
-      if (!needsProxy) return extractedUrl;
-      // Evita duplo proxy
-      if (extractedUrl.startsWith('/api/proxy/m3u8')) return extractedUrl;
-      return `/api/proxy/m3u8?url=${encodeURIComponent(extractedUrl)}`;
-    } catch {
-      return extractedUrl;
-    }
-  };
-
-  const extractedVideoUrl = wrapWithProxy(getInitialExtracted('video'));
+  const extractedVideoUrl = getInitialExtracted('video');
   const extractedSubtitleUrl = getInitialExtracted('subtitle');
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
@@ -490,40 +470,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
-  // Renderiza o KingXPlayer embeddado (iframe do player.kingx.dev)
-  if (isKingX && useKingXEmbed && playerStyle === 'kingx') {
-    const currentIndex = movie.type === 'series' && movie.episodes 
-      ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
-      : -1;
-    const currentEpisode = currentIndex !== -1 && movie.episodes ? movie.episodes[currentIndex] : null;
-    const episodeTitle = currentEpisode ? (currentEpisode.title || `Episódio ${currentEpisode.episode}`) : "";
-    const displayTitle = movie.type === 'series' && episodeTitle 
-       ? `${movie.title || movie.name} - ${episodeTitle}` 
-       : (movie.title || movie.name || "");
-
-    return (
-      <div className="relative w-full h-full">
-        <KingXPlayer
-          src={url} // URL original do player.kingx.dev
-          title={displayTitle}
-          seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}
-          backdropUrl={movie.backdrop_path}
-          logoUrl={movieLogo || undefined}
-          onClose={onClose}
-          initialTime={initialTime ?? movie.last_position ?? 0}
-          isMovie={movie.type !== 'series'}
-          onSwitchPlayer={() => {
-            // Volta para o player nativo (NetflixPlayer)
-            setUseKingXEmbed(false);
-            setPlayerStyle('netflix');
-          }}
-          isBackgroundMode={isBackgroundMode}
-          onClickBackground={onClickBackground}
-        />
-      </div>
-    );
-  }
-
   if (isMP4 && (finalVideoUrl || extractedVideoUrl) && playerStyle === 'netflix') {
     const currentIndex = movie.type === 'series' && movie.episodes 
       ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
@@ -576,11 +522,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           profile={profile}
           maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
           onSwitchPlayer={() => {
-            if (isKingX) {
-              // Para links do KingX, oferece o player embeddado
-              setUseKingXEmbed(true);
-              setPlayerStyle('kingx');
-            } else if (isDriveVideo) {
+            if (isDriveVideo) {
               setDrivePlayMethod('iframe');
               setPlayerStyle('standard');
             } else {
@@ -745,20 +687,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         <div className="relative flex-1 w-full h-full flex flex-col items-center justify-center">
           {!isOnline && (
             <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mb-8 border border-red-600/30 animate-pulse">
+              <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mb-8 border border-red-600/30">
                 <WifiOff size={48} className="text-red-600" />
               </div>
               <h3 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic font-display">Sem Internet</h3>
-              <p className="text-gray-400 max-w-md mb-4 font-medium">
+              <p className="text-gray-400 max-w-md mb-8 font-medium">
                 Parece que você está offline. Verifique sua conexão para continuar assistindo.
               </p>
-              <p className="text-gray-500 text-sm mb-6">
-                A reprodução continuará automaticamente quando a conexão for restabelecida.
-              </p>
-              <div className="flex items-center gap-2 text-gray-500 text-xs">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                Aguardando conexão...
-              </div>
+              <button 
+                onClick={() => window.location.reload()}
+                className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-700 transition-all shadow-[0_10px_30px_rgba(220,38,38,0.3)]"
+              >
+                Tentar Novamente
+              </button>
             </div>
           )}
           

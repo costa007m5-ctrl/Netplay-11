@@ -1507,7 +1507,7 @@ const PlayerRouteWrapper = ({ myMovies, profile, closePlayer, handleSelectMovie,
 
   return (
     <VideoPlayer 
-      key={`${movie.id}`}
+      key={`${movie.id}-${videoUrl}`}
       movie={{...movie, videoUrl: videoUrl || movie.video_url || movie.videoUrl}} 
       onClose={closePlayer}
       profileId={profile?.id}

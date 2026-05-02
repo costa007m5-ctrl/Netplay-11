@@ -272,55 +272,6 @@ router.post('/notifications/send', async (req, res) => {
   }
 });
 
-// Proxy para manifesto HLS do KingX/TeraBox (CORS workaround)
-router.get('/proxy/m3u8', async (req, res) => {
-  const targetUrl = req.query.url as string;
-  if (!targetUrl) {
-    return res.status(400).send('Missing url parameter');
-  }
-
-  try {
-    const decodedUrl = decodeURIComponent(targetUrl);
-    const isKingX = decodedUrl.includes('kingx.dev') || decodedUrl.includes('teradl');
-
-    const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': '*/*',
-    };
-    if (isKingX) {
-      headers['Origin'] = 'https://player.kingx.dev';
-      headers['Referer'] = 'https://player.kingx.dev/';
-    }
-
-    const response = await axios.get(decodedUrl, {
-      headers,
-      responseType: 'text',
-      timeout: 15000,
-      validateStatus: () => true,
-    });
-
-    if (response.status >= 400) {
-      return res.status(response.status).send(`Falha ao buscar manifesto (${response.status})`);
-    }
-
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Content-Type', response.headers['content-type'] || 'application/vnd.apple.mpegurl');
-    res.setHeader('Cache-Control', 'no-cache');
-    return res.status(200).send(response.data);
-  } catch (error: any) {
-    return res.status(500).send(`Proxy error: ${error.message}`);
-  }
-});
-
-router.options('/proxy/m3u8', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.status(204).end();
-});
-
 router.post('/terabox/convert', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL do TeraBox é obrigatória.' });

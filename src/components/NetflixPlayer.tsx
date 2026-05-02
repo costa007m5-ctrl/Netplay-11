@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock, Signal } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock } from 'lucide-react';
 import screenfull from 'screenfull';
 import Hls from 'hls.js';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
-import { useNetworkDiagnostics } from '../hooks/useNetworkDiagnostics';
-import { NetworkStatusIndicator, NetworkQualityToast } from './NetworkStatusIndicator';
 
 interface NetflixPlayerProps {
   src: string;
@@ -74,31 +72,19 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const isIframeMode = useMemo(() => {
     if (!src) return false;
     const lowerSrc = src.toLowerCase();
-
-    // Links agregadores com video_url/subtitle_url funcionam melhor no player nativo
-    // para dar autoplay real (clicou, começou) e permitir retry/proxy interno.
+    
+    // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
+    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+      return true;
+    }
+    
+    // Outros casos contendo video_url podem ser testados nativamente, a menos que sejam das fontes iframe acima
     if (lowerSrc.includes('video_url=')) {
       return false;
     }
-
+    
     return false;
   }, [src]);
-
-  const wrapWithProxy = useCallback((rawUrl?: string | null) => {
-    if (!rawUrl) return rawUrl || '';
-    try {
-      const decoded = decodeURIComponent(rawUrl).replace(/&amp;/g, '&');
-      const lower = decoded.toLowerCase();
-      const needsProxy =
-        lower.includes('.m3u8') &&
-        (lower.includes('teradl.kingx.dev') || lower.includes('kingx.dev'));
-
-      if (!needsProxy || decoded.startsWith('/api/proxy/m3u8')) return decoded;
-      return `/api/proxy/m3u8?url=${encodeURIComponent(decoded)}`;
-    } catch {
-      return rawUrl;
-    }
-  }, []);
 
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
@@ -152,18 +138,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           }
         }
         
-        if (v) vToPlay = wrapWithProxy(v);
-        if (sub) sToPlay = wrapWithProxy(sub);
+        if (v) vToPlay = v;
+        if (sub) sToPlay = sub;
       }
-      vToPlay = wrapWithProxy(vToPlay);
-      sToPlay = wrapWithProxy(sToPlay);
       console.log('URL EXTRACTED:', vToPlay);
     } catch (e) {
       console.warn("URL Extraction failed", e);
     }
     
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [isIframeMode, src, subtitleUrl, wrapWithProxy]);
+  }, [src, subtitleUrl]);
 
   const [activeSrc, setActiveSrc] = useState(parsedUrls.video_url);
   const [activeSubtitleUrl, setActiveSubtitleUrl] = useState(parsedUrls.subtitle_url);
@@ -191,73 +175,20 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   // Independent Mode Detection
   const playerMode = useMemo(() => (initialTime > 0 ? 'resume' : 'fresh'), [initialTime]);
 
-  const toggleReparar = useCallback(() => {
-    console.log("[v0] toggleReparar called - resetting player completely");
-    // Destroy existing HLS instance to ensure clean slate
-    if (hlsRef.current) {
-      try { hlsRef.current.destroy(); } catch (e) {}
-      hlsRef.current = null;
-    }
-    // Reset video element
-    if (videoRef.current) {
-      try {
-        videoRef.current.pause();
-        videoRef.current.removeAttribute('src');
-        videoRef.current.load();
-      } catch (e) {}
-    }
-    // Reset all state for fresh retry
+  const toggleReparar = () => {
     setSessionKey(Date.now());
     setShowStuckButton(false);
     setError(null);
     setIsLoading(true);
-    setAutoplayBlocked(false); // Reset autoplay blocked para permitir nova tentativa
-    resetProgress();
-    setProgressTarget(15);
-    hasStartedPlayedRef.current = false;
-    retryCountRef.current = 0;
-    autoRepairAttemptRef.current = 0;
-    lastProgressCheckRef.current = 0;
-  }, []);
+  };
 
-  // Sincroniza activeSrc apenas se a prop src mudar externamente.
-  // Usado quando o usuário troca de episódio sem desmontar o player —
-  // resetamos o estado de playback para evitar que o HLS antigo trave o novo.
+  // Sincroniza activeSrc apenas se a prop src mudar externamente
   useEffect(() => {
     if (parsedUrls.video_url !== activeSrc) {
-      // Destrói qualquer instância de HLS pendente ANTES de mudar o src
-      // para evitar que requisições antigas conflitem com as novas (causa do stuck em 25%).
-      if (hlsRef.current) {
-        try { hlsRef.current.destroy(); } catch (e) {}
-        hlsRef.current = null;
-      }
-      if (videoRef.current) {
-        try {
-          videoRef.current.pause();
-          videoRef.current.removeAttribute('src');
-          videoRef.current.load();
-        } catch (e) {}
-      }
       setActiveSrc(parsedUrls.video_url);
       setActiveSubtitleUrl(parsedUrls.subtitle_url);
       setSessionKey(Date.now());
       setShowStuckButton(false);
-      // Reseta estados de progresso para o novo conteúdo
-      setCurrentTime(0);
-      setDuration(0);
-      setBufferedPercentage(0);
-      setIsPlaying(false);
-      setIsBuffering(false);
-      setError(null);
-      setErrorRetryCount(0);
-      setErrorRetryCountdown(null);
-      setIsLoading(true);
-      resetProgress();
-      hasStartedPlayedRef.current = false;
-      retryCountRef.current = 0;
-      lastTimeRef.current = 0;
-      recsTargetTimeRef.current = null;
-      recsDismissedRef.current = false;
     }
   }, [parsedUrls.video_url, parsedUrls.subtitle_url]);
 
@@ -274,72 +205,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(true);
-  const [isLoadingState, setIsLoadingStateRaw] = useState(true);
-  const isLoadingRef = useRef(true);
-  // Wrapper que sincroniza state + ref para leituras em tempo real
-  const setIsLoading = (val: boolean) => {
-    isLoadingRef.current = val;
-    setIsLoadingStateRaw(val);
-  };
-  const isLoading = isLoadingState; // alias para compatibilidade
+  const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
 
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
-
-  // Animador suave 0→100 do loading. Mantemos um "target" e um timer
-  // que avança gradualmente, evitando saltos bruscos (25% → tela de play).
-  const targetProgressRef = useRef(0);
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stopProgressAnimation = () => {
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-  };
-  const startProgressAnimation = () => {
-    if (progressTimerRef.current) return;
-    progressTimerRef.current = setInterval(() => {
-      setLoadingProgress((prev) => {
-        const target = targetProgressRef.current;
-        if (prev >= target) return prev;
-        const diff = target - prev;
-        // Avanço rápido: alcança o target em poucos ticks para evitar
-        // sensação de barra "presa" entre marcos do HLS.
-        const step = diff > 40 ? 12 : diff > 15 ? 6 : diff > 5 ? 3 : 1;
-        return Math.min(prev + step, target);
-      });
-    }, 30);
-  };
-  const loadingProgressRef = useRef(0);
-  const setProgressTarget = (value: number) => {
-    targetProgressRef.current = Math.max(targetProgressRef.current, Math.min(100, value));
-    startProgressAnimation();
-  };
-  // Sincroniza a ref com o state para leituras em tempo real dentro de closures
-  useEffect(() => {
-    loadingProgressRef.current = loadingProgress;
-  }, [loadingProgress]);
-  const resetProgress = () => {
-    stopProgressAnimation();
-    targetProgressRef.current = 0;
-    setLoadingProgress(0);
-  };
-  const completeProgress = () => {
-    targetProgressRef.current = 100;
-    setLoadingProgress(100);
-    stopProgressAnimation();
-  };
-  // Limpa o timer do animador quando o componente é desmontado
-  useEffect(() => {
-    return () => stopProgressAnimation();
-  }, []);
-
   const [showStuckButton, setShowStuckButton] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [error, setError] = useState<{ message: string; type: 'network' | 'format' | 'unknown' } | null>(null);
-  const [errorRetryCount, setErrorRetryCount] = useState(0);
-  const [errorRetryCountdown, setErrorRetryCountdown] = useState<number | null>(null);
   const [bufferedPercentage, setBufferedPercentage] = useState(0);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
 
@@ -373,23 +246,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [canCast, setCanCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
-const [qualityToast, setQualityToast] = useState<string | null>(null);
-  const [showNetworkToast, setShowNetworkToast] = useState(false);
-  const [networkQualityChanged, setNetworkQualityChanged] = useState<'excellent' | 'good' | 'fair' | 'poor' | 'offline'>('good');
-  
-  // Hook de diagnóstico de rede para otimização adaptativa
-  const { stats: networkStats, getOptimizedHlsConfig, prefetchUrl, connectionQuality } = useNetworkDiagnostics({
-    checkInterval: 15000, // Verifica a cada 15s
-    enablePrefetch: true,
-    onQualityChange: (quality) => {
-      setNetworkQualityChanged(quality);
-      setShowNetworkToast(true);
-    },
-  });
-  
+  const [qualityToast, setQualityToast] = useState<string | null>(null);
   const [autoRotate, setAutoRotate] = useState(() => {
-  const saved = localStorage.getItem('autoRotate');
-  return saved !== null ? JSON.parse(saved) : true;
+    const saved = localStorage.getItem('autoRotate');
+    return saved !== null ? JSON.parse(saved) : true;
   });
   const [objectFit, setObjectFit] = useState<'contain' | 'cover'>('contain');
   const [emotes, setEmotes] = useState<{ id: string | number; emoji: string; x: number; y: number; profileName?: string }[]>([]);
@@ -677,15 +537,11 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
 
   useEffect(() => {
     let timer: any;
-    // Se o autoplay foi bloqueado, não mostra o botão de stuck automaticamente
-    // pois o player já está mostrando o botão de play para o usuário clicar
-    if (!hasStartedPlayedRef.current && !isPlaying && loadingProgress === 100 && !autoplayBlocked) {
-      console.log("[v0] showStuckButton timer started - will show in 10s if video doesn't start");
+    if (!hasStartedPlayedRef.current && !isPlaying && loadingProgress === 100) {
       // (10 segundos a partir de chegar em 100% se ainda não estiver tocando)
       timer = setTimeout(() => {
-        // Só mostra se ainda não tocou E autoplay não foi bloqueado
-        if (!hasStartedPlayedRef.current && !autoplayBlocked) {
-          console.log("[v0] showStuckButton showing - video stuck after loading");
+        // Só mostra se ainda não tocou
+        if (!hasStartedPlayedRef.current) {
           setShowStuckButton(true);
         }
       }, 10000);
@@ -693,7 +549,7 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
       setShowStuckButton(false);
     }
     return () => clearTimeout(timer);
-  }, [isPlaying, loadingProgress, autoplayBlocked]);
+  }, [isPlaying, loadingProgress]);
 
   useEffect(() => {
     if (isIframeMode) {
@@ -704,14 +560,10 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
     const video = videoRef.current;
     if (!video) return;
 
-    console.log("[v0] Player init effect running - sessionKey:", sessionKey, "activeSrc:", activeSrc?.substring(0, 50) + "...");
-    
     // Reset state
     setError(null);
     setIsLoading(true);
-    resetProgress();
-    // Inicia logo o crawl até 15% para dar feedback imediato ao clique
-    setProgressTarget(15);
+    setLoadingProgress(0);
     retryCountRef.current = 0;
     const initPlayer = () => {
       if (!video) return;
@@ -732,27 +584,12 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
       const videoToPlay = activeSrc;
       if (!videoToPlay) return;
 
-const lowerSrc = videoToPlay.toLowerCase();
+      const lowerSrc = videoToPlay.toLowerCase();
       let startLoadTimer: NodeJS.Timeout;
-      
-      // PREFETCH: Inicia o download do manifesto em paralelo enquanto prepara o player
-      // Isso aquece o cache do navegador e os proxies/CDNs
-      if (lowerSrc.includes('.m3u8')) {
-        try {
-          // Fetch com alta prioridade para aquecer cache e conexão
-          fetch(videoToPlay, { 
-            method: 'GET', 
-            mode: 'cors',
-            credentials: 'omit',
-            priority: 'high' as RequestPriority,
-            cache: 'no-store' // Força requisição fresca para aquecer proxy
-          }).catch(() => {}); // Ignora erros - é apenas prefetch
-        } catch (e) {}
-      }
-      
+
       const initUnifiedMode = () => {
-  if (!isMounted || !video) return;
-  setProgressTarget(30);
+        if (!isMounted || !video) return;
+        setLoadingProgress(25);
         
         const startPoint = initialTime > 0 ? Math.max(0, initialTime - 2) : -1;
         
@@ -760,93 +597,37 @@ const lowerSrc = videoToPlay.toLowerCase();
           const canPlayNative = video.canPlayType('application/vnd.apple.mpegurl') !== '';
           const isIOS = /iP(hone|od|ad)/i.test(navigator.userAgent);
           
-if (Hls.isSupported() && !isIOS) {
-  // Obtém configuração otimizada baseada na qualidade atual da rede
-  const networkOptimizedConfig = getOptimizedHlsConfig();
-  
-  // Configuração híbrida: usa valores agressivos para início rápido
-  // mas permite que a rede influencie buffers e timeouts
-  const hls = new Hls({
-  // Configurações base para início rápido
-  enableWorker: true,
-  lowLatencyMode: true,
-  startFragPrefetch: true,
-  capLevelToPlayerSize: true,
-  autoStartLoad: true,
-  // startLevel: 0 → começa pela QUALIDADE MAIS BAIXA (menor fragmento, download rápido)
-  startLevel: 0,
-  // Estima bandwidth baseado na qualidade da rede detectada
-  abrEwmaDefaultEstimate: networkOptimizedConfig.abrEwmaDefaultEstimate || 2000000,
-  // Fatores ABR agressivos para subir qualidade rapidamente
-  abrEwmaFastLive: 2.0,
-  abrEwmaSlowLive: 4.0,
-  abrEwmaFastVoD: 2.0,
-  abrEwmaSlowVoD: 4.0,
-  testBandwidth: false,
-  startPosition: startPoint > 0 ? startPoint : -1,
-  // Buffer inicial mínimo para começar rápido, depois adapta baseado na rede
-  maxBufferLength: Math.max(2, networkOptimizedConfig.maxBufferLength || 2),
-  maxMaxBufferLength: networkOptimizedConfig.maxMaxBufferLength || 30,
-  backBufferLength: 0,
-  maxBufferSize: networkOptimizedConfig.maxBufferSize || 30 * 1000 * 1000,
-  maxBufferHole: 0.8,
-  // Timeouts mais tolerantes para proxies que demoram a inicializar (ex: kingx.dev)
-  manifestLoadingMaxRetry: networkOptimizedConfig.manifestLoadingMaxRetry || 8,
-  levelLoadingMaxRetry: networkOptimizedConfig.levelLoadingMaxRetry || 8,
-  fragLoadingMaxRetry: networkOptimizedConfig.fragLoadingMaxRetry || 8,
-  manifestLoadingRetryDelay: networkOptimizedConfig.manifestLoadingRetryDelay || 500,
-  levelLoadingRetryDelay: networkOptimizedConfig.levelLoadingRetryDelay || 500,
-  fragLoadingRetryDelay: networkOptimizedConfig.fragLoadingRetryDelay || 300,
-  manifestLoadingTimeOut: networkOptimizedConfig.manifestLoadingTimeOut || 15000, // 15s para manifesto
-  levelLoadingTimeOut: networkOptimizedConfig.levelLoadingTimeOut || 15000,
-  fragLoadingTimeOut: networkOptimizedConfig.fragLoadingTimeOut || 20000, // 20s para fragmentos
-  // Delays adaptativos baseados na rede
-  maxStarvationDelay: networkOptimizedConfig.maxStarvationDelay || 1,
-  maxLoadingDelay: networkOptimizedConfig.maxLoadingDelay || 1,
-  nudgeMaxRetry: 5,
-  nudgeOffset: 0.2,
-  highBufferWatchdogPeriod: 0.5,
-  stretchShortVideoTrack: true,
-  progressive: true,
+          if (Hls.isSupported() && !isIOS) {
+            const hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+              startFragPrefetch: true,
+              capLevelToPlayerSize: true, // Limits initial quality based on player frame size to start faster
+              autoStartLoad: true,
+              startLevel: -1, // Use auto level
+              startPosition: startPoint > 0 ? startPoint : -1,
+              maxBufferLength: 30,
+              maxMaxBufferLength: 60,
+              manifestLoadingMaxRetry: 10,
+              levelLoadingMaxRetry: 10,
+              fragLoadingMaxRetry: 10,
+              manifestLoadingRetryDelay: 500,
+              levelLoadingRetryDelay: 500,
+              fragLoadingRetryDelay: 500,
             });
             hls.attachMedia(video);
-            hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-              setProgressTarget(20);
-              hls.loadSource(videoToPlay);
-            });
-            hls.on(Hls.Events.MANIFEST_LOADING, () => {
-              setProgressTarget(30);
-            });
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(videoToPlay));
             hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
-              setProgressTarget(45);
+              setLoadingProgress(50);
               
               if (video) {
-                 video.play().catch(e => { 
-                   console.warn("Autoplay block", e); 
-                   setAutoplayBlocked(true); 
-                   setShowControls(true); 
-                   setIsPlaying(false);
-                   // Se autoplay foi bloqueado, esconde o loading para mostrar o botão de play
-                   completeProgress();
-                   setIsLoading(false);
-                   setShowLogoOverlay(false);
-                 });
+                 video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
               }
             });
-            // Progresso real baseado em eventos do HLS.js
-            // FRAG_LOADING → começou a baixar primeiro fragmento (45→60)
-            // FRAG_LOADED → terminou (60→85)
-            // FRAG_BUFFERED → bufferizado (85→95)
-            hls.on(Hls.Events.FRAG_LOADING, () => {
-              setProgressTarget(Math.max(targetProgressRef.current, 60));
-            });
-            hls.on(Hls.Events.FRAG_LOADED, () => {
-              setProgressTarget(Math.max(targetProgressRef.current, 85));
-            });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
-              setProgressTarget(Math.min(95, Math.max(targetProgressRef.current, 92)));
+              setLoadingProgress(prev => Math.min(prev + 10, 95));
             });
 
             hls.on(Hls.Events.ERROR, (event, data) => {
@@ -856,23 +637,13 @@ if (Hls.isSupported() && !isIOS) {
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                    // Fail fast for 403 Forbidden or 404 Not Found as retrying won't help
                    if (data.response?.code === 403 || data.response?.code === 404) {
-                     setError({ message: "Link expirado ou acesso negado. Feche e tente reproduzir novamente ou escolha outro player.", type: 'format' });
+                     setError({ message: "Link expirado ou acesso negado. Feche e tente reproduzir novamente ou escollha outro player.", type: 'network' });
                      setIsLoading(false);
                      return;
                    }
-                   // Proxies como kingx.dev/teradl podem precisar de mais tempo para inicializar
-                   // Aumentamos para 20 tentativas com delays mais longos
-                   const MAX_RETRIES = 20;
-                   if (retryCountRef.current < MAX_RETRIES) { 
+                   if (retryCountRef.current < 10) { 
                      retryCountRef.current++;
-                     // Atualiza progresso visual para mostrar que está tentando
-                     const progressIncrease = Math.min(5, (100 - targetProgressRef.current) / (MAX_RETRIES - retryCountRef.current + 1));
-                     setProgressTarget(Math.min(95, targetProgressRef.current + progressIncrease));
-                     
-                     // Delay mais longo para dar tempo ao proxy: 500ms, 1s, 1.5s, 2s, 2.5s, 3s (max)
-                     const retryDelay = Math.min(500 + (retryCountRef.current * 500), 3000);
-                     console.log(`[v0] HLS retry ${retryCountRef.current}/${MAX_RETRIES} em ${retryDelay}ms`);
-                     
+                     setLoadingProgress(prev => Math.max(prev, 10));
                      setTimeout(() => {
                        // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
@@ -881,9 +652,9 @@ if (Hls.isSupported() && !isIOS) {
                        } else {
                            hls.startLoad();
                        }
-                     }, retryDelay);
+                     }, 1500); // 1.5s delay to handle cold-start proxies smoothly
                    } else {
-                     setError({ message: "Não foi possível conectar ao servidor de vídeo após várias tentativas. Tente outro player ou verifique se o link ainda é válido.", type: 'format' });
+                     setError({ message: "Falha contínua na conexão. O servidor pode estar offline ou bloqueado.", type: 'network' });
                      setIsLoading(false);
                    }
                  }
@@ -949,16 +720,13 @@ if (Hls.isSupported() && !isIOS) {
       const didSeek = Math.abs(time - lastTimeRef.current) > 2;
       lastTimeRef.current = time;
 
-// O vídeo já está renderizando frames — empurra o target para 100 e esconde loading.
-  // Condição AGRESSIVA: esconde loading assim que tiver qualquer progresso
-  // readyState >= 2 (HAVE_CURRENT_DATA) já é suficiente para mostrar o vídeo
-  if (time > 0.05 && video.readyState >= 2 && !video.seeking && !video.paused) {
-  if (isLoadingRef.current) {
-  completeProgress();
-  setIsLoading(false);
-  setShowLogoOverlay(false);
-  }
-  }
+      if (time > 0.1 && video.readyState >= 3 && !video.seeking) {
+        if (isLoading) {
+          setIsLoading(false);
+          setLoadingProgress(100);
+          setShowLogoOverlay(false);
+        }
+      }
 
       if (video.duration > 0) {
         const timeFromEnd = video.duration - time;
@@ -1019,29 +787,17 @@ if (Hls.isSupported() && !isIOS) {
     };
 
     const handleCanPlay = () => {
-      console.log("[v0] handleCanPlay fired - readyState:", video.readyState, "paused:", video.paused, "hasStartedPlayed:", hasStartedPlayedRef.current);
-      // O vídeo está pronto para tocar — empurra o target para 95%.
-      setProgressTarget(95);
+      // Don't set isLoading(false) here, let handlePlaying or handleTimeUpdate do it
+      // when the video truly starts playing to prevent the loading screen from dropping early
       
-      // Se já estava tocando antes (ex: seek, buffering), esconde loading imediatamente
-      if (hasStartedPlayedRef.current) {
-        completeProgress();
-        setIsLoading(false);
-        setShowLogoOverlay(false);
-      }
-
       if (video.paused) {
         // Only autoplay if we are host, OR if we are not in a room, OR if we are supposed to be playing.
         // Actually, if we are a guest, wait for playback-update to tell us to play. If we try to play automatically, we break the host's pause state.
         if (!roomId || isHost) {
           video.play().catch(err => {
-            console.warn("[v0] Autoplay blocked in handleCanPlay:", err);
-            // IMPORTANTE: Quando autoplay é bloqueado, escondemos o loading e mostramos 
-            // o player com botão de play para o usuário clicar manualmente.
-            // Também marcamos autoplayBlocked para evitar retries automáticos infinitos.
-            setAutoplayBlocked(true);
-            completeProgress();
+            console.warn("Autoplay blocked:", err);
             setIsLoading(false);
+            setLoadingProgress(100);
             setShowLogoOverlay(false);
             setShowControls(true);
             setIsPlaying(false);
@@ -1066,43 +822,23 @@ if (Hls.isSupported() && !isIOS) {
       }
     };
 
-  const handleCanPlayThrough = () => {
-  // canplaythrough = pode reproduzir até o fim sem parar
-  completeProgress();
-  setIsLoading(false);
-  setShowLogoOverlay(false);
-  };
+    const handleWaiting = () => {
+      // Evita mostrar loading se já houver buffer suficiente
+      if (video.buffered.length > 0) {
+        const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+        if (bufferedEnd > video.currentTime + 1.5) return;
+      }
+      setIsBuffering(true);
+    };
 
-  const handleWaiting = () => {
-  // Durante a carga inicial (antes do vídeo começar a tocar pela primeira vez),
-  // o overlay de loading principal já cobre a tela — não exibimos o spinner
-  // de buffering pequeno por cima dele.
-  if (!hasStartedPlayedRef.current) return;
-  // Evita mostrar buffering se já houver buffer suficiente à frente
-  if (video.buffered.length > 0) {
-  const bufferedEnd = video.buffered.end(video.buffered.length - 1);
-  if (bufferedEnd > video.currentTime + 1.5) return;
-  }
-  setIsBuffering(true);
-  };
-
-const handlePlaying = () => {
-  console.log("[v0] handlePlaying fired - video is now playing!");
-  hasStartedPlayedRef.current = true;
-  // O vídeo começou a reproduzir — esconde loading IMEDIATAMENTE
-  // Prioriza mostrar o vídeo ao usuário o mais rápido possível
-  completeProgress();
-  setIsLoading(false);
-  setShowLogoOverlay(false);
-  setIsBuffering(false);
-  setIsPlaying(true);
-  setShowStuckButton(false);
-  setError(null);
-  setAutoplayBlocked(false); // Limpa flag de autoplay blocked já que está tocando
-  // Reset error retry state on successful playback
-  setErrorRetryCount(0);
-  setErrorRetryCountdown(null);
-  retryCountRef.current = 0;
+    const handlePlaying = () => {
+      hasStartedPlayedRef.current = true;
+      // Removed setIsLoading(false) and friends here to allow timeUpdate/progress to hide it, preventing black flashes
+      setIsBuffering(false);
+      setIsPlaying(true);
+      setShowStuckButton(false);
+      setError(null);
+      retryCountRef.current = 0;
       
       lockOrientation();
 
@@ -1133,11 +869,13 @@ const handlePlaying = () => {
         setBufferedPercentage(progress);
         
         if (!isLoading) {
-           // Já está reproduzindo — garante que a barra está em 100
-           completeProgress();
+           setLoadingProgress(100);
+        } else {
+           setLoadingProgress(prev => Math.max(prev, progress));
         }
-        // Quando ainda está carregando, o target é controlado pelos eventos do HLS
-        // e por canplay/playing — não usamos o buffer total aqui (ele cresce muito devagar).
+        
+        // We only update progress here. Hiding the loading screen should strictly wait until playback begins.
+        // That is handled in handlePlaying and handleTimeUpdate to ensure frames are visible.
       }
     };
 
@@ -1150,13 +888,13 @@ const handlePlaying = () => {
     const handleError = (e: any) => {
       // Ignora evento abort (1), que acontece ao desmontar o player ou mudar o src
       if (video.error && video.error.code === 1) return;
-      
+
       // Se HLS.js estiver ativo, ele possui seu próprio tratador de erros ultra-robusto (Hls.Events.ERROR).
       // Evitamos conflito com erros nativos prematuros do HTMLMediaElement.
       if (activeSrc && activeSrc.toLowerCase().includes('.m3u8') && Hls.isSupported() && hlsRef.current) {
-        return;
+        return; 
       }
-      
+
       if (retryCountRef.current < 15) { // increased to 15 for slower cold starts in Safari / iOS
         retryCountRef.current++;
         setTimeout(() => {
@@ -1167,8 +905,7 @@ const handlePlaying = () => {
         }, 2000);
         return;
       }
-      
-      // Só chegamos aqui quando os 15 retries falharam — é um erro fatal.
+
       if (!error) {
         const lowerSrc = (activeSrc || '').toLowerCase();
         let errorMsg = "Não foi possível carregar o vídeo.";
@@ -1183,22 +920,20 @@ const handlePlaying = () => {
           message: errorMsg, 
           type: lowerSrc.includes('drive.google.com') ? 'format' : 'network' 
         });
-        // Só desliga loading quando há erro fatal exibido
-        setIsLoading(false);
       }
+      setIsLoading(false);
     };
 
-video.addEventListener('timeupdate', handleTimeUpdate);
-  video.addEventListener('loadedmetadata', handleLoadedMetadata);
-  video.addEventListener('canplay', handleCanPlay);
-  video.addEventListener('canplaythrough', handleCanPlayThrough);
-  video.addEventListener('seeked', () => setIsBuffering(false));
-  video.addEventListener('waiting', handleWaiting);
-  video.addEventListener('playing', handlePlaying);
-  video.addEventListener('pause', handlePause);
-  video.addEventListener('progress', handleProgress);
-  video.addEventListener('stalled', handleStalled);
-  video.addEventListener('error', handleError);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('seeked', () => setIsBuffering(false));
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('playing', handlePlaying);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('progress', handleProgress);
+    video.addEventListener('stalled', handleStalled);
+    video.addEventListener('error', handleError);
 
     let isMounted = true;
     const cleanupInit = initPlayer();
@@ -1206,17 +941,16 @@ video.addEventListener('timeupdate', handleTimeUpdate);
     return () => {
       isMounted = false;
       if (cleanupInit) cleanupInit();
-video.removeEventListener('timeupdate', handleTimeUpdate);
-  video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-  video.removeEventListener('canplay', handleCanPlay);
-  video.removeEventListener('canplaythrough', handleCanPlayThrough);
-  video.removeEventListener('seeked', () => setIsBuffering(false));
-  video.removeEventListener('waiting', handleWaiting);
-  video.removeEventListener('playing', handlePlaying);
-  video.removeEventListener('pause', handlePause);
-  video.removeEventListener('progress', handleProgress);
-  video.removeEventListener('stalled', handleStalled);
-  video.removeEventListener('error', handleError);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('seeked', () => setIsBuffering(false));
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('progress', handleProgress);
+      video.removeEventListener('stalled', handleStalled);
+      video.removeEventListener('error', handleError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -1308,123 +1042,23 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
     };
   }, [movieId]);
 
-  // Auto-repair: detecta quando o loading trava e automaticamente reinicia o HLS.
-  // Isso resolve o problema onde a primeira tentativa falha mas clicar em "Reparar" funciona.
-  const autoRepairAttemptRef = useRef(0);
-  const lastProgressCheckRef = useRef(0);
-  
-  useEffect(() => {
-    let checkTimer: any;
-    
-    // NÃO tenta auto-repair se o autoplay foi bloqueado - o usuário precisa clicar manualmente
-    if (isLoading && !hasStartedPlayedRef.current && !autoplayBlocked) {
-      // Verifica a cada 4 segundos se houve progresso
-      checkTimer = setInterval(() => {
-        const currentProgress = loadingProgressRef.current;
-        const progressDelta = currentProgress - lastProgressCheckRef.current;
-        
-        console.log("[v0] Auto-repair check - progress:", currentProgress, "delta:", progressDelta, "attempts:", autoRepairAttemptRef.current, "autoplayBlocked:", autoplayBlocked);
-        
-        // Se o progresso avançou menos de 5% em 4 segundos e ainda não passou de 80%,
-        // e ainda não fizemos mais de 2 tentativas de auto-repair
-        // E o autoplay não foi bloqueado (evita loop infinito quando o navegador bloqueia)
-        if (progressDelta < 5 && currentProgress < 80 && autoRepairAttemptRef.current < 2 && !autoplayBlocked) {
-          autoRepairAttemptRef.current++;
-          console.log("[v0] Auto-repair attempt #" + autoRepairAttemptRef.current);
-          
-          // Executa o mesmo código do toggleReparar (reinicia o HLS)
-          setSessionKey(Date.now());
-          setShowStuckButton(false);
-          setError(null);
-          resetProgress();
-          setProgressTarget(15);
-          lastProgressCheckRef.current = 0;
-        } else {
-          lastProgressCheckRef.current = currentProgress;
-        }
-      }, 4000);
-    } else {
-      // Reset quando o vídeo começar a tocar ou loading terminar
-      // MAS não reseta autoRepairAttemptRef se autoplay foi bloqueado (evita loop)
-      if (!autoplayBlocked) {
-        autoRepairAttemptRef.current = 0;
-      }
-      lastProgressCheckRef.current = 0;
-    }
-    
-    return () => {
-      if (checkTimer) clearInterval(checkTimer);
-    };
-  }, [isLoading, autoplayBlocked]);
-
-// Mostra botão manual de Reparar após 12s (caso auto-repair não resolva)
   useEffect(() => {
     let timer: any;
-    // Não mostra se autoplay foi bloqueado - o usuário só precisa clicar no play
-    if (isLoading && !autoplayBlocked) {
+    if (isLoading) {
       timer = setTimeout(() => {
-        console.log("[v0] 12s stuck timer fired - showing repair button");
         setShowStuckButton(true);
-      }, 12000);
-    } else {
-      setShowStuckButton(false);
+      }, 30000); // 30s para mostrar botão de "Reparar" em casos de grande lentidão
     }
     return () => clearTimeout(timer);
-  }, [isLoading, autoplayBlocked]);
+  }, [isLoading]);
 
-  // Auto-retry na tela de erro com backoff exponencial
-  // Tenta recuperar automaticamente sem exigir refresh da página
-  useEffect(() => {
-    if (!error) {
-      // Reset retry state quando o erro é limpo
-      setErrorRetryCount(0);
-      setErrorRetryCountdown(null);
-      return;
-    }
-
-    // Limite de 3 tentativas automaticas antes de exigir ação manual
-    const MAX_ERROR_RETRIES = 3;
-    if (errorRetryCount >= MAX_ERROR_RETRIES) {
-      setErrorRetryCountdown(null);
-      return;
-    }
-
-    // Backoff exponencial: 5s, 10s, 20s
-    const delaySeconds = 5 * Math.pow(2, errorRetryCount);
-    let countdown = delaySeconds;
-    setErrorRetryCountdown(countdown);
-
-    const countdownInterval = setInterval(() => {
-      countdown -= 1;
-      setErrorRetryCountdown(countdown);
-      
-      if (countdown <= 0) {
-        clearInterval(countdownInterval);
-        setErrorRetryCount(prev => prev + 1);
-        toggleReparar();
-      }
-    }, 1000);
-
-    return () => {
-      clearInterval(countdownInterval);
-    };
-  }, [error, errorRetryCount, toggleReparar]);
-  
   const togglePlay = () => {
     const video = videoRef.current;
-    console.log("[v0] togglePlay called - paused:", video?.paused, "readyState:", video?.readyState, "autoplayBlocked:", autoplayBlocked);
     if (video) {
       if (video.paused) {
         lockOrientation();
         // Allow guest to initiate playback to bypass browser autoplay blocks
-        // Quando o usuário clica manualmente, reseta o autoplayBlocked
-        setAutoplayBlocked(false);
-        video.play().catch(e => { 
-          console.warn("[v0] Play failed in togglePlay:", e); 
-          setAutoplayBlocked(true); 
-          setShowControls(true); 
-          setIsPlaying(false); 
-        });
+        video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
         if (isHost && channelRef.current && roomId) {
           channelRef.current.send({
             type: 'broadcast',
@@ -1498,71 +1132,18 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
       const video = videoRef.current as any;
       if (!video) return;
 
-      // Se já está em PiP, sair
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
-        return;
+      } else if (document.pictureInPictureEnabled) {
+        await video.requestPictureInPicture();
+      } else if (video.webkitSupportsPresentationMode && typeof video.webkitSetPresentationMode === "function") {
+        // Fallback para Safari (iOS/Mac)
+        const currentMode = video.webkitPresentationMode;
+        const newMode = currentMode === "picture-in-picture" ? "inline" : "picture-in-picture";
+        video.webkitSetPresentationMode(newMode);
       }
-
-      // Verifica suporte real (alguns navegadores expõem disablePictureInPicture)
-      const supportsStandardPiP = !!document.pictureInPictureEnabled && !video.disablePictureInPicture;
-      const supportsWebkitPiP = !!video.webkitSupportsPresentationMode &&
-        typeof video.webkitSetPresentationMode === 'function';
-
-      if (!supportsStandardPiP && !supportsWebkitPiP) {
-        alert('Mini Player (Picture-in-Picture) não é suportado neste navegador.');
-        return;
-      }
-
-      // PiP não funciona enquanto o vídeo está em fullscreen do documento.
-      // Saímos do fullscreen primeiro e aguardamos antes de pedir o PiP.
-      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
-        try {
-          if (document.exitFullscreen) {
-            await document.exitFullscreen();
-          } else if ((document as any).webkitExitFullscreen) {
-            await (document as any).webkitExitFullscreen();
-          }
-        } catch (e) {
-          console.warn('Falha ao sair do fullscreen antes do PiP:', e);
-        }
-        // Pequeno atraso para o navegador concluir a saída do fullscreen
-        await new Promise((r) => setTimeout(r, 200));
-      }
-
-      // Garante que o vídeo tem áudio audível (PiP precisa de mídia ativa)
-      try { video.muted = false; } catch (e) {}
-
-      // Garante que o vídeo está tocando — algumas implementações
-      // exigem que o elemento esteja em playback para entrar em PiP.
-      if (video.paused) {
-        try { await video.play(); } catch (e) {}
-      }
-
-      try {
-        if (supportsStandardPiP) {
-          await video.requestPictureInPicture();
-        } else if (supportsWebkitPiP) {
-          // Fallback Safari (iOS/Mac)
-          video.webkitSetPresentationMode('picture-in-picture');
-        }
-      } catch (err: any) {
-        // NotAllowedError, InvalidStateError, etc.
-        console.error('Falha ao entrar em PiP:', err);
-        alert('Não foi possível ativar o Mini Player. Tente novamente após iniciar o vídeo.');
-        return;
-      }
-
-      // Após entrar com sucesso em PiP, fecha o player principal para que
-      // o usuário possa navegar pelo app enquanto o vídeo continua na janela flutuante.
-      // Pequeno atraso garante que o evento enterpictureinpicture já disparou.
-      setTimeout(() => {
-        if (document.pictureInPictureElement || (video.webkitPresentationMode === 'picture-in-picture')) {
-          if (onClose) onClose();
-        }
-      }, 250);
     } catch (error) {
-      console.error('PiP error:', error);
+      console.error("PiP error:", error);
     }
   };
 
@@ -2022,8 +1603,8 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
         </AnimatePresence>
       </div>
 
-      {/* Overlay de Buffering Menor - só aparece DEPOIS do vídeo já ter começado a tocar */}
-      {isBuffering && !isLoading && !error && hasStartedPlayedRef.current && (
+      {/* Overlay de Buffering Menor */}
+      {isBuffering && !isLoading && !error && (
         <div className="absolute inset-0 z-[309] flex flex-col items-center justify-center p-4 pointer-events-none">
            <div className="w-16 h-16 border-4 border-white/20 border-t-red-600 rounded-full animate-spin shadow-[0_0_15px_rgba(220,38,38,0.5)]"></div>
         </div>
@@ -2218,42 +1799,16 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
           <h3 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic font-display">
             {error.type === 'network' ? 'Problema de Conexão' : 'Erro de Carregamento'}
           </h3>
-          <p className="text-gray-400 mb-6 max-w-md leading-relaxed font-medium">
+          <p className="text-gray-400 mb-10 max-w-md leading-relaxed font-medium">
             {error.message}
           </p>
           
-          {/* Auto-retry countdown indicator */}
-          {errorRetryCountdown !== null && errorRetryCount < 3 && (
-            <div className="mb-6 flex flex-col items-center">
-              <div className="flex items-center gap-2 text-white/60 text-sm">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                >
-                  <RotateCw size={14} />
-                </motion.div>
-                <span className="font-medium">Tentando novamente em <span className="text-white font-bold">{errorRetryCountdown}s</span></span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-1">Tentativa {errorRetryCount + 1} de 3</p>
-            </div>
-          )}
-          
-          {errorRetryCount >= 3 && (
-            <p className="text-yellow-500/80 text-xs mb-6 font-medium">
-              Tentativas automáticas esgotadas. Use os botões abaixo.
-            </p>
-          )}
-          
           <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
             <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setErrorRetryCount(0); // Reset retry count for manual retry
-                toggleReparar();
-              }}
-              className="flex-1 bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all shadow-xl hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+              onClick={() => window.location.reload()}
+              className="flex-1 bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all shadow-xl hover:scale-105 active:scale-95"
             >
-              <RotateCw size={16} /> Tentar Novamente
+              Recarregar
             </button>
             <button 
               onClick={onSwitchPlayer || onClose}
@@ -2988,27 +2543,6 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
             <ChevronLeft size={32} strokeWidth={3} />
          </button>
       )}
-
-      {/* Indicador de Status de Rede (compacto, no canto superior direito) */}
-      <AnimatePresence>
-        {showControls && !isLoading && !error && connectionQuality !== 'excellent' && connectionQuality !== 'good' && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-6 right-24 z-[350] pointer-events-none"
-          >
-            <NetworkStatusIndicator stats={networkStats} compact />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Toast de Mudança de Qualidade de Rede */}
-      <NetworkQualityToast
-        quality={networkQualityChanged}
-        show={showNetworkToast}
-        onHide={() => setShowNetworkToast(false)}
-      />
     </div>
   );
 };
