@@ -46,7 +46,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     return null;
   };
 
-  const extractedVideoUrl = getInitialExtracted('video');
+  // Envelopa a URL pelo proxy /api/proxy/m3u8 quando ela aponta para um manifesto restrito
+  // (teradl.kingx.dev tem CORS limitado a https://player.kingx.dev).
+  const wrapWithProxy = (extractedUrl: string | null): string | null => {
+    if (!extractedUrl) return extractedUrl;
+    try {
+      const needsProxy =
+        extractedUrl.includes('teradl.kingx.dev') ||
+        (extractedUrl.includes('kingx.dev') && extractedUrl.includes('.m3u8'));
+      if (!needsProxy) return extractedUrl;
+      // Evita duplo proxy
+      if (extractedUrl.startsWith('/api/proxy/m3u8')) return extractedUrl;
+      return `/api/proxy/m3u8?url=${encodeURIComponent(extractedUrl)}`;
+    } catch {
+      return extractedUrl;
+    }
+  };
+
+  const extractedVideoUrl = wrapWithProxy(getInitialExtracted('video'));
   const extractedSubtitleUrl = getInitialExtracted('subtitle');
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
