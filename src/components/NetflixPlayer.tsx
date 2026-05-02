@@ -69,77 +69,67 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
-  const isIframeMode = useMemo(() => {
-    if (!src) return false;
-    const lowerSrc = src.toLowerCase();
-    
-    // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
-      return true;
-    }
-    
-    // Outros casos contendo video_url podem ser testados nativamente, a menos que sejam das fontes iframe acima
-    if (lowerSrc.includes('video_url=')) {
-      return false;
-    }
-    
-    return false;
-  }, [src]);
-
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
-    if (isIframeMode) return { video_url: src, subtitle_url: subtitleUrl };
-
     let vToPlay = src;
     let sToPlay = subtitleUrl;
     
     try {
-      if (src && src.includes('video_url=')) {
-        const urlObj = new URL(src, window.location.origin);
-        
-        // 1. Try standard searchParams
-        let v = urlObj.searchParams.get('video_url');
-        let sub = urlObj.searchParams.get('subtitle_url');
-        
-        // 2. Try hashParams if not found
-        if (!v && urlObj.hash && urlObj.hash.includes('video_url=')) {
-           let hashStr = urlObj.hash.substring(1);
-           // Remove prefix se o hash for formatado estranho (ex: #/nav?video_url=...)
-           if (hashStr.startsWith('/') && hashStr.includes('?')) {
-             hashStr = hashStr.substring(hashStr.indexOf('?') + 1);
-           }
-           
-           // Se a hash string não for urlencoded corretamente e tiver um link cru ali:
-           // A classe URLSearchParams pode engolir parâmetros do link embeddado se houver múltiplos '&'.
-           // Para extrair manual de string bruta de forma segura sem ser corrompido:
-           const vMatch = hashStr.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/);
-           if (vMatch && vMatch[1]) {
-             v = decodeURIComponent(vMatch[1]).replace(/&amp;/g, '&');
-           } else {
-             // Fallback
-             const hashParams = new URLSearchParams(hashStr);
-             v = hashParams.get('video_url');
-           }
-           
-           const subMatch = hashStr.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/);
-           if (subMatch && subMatch[1]) {
-              sub = decodeURIComponent(subMatch[1]).replace(/&amp;/g, '&');
-           } else {
-              const hashParams = new URLSearchParams(hashStr);
-              sub = hashParams.get('subtitle_url') || sub;
+      if (src) {
+        // Intercept player.kingx.dev wrappers to play natively instead of in iframe
+        if (src.includes('player.kingx.dev/?url=')) {
+           const match = src.match(/[\?&]url=(.+)$/i);
+           if (match && match[1]) {
+              let innerUrl = match[1];
+              if (innerUrl.includes('&subtitle_url=')) {
+                 sToPlay = decodeURIComponent(innerUrl.split('&subtitle_url=')[1]);
+                 innerUrl = innerUrl.split('&subtitle_url=')[0];
+              }
+              vToPlay = decodeURIComponent(innerUrl);
            }
         }
-        
-        // 3. Fallback regex se tudo falhar - extraindo de forma mais robusta sem quebrar nos '&' do streaming embeddado
-        if (!v) {
-          const matchVid = src.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
-          if (matchVid && matchVid[1]) {
-             v = decodeURIComponent(matchVid[1]);
+        else if (src.includes('video_url=')) {
+          const urlObj = new URL(src, window.location.origin);
+          
+          // 1. Try standard searchParams
+          let v = urlObj.searchParams.get('video_url');
+          let sub = urlObj.searchParams.get('subtitle_url');
+          
+          // 2. Try hashParams if not found
+          if (!v && urlObj.hash && urlObj.hash.includes('video_url=')) {
+             let hashStr = urlObj.hash.substring(1);
+             if (hashStr.startsWith('/') && hashStr.includes('?')) {
+               hashStr = hashStr.substring(hashStr.indexOf('?') + 1);
+             }
+             
+             const vMatch = hashStr.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/);
+             if (vMatch && vMatch[1]) {
+               v = decodeURIComponent(vMatch[1]).replace(/&amp;/g, '&');
+             } else {
+               const hashParams = new URLSearchParams(hashStr);
+               v = hashParams.get('video_url');
+             }
+             
+             const subMatch = hashStr.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/);
+             if (subMatch && subMatch[1]) {
+                sub = decodeURIComponent(subMatch[1]).replace(/&amp;/g, '&');
+             } else {
+                const hashParams = new URLSearchParams(hashStr);
+                sub = hashParams.get('subtitle_url') || sub;
+             }
           }
+          
+          // 3. Fallback regex
+          if (!v) {
+            const matchVid = src.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+            if (matchVid && matchVid[1]) {
+               v = decodeURIComponent(matchVid[1]);
+            }
+          }
+          
+          if (v) vToPlay = v;
+          if (sub) sToPlay = sub;
         }
-        
-        if (v) vToPlay = v;
-        if (sub) sToPlay = sub;
       }
       console.log('URL EXTRACTED:', vToPlay);
     } catch (e) {
@@ -147,7 +137,23 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [src, subtitleUrl, isIframeMode]);
+  }, [src, subtitleUrl]);
+
+  const isIframeMode = useMemo(() => {
+    if (!parsedUrls.video_url) return false;
+    const lowerSrc = parsedUrls.video_url.toLowerCase();
+    
+    // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
+    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+      return true;
+    }
+    
+    if (lowerSrc.includes('video_url=')) {
+      return false;
+    }
+    
+    return false;
+  }, [parsedUrls.video_url]);
 
   const [activeSrc, setActiveSrc] = useState(parsedUrls.video_url);
   const [activeSubtitleUrl, setActiveSubtitleUrl] = useState(parsedUrls.subtitle_url);
@@ -635,11 +641,11 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               if (data.fatal) {
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                   if (retryCountRef.current < 50) { 
+                   // Retry less times to not get stuck endlessly on dead proxies
+                   if (retryCountRef.current < 5) { 
                      retryCountRef.current++;
                      setLoadingProgress(prev => Math.max(prev, 10));
                      setTimeout(() => {
-                       // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
                            data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
                            data.response?.code === 403 || data.response?.code === 404) {
@@ -647,9 +653,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                        } else {
                            hls.startLoad();
                        }
-                     }, 1500); // 1.5s delay to handle cold-start proxies smoothly
+                     }, 1500);
                    } else {
-                     setError({ message: "Falha contínua na conexão. O servidor pode estar offline ou bloqueado.", type: 'network' });
+                     setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado (Need Verify). Tente usar o player nativo.", type: 'network' });
                      setIsLoading(false);
                    }
                  }

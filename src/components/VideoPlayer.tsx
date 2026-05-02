@@ -34,12 +34,35 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         if (url.includes('#')) {
           searchString = url.split('#')[1];
         } else if (url.includes('?')) {
-          searchString = url.split('?')[1];
+          searchString = url.split('?').slice(1).join('?');
         }
         
         if (searchString) {
-          const params = new URLSearchParams(searchString);
-          return params.get(`${type}_url`);
+          // Do not use URLSearchParams as it completely destroys nested unencoded ampersands
+          if (type === 'video') {
+             // 1. Check for ?url=...
+             if (url.includes('player.kingx.dev/?url=')) {
+                 const match = url.match(/[\?&]url=(.+)$/i);
+                 if (match && match[1]) {
+                    // Se houver subtitle_url depois, recorta
+                    let v = match[1];
+                    if (v.includes('&subtitle_url=')) {
+                       v = v.split('&subtitle_url=')[0];
+                    }
+                    return decodeURIComponent(v);
+                 }
+             }
+             // 2. Check for video_url=
+             const vMatch = searchString.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+             if (vMatch && vMatch[1]) {
+                return decodeURIComponent(vMatch[1]).replace(/&amp;/g, '&');
+             }
+          } else if (type === 'subtitle') {
+             const subMatch = searchString.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/i);
+             if (subMatch && subMatch[1]) {
+                return decodeURIComponent(subMatch[1]).replace(/&amp;/g, '&');
+             }
+          }
         }
       } catch (e) {}
     }
