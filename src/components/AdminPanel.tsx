@@ -1936,7 +1936,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             ) : activeTab === 'apis' ? (
               <AdminAPIsTab />
             ) : activeTab === 'terabox' ? (
-              <AdminTeraboxTab />
+              <AdminTeraboxTab movies={movies} onUpdateMovie={onUpdateMovie} onAddMovie={onAddMovie} />
             ) : activeTab === 'onesignal' ? (
               <AdminOneSignalTab />
             ) : activeTab === 'supabase' ? (

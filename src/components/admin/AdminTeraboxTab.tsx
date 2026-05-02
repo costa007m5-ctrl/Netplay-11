@@ -1,12 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play, Video } from 'lucide-react';
+import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play, Video, RefreshCw, FolderSearch, Plus, Save } from 'lucide-react';
 import Hls from 'hls.js';
+import { Movie } from '../../types';
+import tmdb from '../../services/tmdb';
 
-export default function AdminTeraboxTab() {
+export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
   const [testUrl, setTestUrl] = useState('');
   const [testResult, setTestResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // For Mass Import / Scanner
+  const [folderUrl, setFolderUrl] = useState('');
+  const [folderScanning, setFolderScanning] = useState(false);
+  const [folderResults, setFolderResults] = useState<any[]>([]);
+  const [scanningStatus, setScanningStatus] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
+
+  // For Mass Update
+  const [updatingMode, setUpdatingMode] = useState(false);
+  const [updateLog, setUpdateLog] = useState<string[]>([]);
+  const [updating, setUpdating] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -58,6 +72,155 @@ export default function AdminTeraboxTab() {
     };
   }, [videoUrlToPlay]);
 
+  // Mass Import / Scan Folder
+  const handleScanFolder = async () => {
+    if (!folderUrl) return;
+    setFolderScanning(true);
+    setScanningStatus('Extraindo lista da pasta...');
+    setFolderResults([]);
+    
+    try {
+      const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(folderUrl)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao extrair pasta');
+      
+      let list = data.list || [];
+      if (!list.length && data.url) {
+        list = [data]; // single file fallback
+      }
+
+      setScanningStatus(`Rastreando ${list.length} arquivos no TMDB...`);
+
+      const mapped = [];
+      for (const item of list) {
+        const filename = item.filename || item.name || 'Desconhecido';
+        const urlToSave = item.url || item.dlink || item.stream_url || folderUrl;
+
+        // Try to match with TMDB
+        const searchName = filename.replace(/\.(mp4|mkv|avi|webm)$/i, '').replace(/[\.\-_]/g, ' ').trim();
+        const searchRes = await tmdb.searchMulti(searchName);
+        let bestMatch = searchRes && searchRes.length > 0 ? searchRes[0] : null;
+
+        mapped.push({
+          imported_filename: filename,
+          url: urlToSave,
+          tmdb_match: bestMatch,
+          selected: true
+        });
+      }
+
+      setFolderResults(mapped);
+      setScanningStatus('Concluído. Revise os itens e adicione.');
+    } catch (err: any) {
+      alert("Erro na varredura: " + err.message);
+      setScanningStatus('Erro na varredura.');
+    } finally {
+      setFolderScanning(false);
+    }
+  };
+
+  const handleSaveScanned = async () => {
+    const toSave = folderResults.filter(r => r.selected && r.tmdb_match);
+    if (!toSave.length) return alert('Nenhum item válido selecionado.');
+    
+    setSaveLoading(true);
+    try {
+      for (const item of toSave) {
+        const t = item.tmdb_match;
+        const type = t.media_type === 'tv' ? 'series' : 'movie';
+        
+        const newMovie: Partial<Movie> = {
+          title: t.title || t.name,
+          name: t.name || t.title,
+          original_name: t.original_name || t.original_title,
+          overview: t.overview || '',
+          backdrop_path: t.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : '',
+          poster_path: t.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : '',
+          type,
+          videoUrl: item.url,
+          videoUrl2: item.url,
+          file_name: item.imported_filename
+        };
+        await onAddMovie(newMovie);
+      }
+      alert("Conteúdos adicionados com sucesso!");
+      setFolderResults([]);
+      setFolderUrl('');
+    } catch (err: any) {
+      alert("Erro ao salvar: " + err.message);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  // Mass Update Links
+  const teraboxMovies = movies.filter(m => {
+    const isTera = m.videoUrl?.includes('terabox') || m.videoUrl?.includes('teradl') || m.videoUrl?.includes('kingx') || m.videoUrl?.includes('xapiverse');
+    const hasTeraEpisodes = m.episodes?.some(ep => ep.videoUrl?.includes('terabox') || ep.videoUrl?.includes('teradl') || ep.videoUrl?.includes('kingx') || ep.videoUrl?.includes('xapiverse'));
+    return isTera || hasTeraEpisodes;
+  });
+
+  const getDirectLinkFromApi = async (url: string) => {
+    const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data.url || data.stream_url || (data.list && data.list.length > 0 && (data.list[0].url || data.list[0].dlink)) || url;
+  };
+
+  const processUpdateSingle = async (movie: Movie) => {
+    try {
+      let needsUpdate = false;
+      let newVideoUrl = movie.videoUrl;
+      let newEpisodes = movie.episodes ? [...movie.episodes] : [];
+      let updatedCount = 0;
+
+      if (movie.videoUrl && (movie.videoUrl.includes('terabox') || movie.videoUrl.includes('teradl') || movie.videoUrl.includes('kingx') || movie.videoUrl.includes('xapiverse'))) {
+         const newUrl = await getDirectLinkFromApi(movie.videoUrl);
+         if (newUrl && newUrl !== movie.videoUrl) {
+            newVideoUrl = newUrl;
+            needsUpdate = true;
+            updatedCount++;
+         }
+      }
+
+      if (movie.episodes) {
+         for (let i = 0; i < newEpisodes.length; i++) {
+           const ep = newEpisodes[i];
+           if (ep.videoUrl && (ep.videoUrl.includes('terabox') || ep.videoUrl.includes('teradl') || ep.videoUrl.includes('kingx') || ep.videoUrl.includes('xapiverse'))) {
+              const newUrl = await getDirectLinkFromApi(ep.videoUrl);
+              if (newUrl && newUrl !== ep.videoUrl) {
+                  newEpisodes[i] = { ...ep, videoUrl: newUrl };
+                  needsUpdate = true;
+                  updatedCount++;
+              }
+           }
+         }
+      }
+
+      if (needsUpdate) {
+         await onUpdateMovie({ ...movie, videoUrl: newVideoUrl, episodes: newEpisodes });
+         setUpdateLog(prev => [`[OK] ${movie.title || movie.name} atualizado (${updatedCount} links).`, ...prev]);
+      } else {
+         setUpdateLog(prev => [`[Ignorado] ${movie.title || movie.name} (Links inalterados)`, ...prev]);
+      }
+    } catch (e: any) {
+      setUpdateLog(prev => [`[ERRO] ${movie.title || movie.name}: ${e.message}`, ...prev]);
+    }
+  };
+
+  const handleUpdateAll = async () => {
+    if (!confirm(`Tem certeza que deseja processar ${teraboxMovies.length} filmes usando a API XAPIverse? Esta ação irá converter os links de origem para links diretos.`)) return;
+    
+    setUpdating(true);
+    setUpdateLog([]);
+    for (const movie of teraboxMovies) {
+       await processUpdateSingle(movie);
+       // Add a small delay to avoid rate limiting
+       await new Promise(r => setTimeout(r, 1000));
+    }
+    setUpdating(false);
+  };
+
   return (
     <div className="max-w-4xl mx-auto py-8">
       <div className="mb-8">
@@ -79,16 +242,150 @@ export default function AdminTeraboxTab() {
         </div>
         <p className="text-sm text-gray-400 mt-2">
           O servidor está configurado para utilizar a chave de API <code>xAPIverse-Key</code>.
-          O endpoint local <code>/api/terabox-pro</code> processará os links.
+          O endpoint local <code>/api/terabox-pro</code> processará os links automaticamente no player e ferramentas abaixo.
         </p>
       </div>
 
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        {/* Scanner de Pastas */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-green-400">
+            <FolderSearch size={20} />
+            Rastreio de Novos Conteúdos
+          </h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Cole um link de pasta do Terabox. O sistema fará a varredura (rastreio) e adicionará os arquivos encontrados automaticamente.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={folderUrl}
+              onChange={e => setFolderUrl(e.target.value)}
+              placeholder="Link da Pasta Terabox..."
+              className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+            />
+            <button
+              onClick={handleScanFolder}
+              disabled={folderScanning || !folderUrl}
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
+            >
+              {folderScanning ? <RefreshCw size={14} className="animate-spin" /> : <FolderSearch size={14} />}
+              Escanear
+            </button>
+          </div>
+          {scanningStatus && <div className="mt-3 text-xs text-green-400 font-bold">{scanningStatus}</div>}
+        </div>
+
+        {/* Atualizador em Massa */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-yellow-400">
+            <RefreshCw size={20} />
+            Atualizar Links Antigos
+          </h3>
+          <p className="text-xs text-gray-400 mb-4">
+             Converta links do KingX/Terabox no seu catálogo para os novos links diretos gerados pela API XAPIverse.
+             <strong> {teraboxMovies.length} itens encontados.</strong>
+          </p>
+          <button
+            onClick={() => setUpdatingMode(!updatingMode)}
+            className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
+          >
+            Abrir Ferramenta de Atualização
+          </button>
+        </div>
+      </div>
+
+      {folderResults.length > 0 && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-6 mb-8">
+          <div className="flex justify-between items-center mb-4">
+             <h3 className="font-bold text-green-400">Resultados da Varredura ({folderResults.length})</h3>
+             <button
+                onClick={handleSaveScanned}
+                disabled={saveLoading}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center gap-2"
+             >
+                {saveLoading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                Adicionar Selecionados ao Catálogo
+             </button>
+          </div>
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+             {folderResults.map((res, i) => (
+                <div key={i} className="flex items-center gap-4 bg-black/40 p-3 rounded-xl border border-white/5">
+                   <input 
+                     type="checkbox" 
+                     checked={res.selected}
+                     onChange={(e) => {
+                        const copy = [...folderResults];
+                        copy[i].selected = e.target.checked;
+                        setFolderResults(copy);
+                     }}
+                     className="w-4 h-4 rounded"
+                   />
+                   <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white truncate">{res.imported_filename}</div>
+                      <div className="text-xs text-gray-400 truncate mt-1">Match TMDB: {res.tmdb_match ? (res.tmdb_match.title || res.tmdb_match.name) : <span className="text-red-400">Não encontrado</span>}</div>
+                   </div>
+                </div>
+             ))}
+          </div>
+        </div>
+      )}
+
+      {updatingMode && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-6 mb-8">
+          <div className="flex justify-between items-center mb-4">
+             <h3 className="font-bold text-yellow-500">Filmes/Séries com Terabox</h3>
+             <button
+                onClick={handleUpdateAll}
+                disabled={updating || teraboxMovies.length === 0}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center gap-2"
+             >
+                {updating ? <RefreshCw size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                Otimizar Todos os Links
+             </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+               {teraboxMovies.map((m, i) => (
+                  <div key={i} className="flex items-center gap-4 bg-black/40 p-3 rounded-xl border border-white/5">
+                     <img src={m.backdrop_path || m.poster_path} className="w-16 h-10 object-cover rounded" alt="" />
+                     <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-white truncate">{m.title || m.name}</div>
+                        <div className="text-[10px] text-gray-500 truncate">{m.videoUrl}</div>
+                     </div>
+                     <button
+                        onClick={async () => {
+                          setUpdating(true);
+                          await processUpdateSingle(m);
+                          setUpdating(false);
+                        }}
+                        disabled={updating}
+                        className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-all"
+                        title="Atualizar link Individual"
+                     >
+                        <RefreshCw size={14} className="text-yellow-500" />
+                     </button>
+                  </div>
+               ))}
+               {teraboxMovies.length === 0 && <div className="text-sm text-gray-500 p-4">Nenhum conteúdo com Terabox/KingX.</div>}
+            </div>
+            <div className="bg-black/60 rounded-xl p-4 border border-white/5 font-mono text-[10px] text-gray-300 h-96 overflow-y-auto">
+               <div className="text-yellow-500 font-bold mb-2 uppercase">Log de Operações</div>
+               {updateLog.map((log, i) => (
+                  <div key={i} className={`mb-1 ${log.includes('[ERRO]') ? 'text-red-400' : log.includes('Ignorado') ? 'text-gray-500' : 'text-green-400'}`}>{log}</div>
+               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8 mt-8">
         <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
           <LinkIcon className="text-gray-400" size={20} />
-          Testador de Links
+          Testador Rápido de Player
         </h3>
-        <p className="text-sm text-gray-400 mb-4">Cole um link do Terabox ou KingX abaixo para simular a extração direta da API.</p>
+        <p className="text-sm text-gray-400 mb-4">Teste extrair e rodar um vídeo diretamente nesta tela.</p>
         
         <div className="flex gap-2">
           <input
@@ -131,7 +428,7 @@ export default function AdminTeraboxTab() {
 
         {testResult && (
           <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-xl overflow-x-auto">
-            <h4 className="font-bold text-gray-300 mb-2 text-sm uppercase">Resultado da Extração</h4>
+            <h4 className="font-bold text-gray-300 mb-2 text-sm uppercase">Resultado da Extração Bruto</h4>
             <pre className="text-xs text-green-400 whitespace-pre-wrap">
               {JSON.stringify(testResult, null, 2)}
             </pre>
@@ -142,3 +439,4 @@ export default function AdminTeraboxTab() {
     </div>
   );
 }
+
