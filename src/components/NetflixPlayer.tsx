@@ -192,6 +192,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const playerMode = useMemo(() => (initialTime > 0 ? 'resume' : 'fresh'), [initialTime]);
 
   const toggleReparar = useCallback(() => {
+    console.log("[v0] toggleReparar called - resetting player completely");
     // Destroy existing HLS instance to ensure clean slate
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (e) {}
@@ -210,6 +211,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     setShowStuckButton(false);
     setError(null);
     setIsLoading(true);
+    setAutoplayBlocked(false); // Reset autoplay blocked para permitir nova tentativa
     resetProgress();
     setProgressTarget(15);
     hasStartedPlayedRef.current = false;
@@ -675,11 +677,15 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
 
   useEffect(() => {
     let timer: any;
-    if (!hasStartedPlayedRef.current && !isPlaying && loadingProgress === 100) {
+    // Se o autoplay foi bloqueado, não mostra o botão de stuck automaticamente
+    // pois o player já está mostrando o botão de play para o usuário clicar
+    if (!hasStartedPlayedRef.current && !isPlaying && loadingProgress === 100 && !autoplayBlocked) {
+      console.log("[v0] showStuckButton timer started - will show in 10s if video doesn't start");
       // (10 segundos a partir de chegar em 100% se ainda não estiver tocando)
       timer = setTimeout(() => {
-        // Só mostra se ainda não tocou
-        if (!hasStartedPlayedRef.current) {
+        // Só mostra se ainda não tocou E autoplay não foi bloqueado
+        if (!hasStartedPlayedRef.current && !autoplayBlocked) {
+          console.log("[v0] showStuckButton showing - video stuck after loading");
           setShowStuckButton(true);
         }
       }, 10000);
@@ -687,7 +693,7 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
       setShowStuckButton(false);
     }
     return () => clearTimeout(timer);
-  }, [isPlaying, loadingProgress]);
+  }, [isPlaying, loadingProgress, autoplayBlocked]);
 
   useEffect(() => {
     if (isIframeMode) {
@@ -698,6 +704,8 @@ const [qualityToast, setQualityToast] = useState<string | null>(null);
     const video = videoRef.current;
     if (!video) return;
 
+    console.log("[v0] Player init effect running - sessionKey:", sessionKey, "activeSrc:", activeSrc?.substring(0, 50) + "...");
+    
     // Reset state
     setError(null);
     setIsLoading(true);
@@ -1011,6 +1019,7 @@ if (Hls.isSupported() && !isIOS) {
     };
 
     const handleCanPlay = () => {
+      console.log("[v0] handleCanPlay fired - readyState:", video.readyState, "paused:", video.paused, "hasStartedPlayed:", hasStartedPlayedRef.current);
       // O vídeo está pronto para tocar — empurra o target para 95%.
       setProgressTarget(95);
       
@@ -1026,7 +1035,11 @@ if (Hls.isSupported() && !isIOS) {
         // Actually, if we are a guest, wait for playback-update to tell us to play. If we try to play automatically, we break the host's pause state.
         if (!roomId || isHost) {
           video.play().catch(err => {
-            console.warn("Autoplay blocked:", err);
+            console.warn("[v0] Autoplay blocked in handleCanPlay:", err);
+            // IMPORTANTE: Quando autoplay é bloqueado, escondemos o loading e mostramos 
+            // o player com botão de play para o usuário clicar manualmente.
+            // Também marcamos autoplayBlocked para evitar retries automáticos infinitos.
+            setAutoplayBlocked(true);
             completeProgress();
             setIsLoading(false);
             setShowLogoOverlay(false);
@@ -1074,6 +1087,7 @@ if (Hls.isSupported() && !isIOS) {
   };
 
 const handlePlaying = () => {
+  console.log("[v0] handlePlaying fired - video is now playing!");
   hasStartedPlayedRef.current = true;
   // O vídeo começou a reproduzir — esconde loading IMEDIATAMENTE
   // Prioriza mostrar o vídeo ao usuário o mais rápido possível
@@ -1084,6 +1098,7 @@ const handlePlaying = () => {
   setIsPlaying(true);
   setShowStuckButton(false);
   setError(null);
+  setAutoplayBlocked(false); // Limpa flag de autoplay blocked já que está tocando
   // Reset error retry state on successful playback
   setErrorRetryCount(0);
   setErrorRetryCountdown(null);
@@ -1301,16 +1316,21 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
   useEffect(() => {
     let checkTimer: any;
     
-    if (isLoading && !hasStartedPlayedRef.current) {
+    // NÃO tenta auto-repair se o autoplay foi bloqueado - o usuário precisa clicar manualmente
+    if (isLoading && !hasStartedPlayedRef.current && !autoplayBlocked) {
       // Verifica a cada 4 segundos se houve progresso
       checkTimer = setInterval(() => {
         const currentProgress = loadingProgressRef.current;
         const progressDelta = currentProgress - lastProgressCheckRef.current;
         
+        console.log("[v0] Auto-repair check - progress:", currentProgress, "delta:", progressDelta, "attempts:", autoRepairAttemptRef.current, "autoplayBlocked:", autoplayBlocked);
+        
         // Se o progresso avançou menos de 5% em 4 segundos e ainda não passou de 80%,
         // e ainda não fizemos mais de 2 tentativas de auto-repair
-        if (progressDelta < 5 && currentProgress < 80 && autoRepairAttemptRef.current < 2) {
+        // E o autoplay não foi bloqueado (evita loop infinito quando o navegador bloqueia)
+        if (progressDelta < 5 && currentProgress < 80 && autoRepairAttemptRef.current < 2 && !autoplayBlocked) {
           autoRepairAttemptRef.current++;
+          console.log("[v0] Auto-repair attempt #" + autoRepairAttemptRef.current);
           
           // Executa o mesmo código do toggleReparar (reinicia o HLS)
           setSessionKey(Date.now());
@@ -1325,27 +1345,32 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
       }, 4000);
     } else {
       // Reset quando o vídeo começar a tocar ou loading terminar
-      autoRepairAttemptRef.current = 0;
+      // MAS não reseta autoRepairAttemptRef se autoplay foi bloqueado (evita loop)
+      if (!autoplayBlocked) {
+        autoRepairAttemptRef.current = 0;
+      }
       lastProgressCheckRef.current = 0;
     }
     
     return () => {
       if (checkTimer) clearInterval(checkTimer);
     };
-  }, [isLoading]);
+  }, [isLoading, autoplayBlocked]);
 
 // Mostra botão manual de Reparar após 12s (caso auto-repair não resolva)
   useEffect(() => {
     let timer: any;
-    if (isLoading) {
+    // Não mostra se autoplay foi bloqueado - o usuário só precisa clicar no play
+    if (isLoading && !autoplayBlocked) {
       timer = setTimeout(() => {
+        console.log("[v0] 12s stuck timer fired - showing repair button");
         setShowStuckButton(true);
       }, 12000);
     } else {
       setShowStuckButton(false);
     }
     return () => clearTimeout(timer);
-  }, [isLoading]);
+  }, [isLoading, autoplayBlocked]);
 
   // Auto-retry na tela de erro com backoff exponencial
   // Tenta recuperar automaticamente sem exigir refresh da página
@@ -1387,11 +1412,19 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
   
   const togglePlay = () => {
     const video = videoRef.current;
+    console.log("[v0] togglePlay called - paused:", video?.paused, "readyState:", video?.readyState, "autoplayBlocked:", autoplayBlocked);
     if (video) {
       if (video.paused) {
         lockOrientation();
         // Allow guest to initiate playback to bypass browser autoplay blocks
-        video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+        // Quando o usuário clica manualmente, reseta o autoplayBlocked
+        setAutoplayBlocked(false);
+        video.play().catch(e => { 
+          console.warn("[v0] Play failed in togglePlay:", e); 
+          setAutoplayBlocked(true); 
+          setShowControls(true); 
+          setIsPlaying(false); 
+        });
         if (isHost && channelRef.current && roomId) {
           channelRef.current.send({
             type: 'broadcast',
