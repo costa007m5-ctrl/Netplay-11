@@ -72,19 +72,40 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const isIframeMode = useMemo(() => {
     if (!src) return false;
     const lowerSrc = src.toLowerCase();
-    
-    // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
-      return true;
-    }
-    
-    // Outros casos contendo video_url podem ser testados nativamente, a menos que sejam das fontes iframe acima
+
+    // Links agregadores com video_url/subtitle_url funcionam melhor no player nativo
+    // para dar autoplay real (clicou, começou) e permitir retry/proxy interno.
     if (lowerSrc.includes('video_url=')) {
       return false;
     }
-    
+
+    // player.kingx sem video_url extraível precisa abrir como página embed.
+    if (lowerSrc.includes('player.kingx.dev')) {
+      return true;
+    }
+
+    // Mantém iframe apenas para embeds puros sem URL de mídia extraível.
+    if (lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+      return true;
+    }
+
     return false;
   }, [src]);
+
+  const wrapWithProxy = useCallback((rawUrl?: string | null) => {
+    if (!rawUrl) return rawUrl || '';
+    try {
+      const decoded = decodeURIComponent(rawUrl).replace(/&amp;/g, '&');
+      const needsProxy =
+        decoded.includes('teradl.kingx.dev') ||
+        (decoded.includes('kingx.dev') && decoded.includes('.m3u8'));
+
+      if (!needsProxy || decoded.startsWith('/api/proxy/m3u8')) return decoded;
+      return `/api/proxy/m3u8?url=${encodeURIComponent(decoded)}`;
+    } catch {
+      return rawUrl;
+    }
+  }, []);
 
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
@@ -138,16 +159,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           }
         }
         
-        if (v) vToPlay = v;
-        if (sub) sToPlay = sub;
+        if (v) vToPlay = wrapWithProxy(v);
+        if (sub) sToPlay = wrapWithProxy(sub);
       }
+      vToPlay = wrapWithProxy(vToPlay);
+      sToPlay = wrapWithProxy(sToPlay);
       console.log('URL EXTRACTED:', vToPlay);
     } catch (e) {
       console.warn("URL Extraction failed", e);
     }
     
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [src, subtitleUrl]);
+  }, [isIframeMode, src, subtitleUrl, wrapWithProxy]);
 
   const [activeSrc, setActiveSrc] = useState(parsedUrls.video_url);
   const [activeSubtitleUrl, setActiveSubtitleUrl] = useState(parsedUrls.subtitle_url);
