@@ -257,11 +257,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         const target = targetProgressRef.current;
         if (prev >= target) return prev;
         const diff = target - prev;
-        // Avanço suave: maior próximo ao target, mais lento perto do fim
-        const step = diff > 30 ? 4 : diff > 10 ? 2 : 1;
+        // Avanço rápido: alcança o target em poucos ticks para evitar
+        // sensação de barra "presa" entre marcos do HLS.
+        const step = diff > 40 ? 12 : diff > 15 ? 6 : diff > 5 ? 3 : 1;
         return Math.min(prev + step, target);
       });
-    }, 60);
+    }, 30);
   };
   const setProgressTarget = (value: number) => {
     targetProgressRef.current = Math.max(targetProgressRef.current, Math.min(100, value));
@@ -676,39 +677,62 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               enableWorker: true,
               lowLatencyMode: true,
               startFragPrefetch: true,
-              capLevelToPlayerSize: true, // Limits initial quality based on player frame size to start faster
+              capLevelToPlayerSize: true,
               autoStartLoad: true,
-              startLevel: -1, // Use auto level
+              // startLevel: 0 → começa pela QUALIDADE MAIS BAIXA (menor fragmento, download rápido)
+              // O HLS.js sobe a qualidade automaticamente após medir a banda.
+              startLevel: 0,
+              testBandwidth: false, // não desperdiça tempo medindo banda antes de tocar
               startPosition: startPoint > 0 ? startPoint : -1,
-              // Buffers menores = playback começa mais rápido
-              maxBufferLength: 15,
+              // Buffer mínimo para iniciar o playback o mais rápido possível
+              maxBufferLength: 10,
               maxMaxBufferLength: 30,
               backBufferLength: 0,
-              maxBufferSize: 30 * 1000 * 1000,
-              manifestLoadingMaxRetry: 10,
-              levelLoadingMaxRetry: 10,
-              fragLoadingMaxRetry: 10,
-              manifestLoadingRetryDelay: 500,
-              levelLoadingRetryDelay: 500,
-              fragLoadingRetryDelay: 500,
+              maxBufferSize: 20 * 1000 * 1000,
+              // Timeouts e retries agressivos
+              manifestLoadingMaxRetry: 6,
+              levelLoadingMaxRetry: 6,
+              fragLoadingMaxRetry: 6,
+              manifestLoadingRetryDelay: 300,
+              levelLoadingRetryDelay: 300,
+              fragLoadingRetryDelay: 300,
+              manifestLoadingTimeOut: 10000,
+              levelLoadingTimeOut: 10000,
+              fragLoadingTimeOut: 20000,
+              // Deixa o HLS começar a tocar com apenas alguns segundos de buffer
+              maxStarvationDelay: 4,
+              maxLoadingDelay: 4,
+              nudgeMaxRetry: 5,
             });
             hls.attachMedia(video);
             hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-              setProgressTarget(45);
+              setProgressTarget(20);
               hls.loadSource(videoToPlay);
+            });
+            hls.on(Hls.Events.MANIFEST_LOADING, () => {
+              setProgressTarget(30);
             });
             hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
-              setProgressTarget(70);
+              setProgressTarget(45);
               
               if (video) {
                  video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
               }
             });
+            // Progresso real baseado em eventos do HLS.js
+            // FRAG_LOADING → começou a baixar primeiro fragmento (45→60)
+            // FRAG_LOADED → terminou (60→85)
+            // FRAG_BUFFERED → bufferizado (85→95)
+            hls.on(Hls.Events.FRAG_LOADING, () => {
+              setProgressTarget(Math.max(targetProgressRef.current, 60));
+            });
+            hls.on(Hls.Events.FRAG_LOADED, () => {
+              setProgressTarget(Math.max(targetProgressRef.current, 85));
+            });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
-              // Cada fragmento bufferizado avança o target em direção a 95
-              setProgressTarget(Math.min(95, targetProgressRef.current + 8));
+              setProgressTarget(Math.min(95, Math.max(targetProgressRef.current, 92)));
             });
 
             hls.on(Hls.Events.ERROR, (event, data) => {
@@ -801,10 +825,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const didSeek = Math.abs(time - lastTimeRef.current) > 2;
       lastTimeRef.current = time;
 
-      // O vídeo já está renderizando frames — empurra o target para 100
-      // mas só esconde o loading quando o progresso visual atingir 100%.
-      if (time > 0.1 && video.readyState >= 3 && !video.seeking) {
-        if (isLoading) {
+      // O vídeo já está renderizando frames — empurra o target para 100.
+      // Só escondemos o loading quando:
+      //  1) o vídeo está rodando de verdade (time > 0.3s)
+      //  2) tem buffer suficiente à frente (>= 1.5s)
+      //  3) a barra visual chegou em 100%
+      // Isso elimina o "segundo spinner" (buffering aparecer logo depois).
+      if (time > 0.3 && video.readyState >= 3 && !video.seeking && !video.paused) {
+        // Verifica se há buffer suficiente à frente do ponto atual
+        let hasEnoughBuffer = false;
+        if (video.buffered.length > 0) {
+          for (let i = 0; i < video.buffered.length; i++) {
+            const start = video.buffered.start(i);
+            const end = video.buffered.end(i);
+            if (time >= start && time <= end && end - time >= 1.5) {
+              hasEnoughBuffer = true;
+              break;
+            }
+          }
+        }
+        if (isLoading && hasEnoughBuffer) {
           setProgressTarget(100);
           if (loadingProgress >= 99) {
             completeProgress();
@@ -873,9 +913,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handleCanPlay = () => {
-      // O vídeo está pronto para tocar — empurra o target para 90%.
-      // Só escondemos o loading quando ele realmente começa a renderizar (handlePlaying/timeupdate).
-      setProgressTarget(90);
+      // O vídeo está pronto para tocar — empurra o target para 95%.
+      // Só escondemos o loading quando ele realmente começa a renderizar (handleTimeUpdate).
+      setProgressTarget(95);
 
       if (video.paused) {
         // Only autoplay if we are host, OR if we are not in a room, OR if we are supposed to be playing.
@@ -910,7 +950,11 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handleWaiting = () => {
-      // Evita mostrar loading se já houver buffer suficiente
+      // Durante a carga inicial (antes do vídeo começar a tocar pela primeira vez),
+      // o overlay de loading principal já cobre a tela — não exibimos o spinner
+      // de buffering pequeno por cima dele.
+      if (!hasStartedPlayedRef.current) return;
+      // Evita mostrar buffering se já houver buffer suficiente à frente
       if (video.buffered.length > 0) {
         const bufferedEnd = video.buffered.end(video.buffered.length - 1);
         if (bufferedEnd > video.currentTime + 1.5) return;
@@ -921,14 +965,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const handlePlaying = () => {
       hasStartedPlayedRef.current = true;
       // O vídeo começou a reproduzir de fato — sobe o target para 100.
-      // Damos um pequeno tempo (200ms) para a barra animar até 100% antes
-      // de esconder o loading, evitando saltos visuais.
+      // NÃO escondemos o loading aqui ainda — esperamos o handleTimeUpdate
+      // confirmar que o vídeo está mesmo renderizando frames com buffer suficiente.
+      // Isso evita o "segundo spinner" (buffering) aparecer logo após o loading sumir.
       setProgressTarget(100);
-      setTimeout(() => {
-        completeProgress();
-        setIsLoading(false);
-        setShowLogoOverlay(false);
-      }, 220);
       setIsBuffering(false);
       setIsPlaying(true);
       setShowStuckButton(false);
@@ -1749,8 +1789,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         </AnimatePresence>
       </div>
 
-      {/* Overlay de Buffering Menor */}
-      {isBuffering && !isLoading && !error && (
+      {/* Overlay de Buffering Menor - só aparece DEPOIS do vídeo já ter começado a tocar */}
+      {isBuffering && !isLoading && !error && hasStartedPlayedRef.current && (
         <div className="absolute inset-0 z-[309] flex flex-col items-center justify-center p-4 pointer-events-none">
            <div className="w-16 h-16 border-4 border-white/20 border-t-red-600 rounded-full animate-spin shadow-[0_0_15px_rgba(220,38,38,0.5)]"></div>
         </div>
