@@ -704,19 +704,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         <div className="relative flex-1 w-full h-full flex flex-col items-center justify-center">
           {!isOnline && (
             <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mb-8 border border-red-600/30">
+              <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mb-8 border border-red-600/30 animate-pulse">
                 <WifiOff size={48} className="text-red-600" />
               </div>
               <h3 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic font-display">Sem Internet</h3>
-              <p className="text-gray-400 max-w-md mb-8 font-medium">
+              <p className="text-gray-400 max-w-md mb-4 font-medium">
                 Parece que você está offline. Verifique sua conexão para continuar assistindo.
               </p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-700 transition-all shadow-[0_10px_30px_rgba(220,38,38,0.3)]"
-              >
-                Tentar Novamente
-              </button>
+              <p className="text-gray-500 text-sm mb-6">
+                A reprodução continuará automaticamente quando a conexão for restabelecida.
+              </p>
+              <div className="flex items-center gap-2 text-gray-500 text-xs">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                Aguardando conexão...
+              </div>
             </div>
           )}
           
