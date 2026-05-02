@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 
 interface NetflixPlayerProps {
   src: string;
+  verificationUrl?: string;
   title: string;
   seriesTitle?: string;
   movieId?: string | number;
@@ -38,6 +39,7 @@ interface NetflixPlayerProps {
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
   src, 
+  verificationUrl,
   title, 
   seriesTitle,
   movieId,
@@ -68,6 +70,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const mediaAttachedRef = useRef(false);
+  const iframeLoadedRef = useRef(false);
+  const startedHlsRef = useRef(false);
+  const videoToPlayRef = useRef('');
+  
+  const attemptStartHlsLoad = useCallback(() => {
+    if (startedHlsRef.current) return;
+    if (mediaAttachedRef.current && (!verificationUrl || iframeLoadedRef.current) && hlsRef.current) {
+        startedHlsRef.current = true;
+        hlsRef.current.loadSource(videoToPlayRef.current);
+    }
+  }, [verificationUrl]);
   
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
@@ -564,6 +578,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const initPlayer = () => {
       if (!video) return;
 
+      iframeLoadedRef.current = false;
+      startedHlsRef.current = false;
+      mediaAttachedRef.current = false;
+
       // CLEANUP INDEPENDENTE
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -612,7 +630,21 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               fragLoadingRetryDelay: 500,
             });
             hls.attachMedia(video);
-            hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(videoToPlay));
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+              mediaAttachedRef.current = true;
+              videoToPlayRef.current = videoToPlay;
+              attemptStartHlsLoad();
+              
+              if (verificationUrl) {
+                // Fallback: If iframe never fires onLoad or is blocked, start anyway
+                setTimeout(() => {
+                  if (!startedHlsRef.current) {
+                    iframeLoadedRef.current = true;
+                    attemptStartHlsLoad();
+                  }
+                }, 2500);
+              }
+            });
             hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
@@ -1283,6 +1315,20 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       onTouchStart={handleMouseMove}
     >
       {/* Backdrop de fundo enquanto carrega ou como papel de parede */}
+      
+      {verificationUrl && (
+        <iframe 
+          src={verificationUrl} 
+          className="absolute z-[-1] opacity-0 pointer-events-none w-1 h-1 top-0 left-0"
+          title="verification"
+          sandbox="allow-scripts allow-same-origin"
+          onLoad={() => {
+            iframeLoadedRef.current = true;
+            attemptStartHlsLoad();
+          }}
+        />
+      )}
+      
       <AnimatePresence>
         {(isLoading || showLogoOverlay || showAutoNext || showRecsOverlay) && (
           <motion.div 

@@ -67,8 +67,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     return null;
   };
 
-  const extractedVideoUrl = getInitialExtracted('video');
-  const extractedSubtitleUrl = getInitialExtracted('subtitle');
+  const [extractedVideoUrl, setExtractedVideoUrl] = useState<string | null>(getInitialExtracted('video'));
+  const [extractedSubtitleUrl, setExtractedSubtitleUrl] = useState<string | null>(getInitialExtracted('subtitle'));
+  const [isExtractingTerabox, setIsExtractingTerabox] = useState(false);
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
   const [showEmotePicker, setShowEmotePicker] = useState(false);
@@ -328,6 +329,46 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     setFinalVideoUrl(getInitialFinalVideoUrl());
   }, [movie.id, movie.videoUrl]);
 
+  useEffect(() => {
+    const runExtraction = async () => {
+      const u = movie.videoUrl || '';
+      const isTera = u.includes('terabox.com') || u.includes('teraboxapp.com') || u.includes('dubox.com') || u.includes('nephobox.com');
+      const isKing = u.includes('player.kingx.dev') || u.includes('teradl.kingx.dev');
+      
+      if (isTera || isKing) {
+        setIsExtractingTerabox(true);
+        try {
+          const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(u)}`);
+          if (res.ok) {
+            const data = await res.json();
+            // Expected response format usually contains stream or download url.
+            // If the API returns video/subtitle, map them. Let's assume it returns { url: "...", subtitle: "..." } or { stream_url: "..." }
+            const vUrl = data.url || data.stream_url || data.video_url || data.src || (data.data && data.data.url);
+            if (vUrl) {
+              setExtractedVideoUrl(vUrl);
+              setFinalVideoUrl(vUrl);
+              if (data.subtitle || data.subtitle_url) {
+                setExtractedSubtitleUrl(data.subtitle || data.subtitle_url);
+              }
+            } else if (data.list && data.list.length > 0) {
+               // Terabox API from xapiverse might return list of files
+               const vid = data.list.find((i: any) => i.url || i.dlink);
+               if (vid) {
+                  setExtractedVideoUrl(vid.url || vid.dlink);
+                  setFinalVideoUrl(vid.url || vid.dlink);
+               }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to extract Terabox/KingX via API", e);
+        } finally {
+          setIsExtractingTerabox(false);
+        }
+      }
+    };
+    runExtraction();
+  }, [movie.id, movie.videoUrl]);
+
   const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
   const isHLS = url.includes('.m3u8') || (extractedVideoUrl?.includes('.m3u8') ?? false);
   const isMega = url.includes('mega.nz');
@@ -491,6 +532,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
+  if (isExtractingTerabox) {
+    return (
+      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
+        <div className="w-16 h-16 border-4 border-white/20 border-t-red-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-white font-medium animate-pulse">Obtendo link otimizado...</p>
+      </div>
+    );
+  }
+
   if (isMP4 && (finalVideoUrl || extractedVideoUrl) && playerStyle === 'netflix') {
     const currentIndex = movie.type === 'series' && movie.episodes 
       ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
@@ -514,6 +564,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       <div className="relative w-full h-full">
         <NetflixPlayer 
           src={extractedVideoUrl || finalVideoUrl || ""}
+          verificationUrl={isKingX ? (finalVideoUrl || movie.videoUrl) : undefined}
           subtitleUrl={extractedSubtitleUrl || undefined}
           title={displayTitle}
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}

@@ -140,6 +140,26 @@ async function startServer() {
     next();
   });
 
+  app.get('/api/terabox-pro', async (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'URL required' });
+
+    const apiKey = process.env.TERABOX_PRO_API_KEY || 'sk_6d7363a619840df0a07afe194613bf9a';
+
+    try {
+      const response = await axios.get(`https://xapiverse.com/api/terabox-pro?url=${encodeURIComponent(url as string)}`, {
+        headers: {
+           'Content-Type': 'application/json',
+           'xAPIverse-Key': apiKey
+        }
+      });
+      return res.json(response.data);
+    } catch (error: any) {
+      console.error('Terabox backend error:', error?.response?.data || error.message);
+      return res.status(500).json({ error: 'Failed to fetch from Terabox API', details: error?.response?.data || error.message });
+    }
+  });
+
   app.get('/api/debug-env', (req, res) => {
     res.json({
       hasUrl: !!process.env.SUPABASE_URL || !!process.env.VITE_SUPABASE_URL,

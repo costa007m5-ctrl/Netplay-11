@@ -16,6 +16,7 @@ import AdminMercadoPagoTab from './admin/AdminMercadoPagoTab';
 import AdminReferralsTab from './admin/AdminReferralsTab';
 import { AdminAPIsTab } from './admin/AdminAPIsTab';
 import { AdminOneSignalTab } from './admin/AdminOneSignalTab';
+import AdminTeraboxTab from './admin/AdminTeraboxTab';
 
 interface AdminPanelProps {
   movies: Movie[];
@@ -42,7 +43,7 @@ interface AdminPanelProps {
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1496,6 +1497,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               { id: 'dashboard', label: 'Dashboard', icon: Activity },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
+              { id: 'terabox', label: 'Terabox API', icon: Database },
               { id: 'users', label: 'Usuários/Assin.', icon: Users },
               { id: 'mercadopago', label: 'Mercado Pago', icon: DollarSign },
               { id: 'referrals', label: 'Resgates', icon: Database }, // Using Database temporarily or we can use another icon if imported
@@ -1933,6 +1935,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminReferralsTab />
             ) : activeTab === 'apis' ? (
               <AdminAPIsTab />
+            ) : activeTab === 'terabox' ? (
+              <AdminTeraboxTab />
             ) : activeTab === 'onesignal' ? (
               <AdminOneSignalTab />
             ) : activeTab === 'supabase' ? (
