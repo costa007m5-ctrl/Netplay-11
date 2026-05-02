@@ -69,20 +69,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
-  const normalizedSrc = useMemo(() => {
-    if (src && src.includes('teradl.kingx.dev/index.m3u8')) {
-       // Convert teradl direct m3u8 to player iframe URL to bypass CORS blocks and allow iframe mode
-       const match = src.match(/teradl\.kingx\.dev\/index\.m3u8\?url=([^&]+)/);
-       if (match && match[1]) {
-           return `https://player.kingx.dev/?url=${match[1]}`;
-       }
-    }
-    return src;
-  }, [src]);
-
   const isIframeMode = useMemo(() => {
-    if (!normalizedSrc) return false;
-    const lowerSrc = normalizedSrc.toLowerCase();
+    if (!src) return false;
+    const lowerSrc = src.toLowerCase();
     
     // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
     if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
@@ -95,18 +84,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return false;
-  }, [normalizedSrc]);
+  }, [src]);
 
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
-    if (isIframeMode) return { video_url: normalizedSrc, subtitle_url: subtitleUrl };
+    if (isIframeMode) return { video_url: src, subtitle_url: subtitleUrl };
 
-    let vToPlay = normalizedSrc;
+    let vToPlay = src;
     let sToPlay = subtitleUrl;
     
     try {
-      if (normalizedSrc && normalizedSrc.includes('video_url=')) {
-        const urlObj = new URL(normalizedSrc, window.location.origin);
+      if (src && src.includes('video_url=')) {
+        const urlObj = new URL(src, window.location.origin);
         
         // 1. Try standard searchParams
         let v = urlObj.searchParams.get('video_url');
@@ -143,7 +132,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         
         // 3. Fallback regex se tudo falhar - extraindo de forma mais robusta sem quebrar nos '&' do streaming embeddado
         if (!v) {
-          const matchVid = normalizedSrc.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
+          const matchVid = src.match(/(?:[?&#])video_url=(https?[^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
           if (matchVid && matchVid[1]) {
              v = decodeURIComponent(matchVid[1]);
           }
@@ -158,7 +147,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return { video_url: vToPlay, subtitle_url: sToPlay };
-  }, [normalizedSrc, subtitleUrl, isIframeMode]);
+  }, [src, subtitleUrl, isIframeMode]);
 
   const [activeSrc, setActiveSrc] = useState(parsedUrls.video_url);
   const [activeSubtitleUrl, setActiveSubtitleUrl] = useState(parsedUrls.subtitle_url);
@@ -646,19 +635,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               if (data.fatal) {
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                   // Fail fast for 403 Forbidden or 404 Not Found as retrying won't help
-                   if (data.response?.code === 403 || data.response?.code === 404) {
-                     setError({ message: "Link expirado ou acesso negado. Feche e tente reproduzir novamente ou escollha outro player.", type: 'network' });
-                     setIsLoading(false);
-                     return;
-                   }
-                   if (retryCountRef.current < 10) { 
+                   if (retryCountRef.current < 50) { 
                      retryCountRef.current++;
                      setLoadingProgress(prev => Math.max(prev, 10));
                      setTimeout(() => {
                        // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
-                           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
+                           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
+                           data.response?.code === 403 || data.response?.code === 404) {
                            hls.loadSource(videoToPlay);
                        } else {
                            hls.startLoad();
@@ -673,8 +657,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                    hls.recoverMediaError();
                  }
                  else {
-                   setError({ message: "Ocorreu um erro no player. O formato de vídeo pode não ser suportado.", type: 'network' });
-                   setIsLoading(false);
+                   // We ignore other fatal errors to allow auto-recovery without blocking the user
+                   console.error("Ignored fatal error for seamless playback attempt", data);
                  }
               }
             });

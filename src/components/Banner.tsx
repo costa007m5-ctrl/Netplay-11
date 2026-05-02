@@ -92,12 +92,9 @@ const Banner = React.memo(({ onPlay, onInfo, movieOverride, movies = [] }: Banne
   })();
 
   const handlePlayClick = () => {
-    // Para resolver o bug de "Falha contínua na conexão" por causa de links que expiram
-    if (movie.type === 'series') {
-       onInfo(movie);
-    } else {
-       onPlay(movie, movie.videoUrl);
-    }
+    const isYouTube = movie.type === 'link';
+    const defaultUrl = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
+    onPlay(movie, savedUrl || defaultUrl);
   };
 
   return (
