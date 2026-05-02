@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock, Signal } from 'lucide-react';
 import screenfull from 'screenfull';
 import Hls from 'hls.js';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
+import { useNetworkDiagnostics } from '../hooks/useNetworkDiagnostics';
+import { NetworkStatusIndicator, NetworkQualityToast } from './NetworkStatusIndicator';
 
 interface NetflixPlayerProps {
   src: string;
@@ -77,8 +79,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     // para dar autoplay real (clicou, começou) e permitir retry/proxy interno.
     if (lowerSrc.includes('video_url=')) {
       return false;
-    }
-      return true;
     }
 
     return false;
@@ -371,10 +371,23 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [canCast, setCanCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
-  const [qualityToast, setQualityToast] = useState<string | null>(null);
+const [qualityToast, setQualityToast] = useState<string | null>(null);
+  const [showNetworkToast, setShowNetworkToast] = useState(false);
+  const [networkQualityChanged, setNetworkQualityChanged] = useState<'excellent' | 'good' | 'fair' | 'poor' | 'offline'>('good');
+  
+  // Hook de diagnóstico de rede para otimização adaptativa
+  const { stats: networkStats, getOptimizedHlsConfig, prefetchUrl, connectionQuality } = useNetworkDiagnostics({
+    checkInterval: 15000, // Verifica a cada 15s
+    enablePrefetch: true,
+    onQualityChange: (quality) => {
+      setNetworkQualityChanged(quality);
+      setShowNetworkToast(true);
+    },
+  });
+  
   const [autoRotate, setAutoRotate] = useState(() => {
-    const saved = localStorage.getItem('autoRotate');
-    return saved !== null ? JSON.parse(saved) : true;
+  const saved = localStorage.getItem('autoRotate');
+  return saved !== null ? JSON.parse(saved) : true;
   });
   const [objectFit, setObjectFit] = useState<'contain' | 'cover'>('contain');
   const [emotes, setEmotes] = useState<{ id: string | number; emoji: string; x: number; y: number; profileName?: string }[]>([]);
@@ -740,50 +753,52 @@ const lowerSrc = videoToPlay.toLowerCase();
           const isIOS = /iP(hone|od|ad)/i.test(navigator.userAgent);
           
 if (Hls.isSupported() && !isIOS) {
+  // Obtém configuração otimizada baseada na qualidade atual da rede
+  const networkOptimizedConfig = getOptimizedHlsConfig();
+  
+  // Configuração híbrida: usa valores agressivos para início rápido
+  // mas permite que a rede influencie buffers e timeouts
   const hls = new Hls({
+  // Configurações base para início rápido
   enableWorker: true,
   lowLatencyMode: true,
   startFragPrefetch: true,
   capLevelToPlayerSize: true,
   autoStartLoad: true,
   // startLevel: 0 → começa pela QUALIDADE MAIS BAIXA (menor fragmento, download rápido)
-  // O HLS.js sobe a qualidade automaticamente após medir a banda.
   startLevel: 0,
-  // Assume 2Mbps para iniciar imediatamente com qualidade razoável
-  abrEwmaDefaultEstimate: 2000000,
-  // Fator rápido para subir qualidade mais agressivamente após iniciar
+  // Estima bandwidth baseado na qualidade da rede detectada
+  abrEwmaDefaultEstimate: networkOptimizedConfig.abrEwmaDefaultEstimate || 2000000,
+  // Fatores ABR agressivos para subir qualidade rapidamente
   abrEwmaFastLive: 2.0,
   abrEwmaSlowLive: 4.0,
   abrEwmaFastVoD: 2.0,
   abrEwmaSlowVoD: 4.0,
-  testBandwidth: false, // não desperdiça tempo medindo banda antes de tocar
+  testBandwidth: false,
   startPosition: startPoint > 0 ? startPoint : -1,
-  // Buffer ULTRA MÍNIMO para iniciar o playback INSTANTANEAMENTE
-  maxBufferLength: 2, // Apenas 2s de buffer para começar
-  maxMaxBufferLength: 30, // Depois aumenta até 30s
-  backBufferLength: 0, // Não guarda buffer atrás
-  maxBufferSize: 30 * 1000 * 1000, // 30MB
-  maxBufferHole: 0.8, // Tolera buracos maiores no buffer
-  // Timeouts ULTRA agressivos — falha rápido para tentar novamente
-  manifestLoadingMaxRetry: 5,
-  levelLoadingMaxRetry: 5,
-  fragLoadingMaxRetry: 5,
-  manifestLoadingRetryDelay: 100, // 100ms entre retries
-  levelLoadingRetryDelay: 100,
-  fragLoadingRetryDelay: 100,
-  manifestLoadingTimeOut: 5000, // 5s max para manifesto
-  levelLoadingTimeOut: 5000,
-  fragLoadingTimeOut: 8000, // 8s para fragmentos
-  // Deixa o HLS começar a tocar com MÍNIMO buffer
-  maxStarvationDelay: 1, // 1s máximo de espera por starvation
-  maxLoadingDelay: 1, // 1s máximo de loading delay
+  // Buffer inicial mínimo para começar rápido, depois adapta baseado na rede
+  maxBufferLength: Math.max(2, networkOptimizedConfig.maxBufferLength || 2),
+  maxMaxBufferLength: networkOptimizedConfig.maxMaxBufferLength || 30,
+  backBufferLength: 0,
+  maxBufferSize: networkOptimizedConfig.maxBufferSize || 30 * 1000 * 1000,
+  maxBufferHole: 0.8,
+  // Timeouts adaptativos baseados na qualidade da conexão
+  manifestLoadingMaxRetry: networkOptimizedConfig.manifestLoadingMaxRetry || 5,
+  levelLoadingMaxRetry: networkOptimizedConfig.levelLoadingMaxRetry || 5,
+  fragLoadingMaxRetry: networkOptimizedConfig.fragLoadingMaxRetry || 5,
+  manifestLoadingRetryDelay: networkOptimizedConfig.manifestLoadingRetryDelay || 100,
+  levelLoadingRetryDelay: networkOptimizedConfig.levelLoadingRetryDelay || 100,
+  fragLoadingRetryDelay: networkOptimizedConfig.fragLoadingRetryDelay || 100,
+  manifestLoadingTimeOut: networkOptimizedConfig.manifestLoadingTimeOut || 5000,
+  levelLoadingTimeOut: networkOptimizedConfig.levelLoadingTimeOut || 5000,
+  fragLoadingTimeOut: networkOptimizedConfig.fragLoadingTimeOut || 8000,
+  // Delays adaptativos baseados na rede
+  maxStarvationDelay: networkOptimizedConfig.maxStarvationDelay || 1,
+  maxLoadingDelay: networkOptimizedConfig.maxLoadingDelay || 1,
   nudgeMaxRetry: 5,
-  nudgeOffset: 0.2, // Nudge mais agressivo
-  // Reduz threshold para começar playback mais cedo
+  nudgeOffset: 0.2,
   highBufferWatchdogPeriod: 0.5,
-  // Streaming agressivo - começa antes do buffer completo
   stretchShortVideoTrack: true,
-  // Prefetch do próximo fragmento enquanto reproduz
   progressive: true,
             });
             hls.attachMedia(video);
@@ -2932,6 +2947,27 @@ video.removeEventListener('timeupdate', handleTimeUpdate);
             <ChevronLeft size={32} strokeWidth={3} />
          </button>
       )}
+
+      {/* Indicador de Status de Rede (compacto, no canto superior direito) */}
+      <AnimatePresence>
+        {showControls && !isLoading && !error && connectionQuality !== 'excellent' && connectionQuality !== 'good' && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute top-6 right-24 z-[350] pointer-events-none"
+          >
+            <NetworkStatusIndicator stats={networkStats} compact />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast de Mudança de Qualidade de Rede */}
+      <NetworkQualityToast
+        quality={networkQualityChanged}
+        show={showNetworkToast}
+        onHide={() => setShowNetworkToast(false)}
+      />
     </div>
   );
 };
