@@ -77,10 +77,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     try {
       if (src && src.includes('video_url=')) {
         const urlObj = new URL(src, window.location.origin);
+        
+        // 1. Try standard searchParams
         let v = urlObj.searchParams.get('video_url');
         let sub = urlObj.searchParams.get('subtitle_url');
         
-        // Se os parâmetros estiverem na hash (ex: #/player?video_url=...)
+        // 2. Try hashParams if not found
         if (!v && urlObj.hash && urlObj.hash.includes('video_url=')) {
            let hashStr = urlObj.hash.substring(1);
            if (hashStr.includes('?')) {
@@ -91,9 +93,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
            sub = hashParams.get('subtitle_url') || sub;
         }
         
-        // Fallback robusto se o & quebrar a query não codificada
+        // 3. Fallback regex se tudo falhar
         if (!v) {
-          const match = src.match(/[?&]video_url=([^&]*)/);
+          const match = src.match(/[?&#]video_url=([^&#]*)/);
           if (match && match[1]) {
              v = decodeURIComponent(match[1]);
           }
@@ -171,6 +173,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [showStuckButton, setShowStuckButton] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [error, setError] = useState<{ message: string; type: 'network' | 'format' | 'unknown' } | null>(null);
   const [bufferedPercentage, setBufferedPercentage] = useState(0);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -548,23 +551,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         const startPoint = initialTime > 0 ? Math.max(0, initialTime - 2) : -1;
         
         if (lowerSrc.includes('.m3u8')) {
-          const canPlayNative = video.canPlayType('application/vnd.apple.mpegurl');
-          const isMobileOrSafari = /iP(hone|od|ad)|Android|Mac OS|Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent) || /Android/i.test(navigator.userAgent);
+          const canPlayNative = video.canPlayType('application/vnd.apple.mpegurl') !== '';
+          const isIOS = /iP(hone|od|ad)/i.test(navigator.userAgent);
           
-          if (canPlayNative && (isMobileOrSafari || !Hls.isSupported())) {
-            video.src = videoToPlay;
-            video.load();
-            video.addEventListener('loadedmetadata', () => {
-              let safeStartPoint = startPoint;
-              if (safeStartPoint > 0) {
-                const duration = video.duration || 0;
-                const threshold = isMovie ? 450 : 30;
-                if (duration > 0 && safeStartPoint >= duration - threshold) { safeStartPoint = 0; }
-                video.currentTime = safeStartPoint;
-              }
-            }, { once: true });
-            video.play().catch(e => { console.warn("Autoplay block", e); setIsLoading(false); setLoadingProgress(100); setShowLogoOverlay(false); setShowControls(true); setIsPlaying(false); });
-          } else if (Hls.isSupported()) {
+          if (Hls.isSupported() && !isIOS) {
             const hls = new Hls({
               enableWorker: true,
               lowLatencyMode: true,
@@ -590,7 +580,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               setLoadingProgress(50);
               
               if (video) {
-                 video.play().catch(e => { console.warn("Autoplay block", e); setIsLoading(false); setLoadingProgress(100); setShowLogoOverlay(false); setShowControls(true); setIsPlaying(false); });
+                 video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
               }
             });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
@@ -629,6 +619,19 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               }
             });
             hlsRef.current = hls;
+          } else if (canPlayNative) {
+            video.src = videoToPlay;
+            video.load();
+            video.addEventListener('loadedmetadata', () => {
+              let safeStartPoint = startPoint;
+              if (safeStartPoint > 0) {
+                const duration = video.duration || 0;
+                const threshold = isMovie ? 450 : 30;
+                if (duration > 0 && safeStartPoint >= duration - threshold) { safeStartPoint = 0; }
+                video.currentTime = safeStartPoint;
+              }
+            }, { once: true });
+            video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
           }
         } else {
           video.src = videoToPlay;
@@ -642,7 +645,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                  video.currentTime = safeStartPoint;
                }
           }, { once: true });
-          video.play().catch(e => { console.warn("Autoplay block", e); setIsLoading(false); setLoadingProgress(100); setShowLogoOverlay(false); setShowControls(true); setIsPlaying(false); });
+          video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
         }
       };
 
@@ -822,18 +825,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
            setLoadingProgress(prev => Math.max(prev, progress));
         }
         
-        // Remove loading only when we have some buffer AND video is starting to play visually
-        if (bufferedEnd > (video.currentTime + 0.5) && isLoading && video.readyState >= 3 && !video.paused) {
-           setIsLoading(false);
-           setLoadingProgress(100);
-           setShowLogoOverlay(false);
-        }
+        // We only update progress here. Hiding the loading screen should strictly wait until playback begins.
+        // That is handled in handlePlaying and handleTimeUpdate to ensure frames are visible.
       }
     };
 
     const handleStalled = () => {
       if (video.paused && isPlaying) {
-        video.play().catch(e => { console.warn("Autoplay block", e); setIsLoading(false); setLoadingProgress(100); setShowLogoOverlay(false); setShowControls(true); setIsPlaying(false); });
+        video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
       }
     };
 
@@ -852,7 +851,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         setTimeout(() => {
           if (video) {
             video.load();
-            video.play().catch(e => { console.warn("Autoplay block", e); setIsLoading(false); setLoadingProgress(100); setShowLogoOverlay(false); setShowControls(true); setIsPlaying(false); });
+            video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
           }
         }, 2000);
         return;
@@ -1010,7 +1009,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       if (video.paused) {
         lockOrientation();
         // Allow guest to initiate playback to bypass browser autoplay blocks
-        video.play().catch(e => { console.warn("Autoplay block", e); setIsLoading(false); setLoadingProgress(100); setShowLogoOverlay(false); setShowControls(true); setIsPlaying(false); });
+        video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
         if (isHost && channelRef.current && roomId) {
           channelRef.current.send({
             type: 'broadcast',
@@ -1631,6 +1630,25 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               </div>
             </div>
             
+            {autoplayBlocked && (
+               <motion.div 
+                 initial={{ opacity: 0, scale: 0.9 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 className="mt-6 z-50 pointer-events-auto"
+               >
+                 <button
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     setAutoplayBlocked(false);
+                     videoRef.current?.play().catch(()=>console.warn("Still blocked"));
+                   }}
+                   className="bg-red-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-[14px] md:text-[18px] italic shadow-[0_0_40px_rgba(220,38,38,0.5)] hover:scale-105 hover:bg-white hover:text-red-600 transition-all flex items-center gap-4 animate-bounce"
+                 >
+                   <Play size={28} fill="currentColor" /> Tocar Para Iniciar
+                 </button>
+               </motion.div>
+            )}
+
             <motion.p 
               key={loadingMessageIndex}
               initial={{ opacity: 0, y: 5 }}
