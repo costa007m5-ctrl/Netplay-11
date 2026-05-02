@@ -74,7 +74,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const lowerSrc = src.toLowerCase();
     
     // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.') || lowerSrc.includes('mega.nz') || lowerSrc.includes('terabox') || lowerSrc.includes('gdplayer') || lowerSrc.includes('youtube.com') || lowerSrc.includes('youtu.be')) {
       return true;
     }
     
@@ -600,20 +600,25 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           if (Hls.isSupported() && !isIOS) {
             const hls = new Hls({
               enableWorker: true,
-              lowLatencyMode: true,
+              lowLatencyMode: false,
               startFragPrefetch: true,
               capLevelToPlayerSize: true, // Limits initial quality based on player frame size to start faster
               autoStartLoad: true,
-              startLevel: -1, // Use auto level
+              startLevel: 0, // Auto level can fail on slow servers, start slow
               startPosition: startPoint > 0 ? startPoint : -1,
-              maxBufferLength: 30,
-              maxMaxBufferLength: 60,
-              manifestLoadingMaxRetry: 10,
-              levelLoadingMaxRetry: 10,
-              fragLoadingMaxRetry: 10,
-              manifestLoadingRetryDelay: 500,
-              levelLoadingRetryDelay: 500,
-              fragLoadingRetryDelay: 500,
+              maxBufferLength: 20,
+              maxMaxBufferLength: 40,
+              manifestLoadingMaxRetry: 30,
+              levelLoadingMaxRetry: 30,
+              fragLoadingMaxRetry: 30,
+              manifestLoadingRetryDelay: 1000,
+              levelLoadingRetryDelay: 1000,
+              fragLoadingRetryDelay: 1000,
+              fragLoadingTimeOut: 20000,
+              manifestLoadingTimeOut: 20000,
+              xhrSetup: (xhr) => { 
+                xhr.withCredentials = false;
+              }
             });
             hls.attachMedia(video);
             hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(videoToPlay));
