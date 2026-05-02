@@ -69,8 +69,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
+  const isIframeMode = useMemo(() => {
+    if (!src) return false;
+    const lowerSrc = src.toLowerCase();
+    
+    // Se tiver video_url dentro, tentamos extrair e tocar nativamente em vez de iframe
+    if (lowerSrc.includes('video_url=')) {
+      return false;
+    }
+    
+    // Se o link já indica ser um player embutido (ex: Vidoza embed),
+    if (lowerSrc.includes('/embed/') || lowerSrc.includes('iframe')) {
+      return true;
+    }
+    return false;
+  }, [src]);
+
   // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
+    if (isIframeMode) return { video_url: src, subtitle_url: subtitleUrl };
+
     let vToPlay = src;
     let sToPlay = subtitleUrl;
     
@@ -533,6 +551,11 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   }, [isPlaying, loadingProgress]);
 
   useEffect(() => {
+    if (isIframeMode) {
+       // O isLoading e afins serão gerenciados pelo onLoad do iframe
+       return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
 
@@ -1487,32 +1510,48 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         )}
       </AnimatePresence>
 
-      <video
-        ref={videoRef}
-        className={`relative z-[10] w-full h-full transition-all duration-700 ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} ${(showAutoNext || showRecsOverlay || showEpisodesSidebar || showSettingsMenu) ? 'scale-[0.7] -translate-x-[15%] rounded-3xl overflow-hidden shadow-2xl origin-center' : ''}`}
-        autoPlay
-        playsInline
-        webkit-playsinline="true"
-        x-webkit-airplay="allow"
-        disablePictureInPicture={false}
-        referrerPolicy="no-referrer"
-        onClick={handleContainerClick}
-        onDoubleClick={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          if (x < rect.width / 2) skip(-10);
-          else skip(10);
-        }}
-      >
-        {(subtitleUrl || activeSubtitleUrl) && !(subtitleUrl || activeSubtitleUrl || '').includes('.m3u8') && (
-          <track 
-            kind="subtitles" 
-            src={subtitleUrl || activeSubtitleUrl} 
-            srcLang="pt" 
-            label="Português" 
-          />
-        )}
-      </video>
+      {isIframeMode ? (
+        <iframe
+          src={src}
+          className="relative z-[10] w-full h-full border-0"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          allowFullScreen
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          referrerPolicy="no-referrer"
+          onLoad={() => {
+            setIsLoading(false);
+            setLoadingProgress(100);
+            setShowLogoOverlay(false);
+          }}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          className={`relative z-[10] w-full h-full transition-all duration-700 ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} ${(showAutoNext || showRecsOverlay || showEpisodesSidebar || showSettingsMenu) ? 'scale-[0.7] -translate-x-[15%] rounded-3xl overflow-hidden shadow-2xl origin-center' : ''}`}
+          autoPlay
+          playsInline
+          webkit-playsinline="true"
+          x-webkit-airplay="allow"
+          disablePictureInPicture={false}
+          referrerPolicy="no-referrer"
+          onClick={handleContainerClick}
+          onDoubleClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            if (x < rect.width / 2) skip(-10);
+            else skip(10);
+          }}
+        >
+          {(subtitleUrl || activeSubtitleUrl) && !(subtitleUrl || activeSubtitleUrl || '').includes('.m3u8') && (
+            <track 
+              kind="subtitles" 
+              src={subtitleUrl || activeSubtitleUrl} 
+              srcLang="pt" 
+              label="Português" 
+            />
+          )}
+        </video>
+      )}
 
       {/* Emotes Overlay Layer */}
       <div className="absolute inset-0 z-[250] pointer-events-none overflow-hidden">
@@ -1906,7 +1945,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       </AnimatePresence>
 
       {/* Overlay de Controles */}
-      <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/60 transition-opacity duration-500 flex flex-col justify-between p-6 z-[305] ${showControls && !isLoading && !isLocked && !isBackgroundMode ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      {!isIframeMode && (
+        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/60 transition-opacity duration-500 flex flex-col justify-between p-6 z-[305] ${showControls && !isLoading && !isLocked && !isBackgroundMode ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         
         {/* Topo */}
         <div className="flex items-center justify-between">
@@ -2386,6 +2426,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* TV Sharing Overlay Fallback */}
       <AnimatePresence>
@@ -2484,6 +2525,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Botão de Fechar Dedicado para Iframe Mode */}
+      {isIframeMode && (
+         <button 
+           onClick={onClose} 
+           className="absolute top-6 left-6 z-[400] bg-black/60 backdrop-blur-md p-3 rounded-full text-white hover:bg-red-600 transition-colors pointer-events-auto shadow-2xl border border-white/10"
+         >
+            <ChevronLeft size={32} strokeWidth={3} />
+         </button>
+      )}
     </div>
   );
 };
