@@ -94,6 +94,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       const mapped = [];
       for (const item of list) {
         const filename = item.filename || item.name || 'Desconhecido';
+        const urlToSave = item.fast_stream_url?.['1080p'] || item.fast_stream_url?.['720p'] || item.fast_stream_url?.['480p'] || item.fast_stream_url?.['360p'] || item.normal_dlink || item.url || item.dlink || item.stream_url || folderUrl;
 
         // Improve TMDB matching by removing years, qualities, and extensions
         let searchName = filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, '');
@@ -108,14 +109,14 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
 
         mapped.push({
           imported_filename: filename,
-          url: folderUrl, // Save the RAW terabox link (input by user)
+          url: urlToSave,
           tmdb_match: bestMatch,
           selected: true
         });
       }
 
       setFolderResults(mapped);
-      setScanningStatus('Concluído. Revise os itens e adicione ou atualize.');
+      setScanningStatus('Concluído. Revise os itens e adicione.');
     } catch (err: any) {
       alert("Erro na varredura: " + err.message);
       setScanningStatus('Erro na varredura.');
@@ -151,44 +152,23 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           genreNames = t.genre_ids.map((id: number) => GENRE_MAP[id]).filter(Boolean).join(', ') || 'Outros';
         }
 
-        const titleOrName = t ? (t.title || t.name) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, '');
-        
-        // Search if movie already exists by TMDB ID, or title
-        const existingMovie = movies.find(m => (t && m.id === t.id) || m.title === titleOrName || m.name === titleOrName);
-
-        if (existingMovie) {
-          // If it is a TV show and has episodes, we might need a more complex update,
-          // but for now let's just update the main video URL of the movie/series.
-          try {
-            await onUpdateMovie(existingMovie.id, {
-              ...existingMovie,
-              videoUrl: folderUrl, // Save the shared folder URL to extract on play
-              videoUrl2: folderUrl,
-              file_name: item.imported_filename
-            });
-          } catch(e) {
-            errorCount++;
-          }
-        } else {
-          const newMovie: Partial<Movie> = {
-            id: t ? t.id : Date.now() + Math.random(),
-            title: titleOrName,
-            name: titleOrName,
-            original_name: t ? (t.original_name || t.original_title) : undefined,
-            overview: t ? t.overview : 'Adicionado via Terabox API (Info não encontrada)',
-            backdrop_path: t?.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : 'https://picsum.photos/seed/terabox/1920/1080',
-            poster_path: t?.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : 'https://picsum.photos/seed/terabox/500/750',
-            type,
-            genres: genreNames,
-            videoUrl: folderUrl, // Save the shared folder URL to extract on play
-            videoUrl2: folderUrl,
-            file_name: item.imported_filename
-          };
-          try {
-            await onAddMovie(newMovie);
-          } catch(e) {
-            errorCount++;
-          }
+        const newMovie: Partial<Movie> = {
+          title: t ? (t.title || t.name) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, ''),
+          name: t ? (t.name || t.title) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, ''),
+          original_name: t ? (t.original_name || t.original_title) : undefined,
+          overview: t ? t.overview : 'Adicionado via Terabox API (Info não encontrada)',
+          backdrop_path: t?.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : 'https://picsum.photos/seed/terabox/1920/1080',
+          poster_path: t?.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : 'https://picsum.photos/seed/terabox/500/750',
+          type,
+          genres: genreNames,
+          videoUrl: item.url,
+          videoUrl2: item.url,
+          file_name: item.imported_filename
+        };
+        try {
+          await onAddMovie(newMovie);
+        } catch(e) {
+          errorCount++;
         }
       }
       if (errorCount === 0) {

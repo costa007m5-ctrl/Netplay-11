@@ -30,11 +30,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
     // KingX (via Xapiverse/Terabox) now requires Captcha on direct M3U8 links. 
-    // We force using their native player via iframe by NOT extracting here if it's KingX wrapper.
-    if (isKing) {
-      return url;
-    }
-    
+    // We MUST pass the player.kingx.dev wrapper down to NetflixPlayer to trigger isIframeMode.
     if (isKing && false) {
       try {
         let searchString = '';
@@ -349,13 +345,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             
             let vid = data.list && data.list.length > 0 ? data.list[0] : data;
             
-            if (data.list && data.list.length > 0 && movie.file_name) {
-               const matched = data.list.find((f: any) => f.filename === movie.file_name || f.name === movie.file_name);
-               if (matched) {
-                 vid = matched;
-               }
-            }
-            
             if (vid) {
                const stUrl = vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
                
@@ -575,7 +564,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       <div className="relative w-full h-full">
         <NetflixPlayer 
           src={extractedVideoUrl || finalVideoUrl || ""}
-          verificationUrl={isKingX ? (movie.videoUrl || undefined) : undefined}
+          // verificationUrl removed since KingX now plays natively via iframe mode
           subtitleUrl={extractedSubtitleUrl || undefined}
           title={displayTitle}
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}

@@ -29,7 +29,7 @@ import Top10Row from './components/Top10Row';
 import AppInfo from './components/AppInfo';
 import UniverseView from './components/UniverseView';
 
-const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
+const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'));
 const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));

@@ -75,15 +75,22 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const startedHlsRef = useRef(false);
   const videoToPlayRef = useRef('');
   
+  const attemptStartHlsLoad = useCallback(() => {
+    if (startedHlsRef.current) return;
+    if (mediaAttachedRef.current && (!verificationUrl || iframeLoadedRef.current) && hlsRef.current) {
+        startedHlsRef.current = true;
+        hlsRef.current.loadSource(videoToPlayRef.current);
+    }
+  }, [verificationUrl]);
+  
+  // Robust Extraction of nested URLs (KingX, Terabox, etc.)
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
     let sToPlay = subtitleUrl;
-    let autoV = null;
     
     try {
-      // Allow extraction for kingx.dev as well, as direct iframe might be blocked.
-      // We will use the original src as verificationUrl if we extract a direct link.
-      if (src) {
+      // KingX links have Captcha protection, so they must be played via native iframe
+      if (src && !src.includes('kingx.dev')) {
         if (src.includes('video_url=')) {
           const urlObj = new URL(src, window.location.origin);
           
@@ -126,10 +133,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           
           if (v) vToPlay = v;
           if (sub) sToPlay = sub;
-          
-          if (v && src.includes('player.kingx.dev')) {
-             autoV = src;
-          }
         }
       }
       console.log('URL EXTRACTED:', vToPlay);
@@ -137,29 +140,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       console.warn("URL Extraction failed", e);
     }
     
-    console.log("NETFLIX_PLAYER_URLS:", { inputSrc: src, vToPlay, sToPlay, autoV });
-    return { video_url: vToPlay, subtitle_url: sToPlay, autoVerificationUrl: autoV };
+    console.log("NETFLIX_PLAYER_URLS:", { inputSrc: src, vToPlay, sToPlay });
+    return { video_url: vToPlay, subtitle_url: sToPlay };
   }, [src, subtitleUrl]);
 
-  const finalVerificationUrl = useMemo(() => verificationUrl || parsedUrls.autoVerificationUrl, [verificationUrl, parsedUrls.autoVerificationUrl]);
-
-  const attemptStartHlsLoad = useCallback(() => {
-    if (startedHlsRef.current) return;
-    if (mediaAttachedRef.current && (!finalVerificationUrl || iframeLoadedRef.current) && hlsRef.current) {
-        startedHlsRef.current = true;
-        hlsRef.current.loadSource(videoToPlayRef.current);
-    }
-  }, [finalVerificationUrl]);
-
-  const [forcedIframeMode, setForcedIframeMode] = useState(false);
-
   const isIframeMode = useMemo(() => {
-    if (forcedIframeMode) return true;
     if (!parsedUrls.video_url) return false;
     const lowerSrc = parsedUrls.video_url.toLowerCase();
     
     // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('teradl.kingx.dev') || lowerSrc.includes('kingx') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
       return true;
     }
     
@@ -168,7 +158,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
     
     return false;
-  }, [parsedUrls.video_url, forcedIframeMode]);
+  }, [parsedUrls.video_url]);
 
   const [activeSrc, setActiveSrc] = useState(parsedUrls.video_url);
   const [activeSubtitleUrl, setActiveSubtitleUrl] = useState(parsedUrls.subtitle_url);
@@ -558,49 +548,19 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
   useEffect(() => {
     let timer: any;
-    // Se estiver carregando há mais de 12 segundos, mostra o botão de ajuda, independente do progresso
-    if (isLoading && !error) {
+    if (!hasStartedPlayedRef.current && !isPlaying && loadingProgress === 100) {
+      // (10 segundos a partir de chegar em 100% se ainda não estiver tocando)
       timer = setTimeout(() => {
-        setShowStuckButton(true);
-      }, 12000);
+        // Só mostra se ainda não tocou
+        if (!hasStartedPlayedRef.current) {
+          setShowStuckButton(true);
+        }
+      }, 10000);
     } else {
       setShowStuckButton(false);
     }
     return () => clearTimeout(timer);
-  }, [isLoading, error]);
-
-  useEffect(() => {
-    if (error && (src.includes('kingx.dev') || src.includes('terabox') || src.includes('teradl'))) {
-       console.log("Auto-switching to Iframe mode due to playback error on KingX/Terabox link");
-       setForcedIframeMode(true);
-       setError(null);
-       setIsLoading(true);
-    }
-  }, [error, src]);
-
-  useEffect(() => {
-    if (isIframeMode && (src.includes('kingx.dev') || src.includes('terabox'))) {
-       // KingX/Terabox iframes may require user interaction (like captchas)
-       // We release the loading overlay immediately so the user can see and interact with it.
-       setIsLoading(false);
-       setLoadingProgress(100);
-       setIsPlaying(true); // Treat as playing to hide logo overlay
-    }
-  }, [isIframeMode, src]);
-
-  useEffect(() => {
-    if (isIframeMode && isLoading) {
-       // Timeout de segurança para fechar o loading em 10 segundos se o iframe demorar
-       const t = setTimeout(() => {
-         if (isLoading) {
-           setIsLoading(false);
-           setLoadingProgress(100);
-           setIsPlaying(true);
-         }
-       }, 10000);
-       return () => clearTimeout(t);
-    }
-  }, [isIframeMode, isLoading]);
+  }, [isPlaying, loadingProgress]);
 
   useEffect(() => {
     if (isIframeMode) {
@@ -676,7 +636,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               videoToPlayRef.current = videoToPlay;
               attemptStartHlsLoad();
               
-              if (finalVerificationUrl) {
+              if (verificationUrl) {
                 // Fallback: If iframe never fires onLoad or is blocked, start anyway
                 setTimeout(() => {
                   if (!startedHlsRef.current) {
@@ -1357,9 +1317,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     >
       {/* Backdrop de fundo enquanto carrega ou como papel de parede */}
       
-      {finalVerificationUrl && (
+      {verificationUrl && (
         <iframe 
-          src={finalVerificationUrl} 
+          src={verificationUrl} 
           className="absolute z-[-1] opacity-0 pointer-events-none w-1 h-1 top-0 left-0"
           title="verification"
           sandbox="allow-scripts allow-same-origin"
@@ -1600,7 +1560,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
       {isIframeMode ? (
         <iframe
-          src={(forcedIframeMode && finalVerificationUrl) ? finalVerificationUrl : src}
+          src={src}
           className="relative z-[10] w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
           allowFullScreen
@@ -1887,25 +1847,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           
           <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
             <button 
-              onClick={() => {
-                setError(null);
-                setIsLoading(true);
-                setSessionKey(Date.now());
-                setForcedIframeMode(false);
-              }}
+              onClick={() => window.location.reload()}
               className="flex-1 bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all shadow-xl hover:scale-105 active:scale-95"
             >
-              Tentativa 1
+              Recarregar
             </button>
             <button 
-              onClick={() => {
-                setError(null);
-                setIsLoading(true);
-                setForcedIframeMode(true);
-              }}
+              onClick={onSwitchPlayer || onClose}
               className="flex-1 bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-700 transition-all shadow-[0_10px_30px_rgba(220,38,38,0.3)] hover:scale-105 active:scale-95"
             >
-              Tentativa 2 (Nativa)
+              Tentar Outro Player
             </button>
           </div>
         </div>

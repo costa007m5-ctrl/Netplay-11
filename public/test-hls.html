@@ -1,0 +1,17 @@
+<html>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<video id="video" controls></video>
+<script>
+  if (Hls.isSupported()) {
+    var video = document.getElementById('video');
+    var hls = new Hls({ debug: true });
+    hls.loadSource('https://autumn-recipe-7116.sukaci.workers.dev/fast_stream?token=3MkHW9RhUZ6o1KKbprvu2hMVMisSxIEs46LwqpQOjq1Uj3qv0vZ_9Yo51oO7KGuScHIQqbkdHnYUdmnZOgMLPMye8DKsD46HtUraoaVsYgCPjCP08eAFUgoR-ae6d2k4AlA_QtVGHc9iIRbGbRC4eS-7RYmRsAJ7YSS0JlvEyaJe0Hw22G5TApCNtwhC-Fr1cJv7-F8QkxSuHJy6aSRFWLcKyCFg0e4miiXHppxZTjq1x31ouyBG9n6XTEd93jG_hnD20zsrqaHgwsPrcTc9DTaT1L-ATWy_qANmpVkMDhngAO9p69CLar8borNkWMT04lUTeeT_lkAwn7fUQpM4CjqQUdAfi9Vk6e_n.m3u8');
+    hls.attachMedia(video);
+    hls.on(Hls.Events.ERROR, function (event, data) {
+      console.log('Error', data);
+    });
+  }
+</script>
+</body>
+</html>
