@@ -1,8 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
-  "installCommand": "npm install",
-  "framework": null,
+  "installCommand": "npm install --legacy-peer-deps",
   "functions": {
     "api/*.ts": {
       "runtime": "nodejs20.x"
