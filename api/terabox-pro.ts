@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const apiKey = process.env.TERABOX_PRO_API_KEY;
   if (!apiKey) {
-    return res.status(503).json({ error: "TERABOX_PRO_API_KEY not configured" });
+    return res.status(503).json({ error: "TERABOX_PRO_API_KEY not configured on server" });
   }
 
   try {
@@ -25,10 +25,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         signal: AbortSignal.timeout(15000),
       },
     );
-    const data = await upstream.json();
+
+    let data: unknown;
+    try {
+      data = await upstream.json();
+    } catch {
+      data = { error: "xapiverse returned non-JSON", status: upstream.status };
+    }
+
+    // Always forward xapiverse's status + body so the client can see the real error
     return res.status(upstream.status).json(data);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "unknown error";
-    return res.status(500).json({ error: "Failed to fetch from Terabox API", details: msg });
+    return res.status(500).json({ error: "Failed to reach Terabox API", details: msg });
   }
 }

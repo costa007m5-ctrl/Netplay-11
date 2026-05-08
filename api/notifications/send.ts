@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-/** Thin wrapper around Supabase REST — no SDK, no TS type conflicts. */
 async function supabaseGet(
   supabaseUrl: string,
   serviceKey: string,
@@ -13,7 +12,7 @@ async function supabaseGet(
     Authorization: `Bearer ${userToken ?? serviceKey}`,
   };
   const res = await fetch(`${supabaseUrl}${path}`, { headers });
-  const data = await res.json().catch(() => null);
+  const data: unknown = await res.json().catch(() => null);
   return { ok: res.ok, data };
 }
 
@@ -27,20 +26,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) return res.status(401).json({ error: "Authorization header required" });
 
-  const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
+  const supabaseUrl = (
+    process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? ""
+  ).replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
   if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
   if (!serviceKey) return res.status(503).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
 
-  // 1. Verify the user JWT via Supabase Auth REST (GET /auth/v1/user with user token)
+  // 1. Verify the JWT via Supabase Auth REST (no SDK — avoids SupabaseAuthClient type issues)
   const authResult = await supabaseGet(supabaseUrl, serviceKey, "/auth/v1/user", token);
   if (!authResult.ok) return res.status(401).json({ error: "Invalid or expired session" });
 
   const userId = (authResult.data as { id?: string } | null)?.id;
   if (!userId) return res.status(401).json({ error: "Could not identify user" });
 
-  // 2. Check admin_users table via PostgREST (service key bypasses RLS)
+  // 2. Check admin_users table (service key bypasses RLS)
   const adminResult = await supabaseGet(
     supabaseUrl,
     serviceKey,
@@ -81,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000),
     });
-    const data = await upstream.json();
+    const data: unknown = await upstream.json();
     return res.json({ success: true, data });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "unknown error";
