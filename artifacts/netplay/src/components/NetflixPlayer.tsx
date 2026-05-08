@@ -663,7 +663,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
       const initUnifiedMode = () => {
         if (!isMounted || !video) return;
-        setLoadingProgress(25);
+        setLoadingProgress(3);
         
         const startPoint = initialTime > 0 ? Math.max(0, initialTime - 2) : -1;
         
@@ -708,14 +708,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
-              setLoadingProgress(50);
+              setLoadingProgress(prev => Math.max(prev, 55));
               
               if (video) {
                  video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
               }
             });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
-              setLoadingProgress(prev => Math.min(prev + 10, 95));
+              setLoadingProgress(prev => Math.min(Math.max(prev, 60) + 8, 95));
             });
 
             hls.on(Hls.Events.ERROR, (event, data) => {
@@ -725,7 +725,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                    if (retryCountRef.current < 15) { 
                      retryCountRef.current++;
-                     setLoadingProgress(prev => Math.max(prev, 10));
+                     // Don't regress progress during retries; smooth animation handles advancement
                      // Exponential backoff for retries: 500ms, 1000ms, 2000ms, max 5000ms
                      const retryDelay = Math.min(500 * Math.pow(1.5, retryCountRef.current - 1), 5000);
                      setTimeout(() => {
@@ -1082,9 +1082,22 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
   }, [autoRotate, lockOrientation]);
 
+  // Smooth animated loading progress (1%→85% while loading, paused at HLS milestones)
   useEffect(() => {
-    // Artificial interval removed in favor of native buffering tracking
-  }, [isLoading, loadingProgress]);
+    if (!isLoading || !!error) return;
+
+    const interval = setInterval(() => {
+      setLoadingProgress(prev => {
+        if (prev >= 85) return prev;
+        if (prev < 15) return prev + 2.5;
+        if (prev < 40) return prev + 1.2;
+        if (prev < 65) return prev + 0.5;
+        return prev + 0.15;
+      });
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, [isLoading, error]);
 
   useEffect(() => {
     let safetyTimeout: NodeJS.Timeout;
@@ -1835,7 +1848,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                 />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xl md:text-2xl font-black text-white italic">{loadingProgress}%</span>
+                <span className="text-xl md:text-2xl font-black text-white italic">{Math.round(loadingProgress)}%</span>
               </div>
             </div>
             
