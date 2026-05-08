@@ -4,6 +4,21 @@ import axios from "axios";
 const router: IRouter = Router();
 
 router.post("/notifications/send", async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    res.status(503).json({ error: "ADMIN_SECRET not configured" });
+    return;
+  }
+
+  const authHeader = req.headers["authorization"] ?? "";
+  const providedToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : "";
+  if (!providedToken || providedToken !== adminSecret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { title, message, imageUrl, targetUrl } = req.body as {
     title?: string;
     message?: string;
@@ -15,12 +30,9 @@ router.post("/notifications/send", async (req, res) => {
   const restApiKey = process.env.ONESIGNAL_REST_API_KEY;
 
   if (!restApiKey) {
-    res.status(503).json({
-      error: "ONESIGNAL_REST_API_KEY not configured",
-    });
+    res.status(503).json({ error: "ONESIGNAL_REST_API_KEY not configured" });
     return;
   }
-
   if (!appId) {
     res.status(503).json({ error: "VITE_ONESIGNAL_APP_ID not configured" });
     return;
