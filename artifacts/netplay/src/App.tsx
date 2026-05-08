@@ -4566,6 +4566,7 @@ export default function App() {
                 appSettings={effectiveAppSettings}
               />
             } />
+            <Route path="*" element={<Navigate to="/menu" replace />} />
           </Routes>
         </AnimatePresence>
       </main>
