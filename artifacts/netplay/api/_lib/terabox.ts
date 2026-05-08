@@ -43,7 +43,7 @@ export async function callTeraboxApi(url: string, apiKey: string) {
         "Content-Type": "application/json",
         "xAPIverse-Key": apiKey,
       },
-      timeout: 25000,
+      timeout: 55000,
     },
   );
 

@@ -10,10 +10,10 @@
       "memory": 1024
     },
     "api/terabox-pro.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/terabox/convert.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "rewrites": [
