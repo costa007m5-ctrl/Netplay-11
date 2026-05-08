@@ -1,24 +1,22 @@
-const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET as string | undefined;
+import { supabase } from '../lib/supabase';
 
 export const notificationService = {
-  async sendNotification(title: string, message: string, imageUrl?: string, data?: any) {
-    if (!ADMIN_SECRET) {
-      console.warn('VITE_ADMIN_SECRET not configured — skipping notification send');
-      return false;
-    }
+  async sendNotification(title: string, message: string, imageUrl?: string, _data?: any) {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        console.warn('No active session — skipping notification send');
+        return false;
+      }
+
       const response = await fetch('/api/notifications/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ADMIN_SECRET}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          title,
-          message,
-          imageUrl,
-          data
-        }),
+        body: JSON.stringify({ title, message, imageUrl }),
       });
 
       if (!response.ok) {
@@ -39,7 +37,6 @@ export const notificationService = {
       '🎬 Novo Filme Adicionado!',
       `"${movieTitle}" já está disponível na sua biblioteca.`,
       imageUrl,
-      { type: 'new_movie' }
     );
   },
 
@@ -48,7 +45,6 @@ export const notificationService = {
       '📺 Novo Episódio Disponível!',
       `${seriesTitle} - T${season}:E${episode} foi adicionado.`,
       imageUrl,
-      { type: 'new_episode' }
     );
   }
 };

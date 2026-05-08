@@ -1,21 +1,21 @@
 import { Router, type IRouter } from "express";
 import axios from "axios";
+import { verifyAdminSession } from "../lib/supabase";
 
 const router: IRouter = Router();
 
 router.post("/notifications/send", async (req, res) => {
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret) {
-    res.status(503).json({ error: "ADMIN_SECRET not configured" });
+  const authHeader = req.headers["authorization"] ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (!token) {
+    res.status(401).json({ error: "Authorization header required" });
     return;
   }
 
-  const authHeader = req.headers["authorization"] ?? "";
-  const providedToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : "";
-  if (!providedToken || providedToken !== adminSecret) {
-    res.status(401).json({ error: "Unauthorized" });
+  const check = await verifyAdminSession(token);
+  if (!check.ok) {
+    res.status(401).json({ error: check.reason });
     return;
   }
 

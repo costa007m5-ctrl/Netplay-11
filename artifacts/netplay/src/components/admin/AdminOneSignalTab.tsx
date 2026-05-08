@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Bell, Send, Check, AlertCircle } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export const AdminOneSignalTab: React.FC = () => {
   const [testStatus, setTestStatus] = useState<string | null>(null);
@@ -7,22 +8,23 @@ export const AdminOneSignalTab: React.FC = () => {
 
   const onesignalAppId = import.meta.env.VITE_ONESIGNAL_APP_ID;
 
-  const adminSecret = import.meta.env.VITE_ADMIN_SECRET as string | undefined;
-
   const handleTestNotification = async () => {
     setIsSending(true);
     setTestStatus(null);
-    if (!adminSecret) {
-      setTestStatus('Falha: VITE_ADMIN_SECRET não configurado nos Secrets do ambiente.');
-      setIsSending(false);
-      return;
-    }
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        setTestStatus('Falha: Nenhuma sessão ativa. Faça login como administrador primeiro.');
+        setIsSending(false);
+        return;
+      }
+
       const response = await fetch('/api/notifications/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminSecret}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           title: 'Teste de OneSignal',
@@ -99,7 +101,7 @@ export const AdminOneSignalTab: React.FC = () => {
             <h4 className="text-white font-bold mb-4 flex items-center gap-2">
               <Send className="w-5 h-5 text-red-500" /> Disparo de Teste
             </h4>
-            <p className="text-sm text-gray-400 mb-6">Esta ação usará o servidor Node.js para enviar uma notificação web push para todos os inscritos (Subscribed Users).</p>
+            <p className="text-sm text-gray-400 mb-6">Esta ação usará o servidor Node.js para enviar uma notificação web push para todos os inscritos (Subscribed Users). Requer sessão de administrador ativa.</p>
             
             <button 
               onClick={handleTestNotification}
