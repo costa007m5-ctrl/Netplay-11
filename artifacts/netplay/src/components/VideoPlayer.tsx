@@ -130,18 +130,22 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               if (nextEp) {
                  localStorage.setItem(`netplay_progress_url_${movie.id}`, nextEp.videoUrl || nextEp.videoUrl2 || '');
               }
+              const nextUrl = nextEp ? (nextEp.videoUrl || nextEp.videoUrl2 || '') : '';
               supabase.from('watch_history').upsert({
                 profile_id: profileId,
                 movie_id: movie.id,
                 last_position: 0,
+                episode_url: nextUrl || undefined,
                 updated_at: new Date().toISOString()
               }, { onConflict: 'profile_id,movie_id' }).then(() => {});
            }
         } else {
+           const currentEpUrl = movie.videoUrl || '';
            supabase.from('watch_history').upsert({
              profile_id: profileId,
              movie_id: movie.id,
              last_position: finalTime,
+             ...(currentEpUrl ? { episode_url: currentEpUrl } : {}),
              updated_at: new Date().toISOString()
            }, { onConflict: 'profile_id,movie_id' }).then(() => {});
         }

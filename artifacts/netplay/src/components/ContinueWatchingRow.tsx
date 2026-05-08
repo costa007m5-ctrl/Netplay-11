@@ -12,11 +12,10 @@ interface ContinueWatchingRowProps {
 }
 
 const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie: Movie, onSelectMovie: (movie: Movie) => void, onPlayMovie: (movie: Movie, episodeUrl?: string, startTime?: number) => void }) => {
-  // Mocking duration if not present (assuming 2h average if movie.runtime is missing)
   const duration = movie.runtime ? movie.runtime * 60 : 7200;
   const position = movie.last_position || 0;
   const progress = (position / duration) * 100;
-  
+
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -24,14 +23,24 @@ const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie:
     return `${m}m`;
   };
 
-  const handleClick = (e: React.MouseEvent) => {
-    // Para resolver o bug de "Falha contínua na conexão" por causa de links que expiram no Continuar Assistindo:
-    // Se for filme (links em geral mais longos ou fixos), tenta tocar direto com a URL fresca (movie.videoUrl).
-    // Se for série, abrimos o Modal onde as URLs dos episódios são buscadas em tempo real do banco.
+  // Para séries: descobre o episódio salvo (Supabase > localStorage > primeiro episódio)
+  const resolvedEpisodeUrl = movie.type === 'series'
+    ? (movie.savedEpisodeUrl
+        || localStorage.getItem(`netplay_progress_url_${movie.id}`)
+        || (movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : undefined))
+    : undefined;
+
+  // Encontra o objeto do episódio para exibir T2 E5 no card
+  const savedEpisodeObj = (movie.type === 'series' && resolvedEpisodeUrl && movie.episodes)
+    ? movie.episodes.find(e => e.videoUrl === resolvedEpisodeUrl || e.videoUrl2 === resolvedEpisodeUrl)
+    : null;
+
+  const handleClick = () => {
     if (movie.type === 'series') {
-       onSelectMovie(movie);
+      // Toca direto no episódio salvo com o tempo salvo
+      onPlayMovie(movie, resolvedEpisodeUrl, position);
     } else {
-       onPlayMovie(movie, movie.videoUrl, position);
+      onPlayMovie(movie, movie.videoUrl, position);
     }
   };
 
@@ -69,7 +78,11 @@ const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie:
             )}
             <div className="flex items-center gap-3 text-gray-400 font-mono text-[9px] md:text-[10px] tracking-widest uppercase">
               <Clock size={10} className="text-red-500" />
-              <span>Restam {formatTime(duration - position)}</span>
+              {savedEpisodeObj ? (
+                <span>T{savedEpisodeObj.season} E{savedEpisodeObj.episode} · Restam {formatTime(duration - position)}</span>
+              ) : (
+                <span>Restam {formatTime(duration - position)}</span>
+              )}
             </div>
           </div>
           

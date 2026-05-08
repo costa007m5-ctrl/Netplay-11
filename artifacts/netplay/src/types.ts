@@ -45,6 +45,7 @@ export interface Movie {
   collection_poster_path?: string;
   collection_logo_path?: string;
   collection_backdrop_path?: string;
+  savedEpisodeUrl?: string; // URL do episódio salvo (carregado do Supabase watch_history)
 }
 
 export interface StreamingProvider {

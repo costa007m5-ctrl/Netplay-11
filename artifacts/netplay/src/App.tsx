@@ -3493,6 +3493,13 @@ export default function App() {
           .filter(h => h.movie)
           .map(h => {
             historyMap[h.movie_id] = h.last_position;
+            // Sync episode_url into localStorage so MovieDetailsModal finds it
+            if (h.episode_url && h.movie_id) {
+              const lsKey = `netplay_progress_url_${h.movie_id}`;
+              if (!localStorage.getItem(lsKey)) {
+                localStorage.setItem(lsKey, h.episode_url);
+              }
+            }
             return {
               ...h.movie,
               id: h.movie.id,
@@ -3503,6 +3510,7 @@ export default function App() {
               videoUrl: h.movie.video_url,
               videoUrl2: h.movie.video_url_2,
               last_position: h.last_position,
+              savedEpisodeUrl: h.episode_url || localStorage.getItem(`netplay_progress_url_${h.movie_id}`) || undefined,
               release_date: h.movie.release_date,
               runtime: h.movie.runtime,
               rating: h.movie.rating || h.movie.vote_average,
@@ -3894,12 +3902,14 @@ export default function App() {
     
     // Salva no Supabase para sincronização
     try {
-      await supabase.from('watch_history').upsert({
+      const upsertData: Record<string, unknown> = {
         profile_id: profile.id,
         movie_id: Number(movieId),
         last_position: time,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'profile_id,movie_id' });
+      };
+      if (episodeUrl) upsertData.episode_url = episodeUrl;
+      await supabase.from('watch_history').upsert(upsertData, { onConflict: 'profile_id,movie_id' });
     } catch (err) {
       console.error('Erro ao atualizar progresso no Supabase:', err);
     }

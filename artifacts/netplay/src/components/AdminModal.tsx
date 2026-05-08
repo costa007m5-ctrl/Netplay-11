@@ -855,6 +855,14 @@ begin
   end if;
 end $$;
 
+-- Adiciona coluna episode_url ao watch_history (para séries: qual episódio estava assistindo)
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_name='watch_history' and column_name='episode_url') then
+    alter table watch_history add column episode_url text;
+  end if;
+end $$;
+
 alter table profiles enable row level security;
 alter table watch_history enable row level security;
 alter table my_list enable row level security;

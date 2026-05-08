@@ -230,8 +230,8 @@ const MovieDetailsModal = React.memo(({
   }, [movie.id, movie.type, movie.first_air_date]);
 
   const savedUrl = useMemo(() => {
-    return localStorage.getItem(`netplay_progress_url_${movie.id}`);
-  }, [movie.id]);
+    return localStorage.getItem(`netplay_progress_url_${movie.id}`) || movie.savedEpisodeUrl || null;
+  }, [movie.id, movie.savedEpisodeUrl]);
 
   const savedEpisodeSeason = useMemo(() => {
     if (movie.type !== 'series' || !movie.episodes || !savedUrl) return null;
