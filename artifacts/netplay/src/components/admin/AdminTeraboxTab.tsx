@@ -238,7 +238,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           }
         }
         mergedEpisodes.sort((a, b) => a.season !== b.season ? a.season - b.season : a.episode - b.episode);
-        await onUpdateMovie(existingMovie.id, { ...existingMovie, episodes: mergedEpisodes, type: 'series' });
+        await onUpdateMovie({ ...existingMovie, episodes: mergedEpisodes, type: 'series' });
         alert(`Série atualizada com ${allEpisodes.length} episódios!`);
       } else {
         const newSeries = {
@@ -312,7 +312,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
 
         if (existingMovie) {
           try {
-            await onUpdateMovie(existingMovie.id, {
+            await onUpdateMovie({
               ...existingMovie,
               videoUrl: videoUrlToSave,
               videoUrl2: videoUrlToSave,

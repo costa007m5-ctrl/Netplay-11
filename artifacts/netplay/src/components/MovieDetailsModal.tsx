@@ -264,13 +264,8 @@ const MovieDetailsModal = React.memo(({
       setSelectedSeason(seasons[0]);
     }
     
-    // Delay video start minimal to allow smooth modal opening
-    const timer = setTimeout(() => {
-      if (movie.videoUrl) {
-        setShowVideo(true);
-      }
-    }, 50);
-    
+    // Background video intentionally disabled — show backdrop image only for smoother performance
+    const timer = setTimeout(() => {}, 0);
     return () => clearTimeout(timer);
   }, [movie, savedEpisodeSeason]);
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Database, Copy, Check, Info, ShieldAlert, Trash2, Edit, Film, Loader2, Search, Filter, LayoutGrid, List, ChevronRight, Tv, PlayCircle, Plus, Settings, Sparkles, RefreshCw } from 'lucide-react';
+import { X, Database, Copy, Check, Info, ShieldAlert, Trash2, Edit, Film, Loader2, Search, Filter, LayoutGrid, List, ChevronRight, Tv, PlayCircle, Plus, Settings, Sparkles, RefreshCw, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import tmdb, { requests } from '../services/tmdb';
 import { Movie, Episode, ScannerState } from '../types';
+import { makeDynamicRef } from '../services/terabox';
 
 const cleanTitleWithAI = async (title: string, type?: string) => title;
 
@@ -66,6 +67,9 @@ const AdminModal: React.FC<AdminModalProps> = ({
   const [newFolderUrl, setNewFolderUrl] = useState('');
   const [newFolderSeason, setNewFolderSeason] = useState<string>('auto');
   const [isScanningNewFolder, setIsScanningNewFolder] = useState(false);
+  const [teraboxFolderUrl, setTeraboxFolderUrl] = useState('');
+  const [teraboxFolderSeason, setTeraboxFolderSeason] = useState<string>('auto');
+  const [isScanningTerabox, setIsScanningTerabox] = useState(false);
 
   const GENRE_MAP: { [key: number]: string } = {
     28: "Ação", 12: "Aventura", 16: "Animação", 35: "Comédia", 80: "Crime",
@@ -424,6 +428,48 @@ const AdminModal: React.FC<AdminModalProps> = ({
       alert('Erro ao escanear pasta do Drive.');
     } finally {
       setIsScanningNewFolder(false);
+    }
+  };
+
+  const handleScanTeraboxFolder = async () => {
+    if (!teraboxFolderUrl) return;
+    setIsScanningTerabox(true);
+    try {
+      const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(teraboxFolderUrl)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao rastrear pasta Terabox');
+      const files: any[] = data.list || [];
+      if (!files.length) { alert('Nenhum arquivo encontrado na pasta.'); return; }
+
+      const newEpisodes: Episode[] = files.map((f, i) => {
+        const name: string = f.file_name || f.filename || f.name || `Arquivo ${i + 1}`;
+        const seMatch = name.match(/(\d+)x(\d+)/);
+        const sNum: string | null = seMatch ? seMatch[1] : (name.match(/[Ss](\d+)/)?.[1] ?? null);
+        const eNum: string | null = seMatch ? seMatch[2] : (name.match(/[Ee](\d+)/)?.[1] ?? null);
+        const season = teraboxFolderSeason === 'auto' ? (sNum ? parseInt(sNum) : 1) : parseInt(teraboxFolderSeason);
+        const episode = eNum ? parseInt(eNum) : i + 1;
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          title: name.replace(/\.[^/.]+$/, ''),
+          season,
+          episode,
+          videoUrl: makeDynamicRef(teraboxFolderUrl, name),
+          overview: ''
+        };
+      });
+
+      const existingUrls = new Set(editForm.episodes.map(e => e.videoUrl));
+      const filtered = newEpisodes.filter(e => !existingUrls.has(e.videoUrl));
+      if (!filtered.length) { alert('Todos os episódios já estão na lista.'); return; }
+
+      const merged = [...editForm.episodes, ...filtered].sort((a, b) => a.season - b.season || a.episode - b.episode);
+      setEditForm(prev => ({ ...prev, episodes: merged }));
+      setTeraboxFolderUrl('');
+      alert(`${filtered.length} episódios com Link Dinâmico adicionados! Clique em "Salvar Alterações" para confirmar.`);
+    } catch (err: any) {
+      alert('Erro: ' + err.message);
+    } finally {
+      setIsScanningTerabox(false);
     }
   };
 
@@ -1199,43 +1245,87 @@ end $$;
                           </div>
 
                           {editForm.type === 'series' && (
-                            <div className="p-4 bg-blue-600/5 border border-blue-500/20 rounded-2xl space-y-4">
-                              <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-2">
-                                <Plus size={14} /> Adicionar Temporada/Pasta
-                              </h4>
-                              <div className="space-y-3">
-                                <div>
-                                  <label className="text-[9px] text-gray-500 uppercase font-bold">Link da Pasta do Google Drive</label>
-                                  <input 
-                                    type="text"
-                                    value={newFolderUrl}
-                                    onChange={(e) => setNewFolderUrl(e.target.value)}
-                                    placeholder="https://drive.google.com/drive/folders/..."
-                                    className="w-full bg-[#1c1c1c] border border-gray-800 rounded-xl p-2.5 text-xs text-white mt-1 focus:border-blue-600 outline-none transition-all"
-                                  />
-                                </div>
-                                <div className="flex gap-3">
-                                  <div className="flex-1">
-                                    <label className="text-[9px] text-gray-500 uppercase font-bold">Temporada</label>
-                                    <select 
-                                      value={newFolderSeason}
-                                      onChange={(e) => setNewFolderSeason(e.target.value)}
+                            <div className="space-y-3">
+                              <div className="p-4 bg-blue-600/5 border border-blue-500/20 rounded-2xl space-y-4">
+                                <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Plus size={14} /> Adicionar Temporada — Google Drive
+                                </h4>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="text-[9px] text-gray-500 uppercase font-bold">Link da Pasta do Google Drive</label>
+                                    <input 
+                                      type="text"
+                                      value={newFolderUrl}
+                                      onChange={(e) => setNewFolderUrl(e.target.value)}
+                                      placeholder="https://drive.google.com/drive/folders/..."
                                       className="w-full bg-[#1c1c1c] border border-gray-800 rounded-xl p-2.5 text-xs text-white mt-1 focus:border-blue-600 outline-none transition-all"
-                                    >
-                                      <option value="auto">Automático (Detectar)</option>
-                                      {[...Array(30)].map((_, i) => (
-                                        <option key={i+1} value={i+1}>Temporada {i+1}</option>
-                                      ))}
-                                    </select>
+                                    />
                                   </div>
-                                  <button 
-                                    onClick={handleScanNewFolder}
-                                    disabled={isScanningNewFolder || !newFolderUrl}
-                                    className="self-end bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2"
-                                  >
-                                    {isScanningNewFolder ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                                    Rastrear
-                                  </button>
+                                  <div className="flex gap-3">
+                                    <div className="flex-1">
+                                      <label className="text-[9px] text-gray-500 uppercase font-bold">Temporada</label>
+                                      <select 
+                                        value={newFolderSeason}
+                                        onChange={(e) => setNewFolderSeason(e.target.value)}
+                                        className="w-full bg-[#1c1c1c] border border-gray-800 rounded-xl p-2.5 text-xs text-white mt-1 focus:border-blue-600 outline-none transition-all"
+                                      >
+                                        <option value="auto">Automático (Detectar)</option>
+                                        {[...Array(30)].map((_, i) => (
+                                          <option key={i+1} value={i+1}>Temporada {i+1}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <button 
+                                      onClick={handleScanNewFolder}
+                                      disabled={isScanningNewFolder || !newFolderUrl}
+                                      className="self-end bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                      {isScanningNewFolder ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                                      Rastrear
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="p-4 bg-yellow-600/5 border border-yellow-500/20 rounded-2xl space-y-4">
+                                <h4 className="text-xs font-black text-yellow-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Zap size={14} /> Adicionar Temporada — Terabox (Link Dinâmico)
+                                </h4>
+                                <p className="text-[9px] text-gray-500">Os episódios são salvos com referência estável. O link de stream é resolvido automaticamente no momento da reprodução.</p>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="text-[9px] text-gray-500 uppercase font-bold">URL da Pasta Terabox</label>
+                                    <input 
+                                      type="text"
+                                      value={teraboxFolderUrl}
+                                      onChange={(e) => setTeraboxFolderUrl(e.target.value)}
+                                      placeholder="https://www.terabox.com/sharing/link?surl=..."
+                                      className="w-full bg-[#1c1c1c] border border-gray-800 rounded-xl p-2.5 text-xs text-white mt-1 focus:border-yellow-600 outline-none transition-all font-mono"
+                                    />
+                                  </div>
+                                  <div className="flex gap-3">
+                                    <div className="flex-1">
+                                      <label className="text-[9px] text-gray-500 uppercase font-bold">Temporada</label>
+                                      <select 
+                                        value={teraboxFolderSeason}
+                                        onChange={(e) => setTeraboxFolderSeason(e.target.value)}
+                                        className="w-full bg-[#1c1c1c] border border-gray-800 rounded-xl p-2.5 text-xs text-white mt-1 focus:border-yellow-600 outline-none transition-all"
+                                      >
+                                        <option value="auto">Automático (Detectar)</option>
+                                        {[...Array(30)].map((_, i) => (
+                                          <option key={i+1} value={i+1}>Temporada {i+1}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <button 
+                                      onClick={handleScanTeraboxFolder}
+                                      disabled={isScanningTerabox || !teraboxFolderUrl}
+                                      className="self-end bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                      {isScanningTerabox ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                                      Gerar Links
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </div>

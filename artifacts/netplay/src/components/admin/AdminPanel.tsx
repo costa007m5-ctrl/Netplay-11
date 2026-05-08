@@ -6,11 +6,13 @@ import {
   Cloud, Link as LinkIcon, ExternalLink, Play, Check, X, Save,
   ArrowUpDown, Download, Settings, Database, Plus, Upload,
   Sparkles, Calendar, Shield, Copy, Star, Send, Image as ImageIcon,
-  Activity, Users, Heart, DollarSign, Server, Bell, RefreshCw
+  Activity, Users, Heart, DollarSign, Server, Bell, RefreshCw,
+  Loader2, Zap
 } from 'lucide-react';
 import { Movie, ScannerState, ReScannerState, StreamingProvider } from '../../types';
 import { supabase } from '../../lib/supabase';
 import tmdb, { requests, getMovieLogo } from '../../services/tmdb';
+import { makeDynamicRef, isDynamicRef } from '../../services/terabox';
 import AdminUsersTab from './AdminUsersTab';
 import AdminMercadoPagoTab from './AdminMercadoPagoTab';
 import AdminReferralsTab from './AdminReferralsTab';
@@ -111,6 +113,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     episodes: []
   });
   const [kingxSeriesUrl, setKingxSeriesUrl] = useState('');
+  const [teraboxEditFolderUrl, setTeraboxEditFolderUrl] = useState('');
+  const [teraboxEditSeason, setTeraboxEditSeason] = useState<string>('auto');
+  const [isScanningTeraboxEdit, setIsScanningTeraboxEdit] = useState(false);
   const [isProviderModalOpen, setIsProviderModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<StreamingProvider | null>(null);
   const [newProvider, setNewProvider] = useState<Partial<StreamingProvider>>({
@@ -1029,6 +1034,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch (error) {
       console.error('Erro na sincronização TMDB:', error);
       alert('Ocorreu um erro ao buscar detalhes dos episódios no TMDB.');
+    }
+  };
+
+  const handleScanTeraboxEpisodes = async () => {
+    if (!teraboxEditFolderUrl || !editingMovie) return;
+    setIsScanningTeraboxEdit(true);
+    try {
+      const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(teraboxEditFolderUrl)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro Terabox');
+      const files: any[] = data.list || [];
+      if (!files.length) { alert('Nenhum arquivo encontrado.'); return; }
+
+      const newEps = files.map((f, i) => {
+        const name: string = f.file_name || f.filename || f.name || `Arquivo ${i + 1}`;
+        const seMatch = name.match(/(\d+)x(\d+)/);
+        const sNum: string | null = seMatch ? seMatch[1] : (name.match(/[Ss](\d+)/)?.[1] ?? null);
+        const eNum: string | null = seMatch ? seMatch[2] : (name.match(/[Ee](\d+)/)?.[1] ?? null);
+        const season = teraboxEditSeason === 'auto' ? (sNum ? parseInt(sNum) : 1) : parseInt(teraboxEditSeason);
+        const episode = eNum ? parseInt(eNum) : i + 1;
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          title: name.replace(/\.[^/.]+$/, ''),
+          season,
+          episode,
+          videoUrl: makeDynamicRef(teraboxEditFolderUrl, name),
+          overview: ''
+        };
+      });
+
+      const existingUrls = new Set((editingMovie.episodes || []).map((e: any) => e.videoUrl));
+      const filtered = newEps.filter(e => !existingUrls.has(e.videoUrl));
+      if (!filtered.length) { alert('Todos os episódios já estão na lista.'); return; }
+
+      const merged = [...(editingMovie.episodes || []), ...filtered]
+        .sort((a: any, b: any) => a.season - b.season || a.episode - b.episode);
+      setEditingMovie(prev => prev ? { ...prev, episodes: merged } : null);
+      setTeraboxEditFolderUrl('');
+      alert(`${filtered.length} episódios com Link Dinâmico adicionados! Salve para confirmar.`);
+    } catch (err: any) {
+      alert('Erro: ' + err.message);
+    } finally {
+      setIsScanningTeraboxEdit(false);
     }
   };
 
@@ -3456,6 +3504,37 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
                       </div>
                       
+                      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-4 space-y-3">
+                        <label className="block text-[9px] font-black text-yellow-400 uppercase tracking-widest px-1 flex items-center gap-1"><Zap size={10} /> Importar Pasta Terabox (Link Dinâmico)</label>
+                        <p className="text-[8px] text-gray-500 px-1">Referências estáveis salvas no BD; stream resolvido em tempo real.</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={teraboxEditFolderUrl}
+                            onChange={(e) => setTeraboxEditFolderUrl(e.target.value)}
+                            className="flex-1 bg-black/20 border border-white/10 rounded-xl py-2 px-4 text-xs font-mono"
+                            placeholder="https://www.terabox.com/sharing/link?surl=..."
+                          />
+                          <select
+                            value={teraboxEditSeason}
+                            onChange={(e) => setTeraboxEditSeason(e.target.value)}
+                            className="bg-black/20 border border-white/10 rounded-xl py-2 px-3 text-xs text-white"
+                          >
+                            <option value="auto">Auto</option>
+                            {[...Array(20)].map((_, i) => <option key={i+1} value={i+1}>T{i+1}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={handleScanTeraboxEpisodes}
+                            disabled={isScanningTeraboxEdit || !teraboxEditFolderUrl}
+                            className="bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {isScanningTeraboxEdit ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                            Gerar
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-4">
                         <label className="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 px-1 italic">Importar Link KingX (Smart Copy)</label>
                         <div className="flex gap-2">
