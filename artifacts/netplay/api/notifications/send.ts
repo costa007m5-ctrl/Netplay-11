@@ -12,29 +12,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!token) return res.status(401).json({ error: "Authorization header required" });
 
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
-  const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
-  if (!supabaseUrl || !anonKey) {
-    return res.status(503).json({ error: "SUPABASE_URL / SUPABASE_ANON_KEY not configured" });
-  }
-  if (!serviceKey) {
-    return res.status(503).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+  if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
+  if (!serviceKey) return res.status(503).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+
+  // Decode the JWT to extract the user ID (sub claim).
+  // supabase.auth.getUser() exists at runtime but is missing from SupabaseAuthClient
+  // types in @supabase/supabase-js v2.105+, so we decode manually and use
+  // auth.admin.getUserById() — which IS correctly typed on the admin client.
+  let userId: string;
+  try {
+    const jwtPayload = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64").toString("utf8"),
+    ) as { sub?: string; exp?: number };
+    if (!jwtPayload.sub) throw new Error("missing sub");
+    if (jwtPayload.exp && jwtPayload.exp < Math.floor(Date.now() / 1000)) {
+      return res.status(401).json({ error: "Token expired" });
+    }
+    userId = jwtPayload.sub;
+  } catch {
+    return res.status(401).json({ error: "Invalid token format" });
   }
 
-  // Verify the JWT using the anon-key client (GoTrueClient.getUser accepts a JWT)
-  const anonClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
-  const { data: userData, error: userErr } = await anonClient.auth.getUser(token);
-  if (userErr || !userData?.user) {
+  // Service-role client: validate user exists and check admin_users table
+  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+
+  const { data: userRecord, error: userErr } = await supabase.auth.admin.getUserById(userId);
+  if (userErr || !userRecord?.user) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
 
-  // Check admin_users table using the service-role client (bypasses RLS)
-  const adminClient = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-  const { data: adminRow } = await adminClient
+  const { data: adminRow } = await supabase
     .from("admin_users")
     .select("id")
-    .eq("user_id", userData.user.id)
+    .eq("user_id", userRecord.user.id)
     .single();
 
   if (!adminRow) return res.status(403).json({ error: "Not an admin" });
