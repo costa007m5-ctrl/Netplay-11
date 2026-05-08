@@ -10,8 +10,11 @@ router.get("/terabox-pro", async (req, res) => {
     return;
   }
 
-  const apiKey =
-    process.env.TERABOX_PRO_API_KEY || "sk_6d7363a619840df0a07afe194613bf9a";
+  const apiKey = process.env.TERABOX_PRO_API_KEY;
+  if (!apiKey) {
+    res.status(503).json({ error: "TERABOX_PRO_API_KEY not configured" });
+    return;
+  }
 
   try {
     const response = await axios.get(
