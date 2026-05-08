@@ -50,6 +50,12 @@ export default defineConfig(async () => {
       fs: {
         strict: false,
       },
+      proxy: {
+        "/api": {
+          target: "http://localhost:8080",
+          changeOrigin: true,
+        },
+      },
     },
     preview: {
       port,
