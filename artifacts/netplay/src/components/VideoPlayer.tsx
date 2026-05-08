@@ -292,7 +292,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const url = movie.videoUrl || '';
   const isDriveVideo = url.includes('drive.google.com');
   const isGooglePhotos = url.includes('photos.google.com') || url.includes('photos.app.goo.gl');
-  const isTeraBox = url.includes('terabox.com') || url.includes('teraboxapp.com') || url.includes('dubox.com') || url.includes('nephobox.com');
+  const isTeraBox = url.includes('terabox.com') || url.includes('teraboxapp.com') || url.includes('dubox.com') || url.includes('nephobox.com') || url.includes('1024terabox.com') || url.includes('freeterabox.com') || url.includes('4funbox.com') || url.includes('mirrobox.com') || url.includes('momerybox.com') || url.includes('teraboxlink.com') || url.includes('terafileshare.com');
   const isKingX = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
   const isGDPlayer = url.includes('gdplayer.to') || url.includes('gdplayer.org');
   const driveId = isDriveVideo ? extractDriveId(url) : null;
@@ -595,26 +595,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isGDPlayer) return url;
       return finalVideoUrl || url || "";
     })();
-
-    // While Terabox is being extracted and we have no URL yet, show pre-loading
-    if (isExtractingTerabox && !extractedVideoUrl) {
-      return (
-        <div className="fixed inset-0 bg-black z-[3000] flex flex-col items-center justify-center gap-6">
-          {movie.backdrop_path && (
-            <img
-              src={movie.backdrop_path.startsWith('http') ? movie.backdrop_path : `https://image.tmdb.org/t/p/original/${movie.backdrop_path}`}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover opacity-20"
-            />
-          )}
-          <div className="relative z-10 flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-full border-4 border-red-600 border-t-transparent animate-spin" />
-            <p className="text-white font-black uppercase tracking-widest text-xs italic">Extraindo link do vídeo...</p>
-            <button onClick={onClose} className="mt-4 text-white/40 text-xs uppercase tracking-widest hover:text-white transition-colors">Cancelar</button>
-          </div>
-        </div>
-      );
-    }
 
     return (
       <div className="relative w-full h-full">

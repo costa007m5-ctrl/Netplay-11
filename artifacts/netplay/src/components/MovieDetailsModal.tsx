@@ -5,7 +5,6 @@ import { Movie } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import tmdb, { requests, getMovieLogo } from '../services/tmdb';
 import VideoPlayer from './VideoPlayer';
-import { isDynamicRef, resolveTeraboxUrl } from '../services/terabox';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -156,34 +155,10 @@ const MovieDetailsModal = React.memo(({
   const [isResolvingUrl, setIsResolvingUrl] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const handlePlay = async (episodeUrl?: string, startTime?: number, playerStyle?: string) => {
-    const urlToCheck = episodeUrl || movie.videoUrl;
-    if (urlToCheck && isDynamicRef(urlToCheck)) {
-      setIsResolvingUrl(true);
-      try {
-        const resolved = await resolveTeraboxUrl(urlToCheck);
-        onPlay(movie, resolved, startTime, playerStyle);
-      } catch (e: any) {
-        // API failed — fall back to playing the folder URL directly as a best-effort
-        // (the player will handle iframe fallback if needed)
-        const { folderUrl } = (() => {
-          try {
-            const raw = urlToCheck.slice('terabox-folder://'.length);
-            const sep = raw.indexOf('###');
-            return { folderUrl: sep !== -1 ? raw.slice(0, sep) : raw };
-          } catch { return { folderUrl: '' }; }
-        })();
-        if (folderUrl) {
-          onPlay(movie, folderUrl, startTime, playerStyle);
-        } else {
-          setResolvingError(e.message || 'Erro ao obter link de vídeo');
-        }
-      } finally {
-        setIsResolvingUrl(false);
-      }
-    } else {
-      onPlay(movie, episodeUrl, startTime, playerStyle);
-    }
+  const handlePlay = (episodeUrl?: string, startTime?: number, playerStyle?: string) => {
+    // Open the player immediately — VideoPlayer handles TeraBox resolution internally,
+    // creating a single unified loading experience instead of two separate spinners.
+    onPlay(movie, episodeUrl, startTime, playerStyle);
   };
 
   const [resolvingError, setResolvingError] = useState<string | null>(null);
@@ -1262,22 +1237,6 @@ const MovieDetailsModal = React.memo(({
 
     </motion.div>
 
-    <AnimatePresence>
-      {isResolvingUrl && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center gap-6"
-        >
-          <Loader2 size={56} className="text-red-500 animate-spin" />
-          <div className="text-center">
-            <p className="text-white font-black uppercase tracking-widest text-lg italic">Obtendo Link de Vídeo</p>
-            <p className="text-gray-400 text-sm mt-2 font-medium">Resolvendo referência dinâmica do Terabox...</p>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
 
     <AnimatePresence>
       {resolvingError && (

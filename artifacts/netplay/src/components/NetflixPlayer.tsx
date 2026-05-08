@@ -1170,7 +1170,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
              videoRef.current.play().catch(e => console.warn("Safety timeout autoplay blocked", e));
           }
         }
-      }, 15000); // 15 seconds safety timeout
+      }, 45000); // 45 seconds — gives slow streams enough time to start
     }
 
     return () => {
