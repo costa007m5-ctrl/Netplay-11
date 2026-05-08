@@ -679,7 +679,21 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         video.load();
       } catch (e) {}
 
-      const videoToPlay = activeSrc;
+      // For teradl.kingx.dev m3u8 links, route through our server-side proxy
+      // so the correct Referer header is sent — browsers can't set it via JS.
+      const buildProxiedUrl = (rawUrl: string): string => {
+        const lower = rawUrl.toLowerCase();
+        if (
+          (lower.includes('teradl.kingx.dev') || lower.includes('teraboxdownloader')) &&
+          lower.includes('.m3u8')
+        ) {
+          const referer = encodeURIComponent('https://player.kingx.dev/');
+          return `/api/proxy-stream?url=${encodeURIComponent(rawUrl)}&referer=${referer}`;
+        }
+        return rawUrl;
+      };
+
+      const videoToPlay = buildProxiedUrl(activeSrc);
       if (!videoToPlay) return;
 
       const lowerSrc = videoToPlay.toLowerCase();

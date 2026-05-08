@@ -164,7 +164,20 @@ const MovieDetailsModal = React.memo(({
         const resolved = await resolveTeraboxUrl(urlToCheck);
         onPlay(movie, resolved, startTime, playerStyle);
       } catch (e: any) {
-        alert('Erro ao obter link de vídeo: ' + e.message);
+        // API failed — fall back to playing the folder URL directly as a best-effort
+        // (the player will handle iframe fallback if needed)
+        const { folderUrl } = (() => {
+          try {
+            const raw = urlToCheck.slice('terabox-folder://'.length);
+            const sep = raw.indexOf('###');
+            return { folderUrl: sep !== -1 ? raw.slice(0, sep) : raw };
+          } catch { return { folderUrl: '' }; }
+        })();
+        if (folderUrl) {
+          onPlay(movie, folderUrl, startTime, playerStyle);
+        } else {
+          setResolvingError(e.message || 'Erro ao obter link de vídeo');
+        }
       } finally {
         setIsResolvingUrl(false);
       }
@@ -172,6 +185,8 @@ const MovieDetailsModal = React.memo(({
       onPlay(movie, episodeUrl, startTime, playerStyle);
     }
   };
+
+  const [resolvingError, setResolvingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isPlayingFullscreen) {
@@ -1260,6 +1275,42 @@ const MovieDetailsModal = React.memo(({
             <p className="text-white font-black uppercase tracking-widest text-lg italic">Obtendo Link de Vídeo</p>
             <p className="text-gray-400 text-sm mt-2 font-medium">Resolvendo referência dinâmica do Terabox...</p>
           </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    <AnimatePresence>
+      {resolvingError && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-xl flex items-center justify-center p-6"
+          onClick={() => setResolvingError(null)}
+        >
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.92, opacity: 0 }}
+            className="bg-[#1a1a1a] border border-red-800/40 rounded-2xl p-8 max-w-sm w-full flex flex-col items-center gap-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 rounded-full bg-red-600/20 flex items-center justify-center">
+              <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-white font-bold text-base mb-1">Falha ao obter link</p>
+              <p className="text-gray-400 text-sm leading-relaxed">{resolvingError}</p>
+            </div>
+            <button
+              onClick={() => setResolvingError(null)}
+              className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-2.5 rounded-xl transition-colors"
+            >
+              Fechar
+            </button>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
