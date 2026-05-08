@@ -1,6 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -28,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const data = await response.json();
     return res.status(response.status).json(data);
-  } catch (error: unknown) {
+  } catch (error) {
     const msg = error instanceof Error ? error.message : "unknown error";
     return res.status(500).json({ error: "Failed to fetch from Terabox API", details: msg });
   }
