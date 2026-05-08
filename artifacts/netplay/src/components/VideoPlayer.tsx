@@ -9,20 +9,21 @@ interface VideoPlayerProps {
   movie: Movie;
   onClose: () => void;
   profileId?: string;
-  profile?: any; // Added profile object
+  profile?: any;
   roomId?: string;
   isHost?: boolean;
-  onPlayNext?: (movie: Movie, episodeUrl: string) => void;
+  onPlayNext?: (movie: Movie, episodeUrl: string, episodeIndex?: number) => void;
   recommendations?: Movie[];
   onProgress?: (movieId: string | number, time: number, episodeUrl?: string) => void;
   appSettings?: AppSettings;
   initialTime?: number;
   initialPlayerStyle?: 'netflix' | 'standard' | 'special' | string;
+  initialEpisodeIndex?: number;
   isBackgroundMode?: boolean;
   onClickBackground?: () => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, initialPlayerStyle, isBackgroundMode, onClickBackground }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, initialPlayerStyle, initialEpisodeIndex, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
   const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
@@ -361,31 +362,56 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           if (res.ok) {
             const data = await res.json();
 
-            // Find which episode we're currently on (by URL match)
-            const currentEpIndex = movie.type === 'series' && movie.episodes
+            const rawList: any[] = Array.isArray(data.list) ? data.list : (data.list ? [data.list] : []);
+
+            // Sort files by filename for consistent ordering (natural sort)
+            const sortedList = [...rawList].sort((a: any, b: any) => {
+              const nameA = (a.filename || a.name || '').toLowerCase();
+              const nameB = (b.filename || b.name || '').toLowerCase();
+              return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            // Find episode index by URL match (may be wrong when all share same URL)
+            const urlMatchIndex = movie.type === 'series' && movie.episodes
               ? movie.episodes.findIndex(ep => ep.videoUrl === u || ep.videoUrl2 === u)
               : -1;
-            const currentEp = currentEpIndex !== -1 && movie.episodes ? movie.episodes[currentEpIndex] : null;
+            const urlMatchEp = urlMatchIndex !== -1 && movie.episodes ? movie.episodes[urlMatchIndex] : null;
 
-            let vid = data.list && data.list.length > 0 ? data.list[0] : data;
+            let vid: any = null;
 
-            if (data.list && data.list.length > 0) {
-              // Priority 1: match by episode-level file_name
-              const epFileName = (currentEp as any)?.file_name;
+            if (sortedList.length > 0) {
+              // Priority 1: match by stored file_name on the episode
+              const epFileName = (urlMatchEp as any)?.file_name;
               const movieFileName = (movie as any).file_name;
               const fileNameToMatch = epFileName || movieFileName;
-
               if (fileNameToMatch) {
-                const matched = data.list.find((f: any) =>
+                vid = sortedList.find((f: any) =>
                   f.filename === fileNameToMatch ||
                   f.name === fileNameToMatch ||
                   (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
-                );
-                if (matched) vid = matched;
-              } else if (currentEpIndex > 0 && currentEpIndex < data.list.length) {
-                // Priority 2: use the episode's position index in the list
-                vid = data.list[currentEpIndex];
+                ) || null;
               }
+
+              // Priority 2: use explicitly passed episode index (most reliable for folder URLs)
+              if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
+                vid = sortedList[initialEpisodeIndex];
+              }
+
+              // Priority 3: use episode's episode number (1-based) as index into sorted list
+              if (!vid && urlMatchEp && (urlMatchEp as any).episode > 0) {
+                const epNum = (urlMatchEp as any).episode - 1;
+                if (epNum < sortedList.length) vid = sortedList[epNum];
+              }
+
+              // Priority 4: URL-match index if it's unique (unambiguous)
+              if (!vid && urlMatchIndex > 0 && urlMatchIndex < sortedList.length) {
+                vid = sortedList[urlMatchIndex];
+              }
+
+              // Priority 5: first file as last resort
+              if (!vid) vid = sortedList[0];
+            } else if (data.filename || data.fast_stream_url || data.dlink) {
+              vid = data;
             }
             
             if (vid) {
@@ -404,7 +430,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           }
         } catch (e) {
           console.error("Failed to extract Terabox via API", e);
-          // On failure, fall back to original URL so player doesn't get stuck
           setExtractedVideoUrl(u);
           setFinalVideoUrl(u);
         } finally {
@@ -413,7 +438,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       }
     };
     runExtraction();
-  }, [movie.id, movie.videoUrl]);
+  }, [movie.id, movie.videoUrl, initialEpisodeIndex]);
 
   const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
   const isHLS = url.includes('.m3u8') || (extractedVideoUrl?.includes('.m3u8') ?? false);
@@ -606,7 +631,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}
           episodes={movie.episodes}
           onSelectEpisode={(ep) => {
-            if (onPlayNext) onPlayNext(movie, ep.videoUrl || ep.videoUrl2 || "");
+            const epIdx = movie.episodes ? movie.episodes.findIndex(e => e.id === ep.id) : -1;
+            if (onPlayNext) onPlayNext(movie, ep.videoUrl || ep.videoUrl2 || "", epIdx >= 0 ? epIdx : undefined);
           }}
           backdropUrl={movie.backdrop_path}
           logoUrl={movieLogo || undefined}
@@ -621,7 +647,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           }}
           onNextEpisode={() => {
             if (hasNextEpisode && movie.episodes && onPlayNext) {
-              onPlayNext(movie, movie.episodes[currentIndex + 1].videoUrl);
+              const nextIdx = currentIndex + 1;
+              onPlayNext(movie, movie.episodes[nextIdx].videoUrl, nextIdx);
             }
           }}
           videoUrlOptions={videoUrlOptions}

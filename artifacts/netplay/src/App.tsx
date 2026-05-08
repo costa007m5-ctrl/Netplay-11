@@ -1451,6 +1451,7 @@ const MovieDetailRouteWrapper = ({
   const movieFromState = location.state?.movie;
   const startTimeFromState = location.state?.startTime;
   const episodeUrlFromState = location.state?.episodeUrl;
+  const episodeIndexFromState: number | undefined = location.state?.episodeIndex;
   const playerStyleFromState = location.state?.playerStyle;
   
   const searchParams = new URLSearchParams(location.search);
@@ -1512,21 +1513,22 @@ const MovieDetailRouteWrapper = ({
 
   return (
     <VideoPlayer 
-      key={`${movie.id}-${videoUrl}`}
+      key={`${movie.id}-${videoUrl}-${episodeIndexFromState ?? ''}`}
       movie={{...movie, videoUrl: videoUrl || movie.video_url || movie.videoUrl}} 
       onClose={closePlayer}
       profileId={profile?.id}
       profile={profile}
       recommendations={recommendations}
       onProgress={onProgress}
-      onPlayNext={(m, url) => {
-         if (handlePlayMovie) handlePlayMovie(m, url, 0);
+      onPlayNext={(m, url, idx) => {
+         if (handlePlayMovie) handlePlayMovie(m, url, 0, undefined, idx);
       }}
       roomId={currentRoomId}
       isHost={isHost}
       appSettings={appSettings}
       initialTime={startTimeFromState !== undefined ? startTimeFromState : savedProgress}
       initialPlayerStyle={playerStyleFromState}
+      initialEpisodeIndex={episodeIndexFromState}
     />
   );
 };
@@ -3923,7 +3925,7 @@ export default function App() {
     navigate(`/movie/${movie.id}`, { state: { backgroundLocation: location.pathname } });
   }, [navigate, location.pathname]);
 
-  const handlePlayMovie = useCallback((movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string) => {
+  const handlePlayMovie = useCallback((movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
     // Travamos a orientação e navegamos de forma síncrona
     try {
       if (document.documentElement.requestFullscreen) {
@@ -3950,7 +3952,7 @@ export default function App() {
     
     // Navegação síncrona permite que o autoplay passe no browser sem block
     const search = window.location.search;
-    navigate(`/watch/${movie.id}${search}`, { state: { movie, episodeUrl, startTime, playerStyle, backgroundLocation: location.state?.backgroundLocation } });
+    navigate(`/watch/${movie.id}${search}`, { state: { movie, episodeUrl, episodeIndex, startTime, playerStyle, backgroundLocation: location.state?.backgroundLocation } });
   }, [navigate, location.state]);
 
   const closeMovieDetails = () => {

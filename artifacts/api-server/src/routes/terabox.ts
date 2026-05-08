@@ -3,6 +3,23 @@ import axios from "axios";
 
 const router: IRouter = Router();
 
+const teraboxCache = new Map<string, { data: any; expiresAt: number }>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+function getCached(url: string): any | null {
+  const entry = teraboxCache.get(url);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    teraboxCache.delete(url);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCached(url: string, data: any) {
+  teraboxCache.set(url, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
 function pickBestUrl(file: any): string | null {
   return (
     file?.fast_stream_url?.["1080p"] ||
@@ -18,6 +35,9 @@ function pickBestUrl(file: any): string | null {
 }
 
 async function callTeraboxApi(url: string, apiKey: string) {
+  const cached = getCached(url);
+  if (cached) return cached;
+
   const response = await axios.post(
     "https://xapiverse.com/api/terabox-pro",
     { url },
@@ -26,9 +46,14 @@ async function callTeraboxApi(url: string, apiKey: string) {
         "Content-Type": "application/json",
         "xAPIverse-Key": apiKey,
       },
-      timeout: 30000,
+      timeout: 12000,
     },
   );
+
+  if (response.data?.status !== "error") {
+    setCached(url, response.data);
+  }
+
   return response.data;
 }
 
