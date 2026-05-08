@@ -3,6 +3,7 @@ import screenfull from 'screenfull';
 import NetflixPlayer from './NetflixPlayer';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
+import { isDynamicRef, resolveTeraboxUrl } from '../services/terabox';
 
 interface VideoPlayerProps {
   movie: Movie;
@@ -333,6 +334,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   useEffect(() => {
     const runExtraction = async () => {
       const u = movie.videoUrl || '';
+
+      // Handle terabox-folder:// dynamic refs (format: "terabox-folder://folderUrl###filename")
+      if (isDynamicRef(u)) {
+        setIsExtractingTerabox(true);
+        try {
+          const resolved = await resolveTeraboxUrl(u);
+          setExtractedVideoUrl(resolved);
+          setFinalVideoUrl(resolved);
+        } catch (e) {
+          console.error("Failed to resolve dynamic Terabox ref", e);
+          setExtractedVideoUrl(u);
+          setFinalVideoUrl(u);
+        } finally {
+          setIsExtractingTerabox(false);
+        }
+        return;
+      }
+
       const isTera = u.includes('terabox.com') || u.includes('teraboxapp.com') || u.includes('dubox.com') || u.includes('nephobox.com') || u.includes('1024terabox.com') || u.includes('freeterabox.com') || u.includes('4funbox.com') || u.includes('mirrobox.com') || u.includes('momerybox.com') || u.includes('teraboxlink.com') || u.includes('terafileshare.com');
       
       if (isTera) {
@@ -341,14 +360,32 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(u)}`);
           if (res.ok) {
             const data = await res.json();
-            
+
+            // Find which episode we're currently on (by URL match)
+            const currentEpIndex = movie.type === 'series' && movie.episodes
+              ? movie.episodes.findIndex(ep => ep.videoUrl === u || ep.videoUrl2 === u)
+              : -1;
+            const currentEp = currentEpIndex !== -1 && movie.episodes ? movie.episodes[currentEpIndex] : null;
+
             let vid = data.list && data.list.length > 0 ? data.list[0] : data;
-            
-            if (data.list && data.list.length > 0 && movie.file_name) {
-               const matched = data.list.find((f: any) => f.filename === movie.file_name || f.name === movie.file_name);
-               if (matched) {
-                 vid = matched;
-               }
+
+            if (data.list && data.list.length > 0) {
+              // Priority 1: match by episode-level file_name
+              const epFileName = (currentEp as any)?.file_name;
+              const movieFileName = (movie as any).file_name;
+              const fileNameToMatch = epFileName || movieFileName;
+
+              if (fileNameToMatch) {
+                const matched = data.list.find((f: any) =>
+                  f.filename === fileNameToMatch ||
+                  f.name === fileNameToMatch ||
+                  (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
+                );
+                if (matched) vid = matched;
+              } else if (currentEpIndex > 0 && currentEpIndex < data.list.length) {
+                // Priority 2: use the episode's position index in the list
+                vid = data.list[currentEpIndex];
+              }
             }
             
             if (vid) {

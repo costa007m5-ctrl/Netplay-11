@@ -193,6 +193,8 @@ const MovieDetailsModal = React.memo(({
 
   useEffect(() => {
     const fetchWatchProviders = async () => {
+      // Skip if movie already has watch_providers data stored (avoids unnecessary TMDB call)
+      if (movie.watch_providers) return;
       try {
         const isTv = movie.type === 'series' || !!movie.first_air_date;
         const url = isTv ? requests.tvWatchProviders(movie.id) : requests.movieWatchProviders(movie.id);
@@ -553,8 +555,11 @@ const MovieDetailsModal = React.memo(({
                     whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255,255,255,0.3)' }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
-                      if (isYouTube || isKingX) {
-                        const defaultUrl = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
+                      if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                        const urlToPlay = savedUrl || movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
+                        handlePlay(urlToPlay, savedProgress, 'netflix');
+                      } else if (isYouTube || isKingX) {
+                        const defaultUrl = movie.videoUrl;
                         handlePlay(savedUrl || defaultUrl || undefined, savedProgress);
                       } else {
                         setIsPlayingFullscreen(true);
@@ -573,9 +578,11 @@ const MovieDetailsModal = React.memo(({
                     onClick={() => {
                       localStorage.removeItem(`netplay_progress_${movie.id}`);
                       setUserResetProgress(true);
-                      if (isYouTube || isKingX) {
-                        const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
-                        handlePlay(urlToPlay, 0);
+                      if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                        const urlToPlay = movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
+                        handlePlay(urlToPlay, 0, 'netflix');
+                      } else if (isYouTube || isKingX) {
+                        handlePlay(movie.videoUrl, 0);
                       } else {
                         setIsPlayingFullscreen(true);
                       }
@@ -598,9 +605,11 @@ const MovieDetailsModal = React.memo(({
                             document.dispatchEvent(new CustomEvent('open-plans'));
                             return;
                           }
-                          if (isYouTube || isKingX) {
-                            const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
+                          if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                            const urlToPlay = movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
                             handlePlay(urlToPlay, 0, 'netflix');
+                          } else if (isYouTube || isKingX) {
+                            handlePlay(movie.videoUrl, 0, 'netflix');
                           } else {
                             setIsPlayingFullscreen(true);
                           }
