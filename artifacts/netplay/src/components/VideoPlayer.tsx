@@ -630,6 +630,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         <NetflixPlayer 
           src={playerSrc}
           verificationUrl={isKingX && !extractedVideoUrl ? (movie.videoUrl || undefined) : undefined}
+          iframeFallbackUrl={isKingX ? (movie.videoUrl || undefined) : undefined}
           subtitleUrl={extractedSubtitleUrl || undefined}
           title={displayTitle}
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}

@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 interface NetflixPlayerProps {
   src: string;
   verificationUrl?: string;
+  iframeFallbackUrl?: string;
   title: string;
   seriesTitle?: string;
   movieId?: string | number;
@@ -40,6 +41,7 @@ interface NetflixPlayerProps {
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
   src, 
   verificationUrl,
+  iframeFallbackUrl,
   title, 
   seriesTitle,
   movieId,
@@ -765,7 +767,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               if (data.fatal) {
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                   if (retryCountRef.current < 15) { 
+                   if (retryCountRef.current < 5) { 
                      retryCountRef.current++;
                      // Don't regress progress during retries; smooth animation handles advancement
                      // Exponential backoff for retries: 500ms, 1000ms, 2000ms, max 5000ms
@@ -1024,7 +1026,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         return; 
       }
 
-      if (retryCountRef.current < 15) { // increased to 15 for slower cold starts in Safari / iOS
+      if (retryCountRef.current < 5) { // reduced to 5 for faster failure detection
         retryCountRef.current++;
         setTimeout(() => {
           if (video) {
@@ -1731,7 +1733,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
       {isIframeMode ? (
         <iframe
-          src={(forcedIframeMode && finalVerificationUrl) ? finalVerificationUrl : src}
+          src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
           className="relative z-[10] w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
           allowFullScreen
