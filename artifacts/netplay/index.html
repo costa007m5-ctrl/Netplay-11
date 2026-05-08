@@ -16,9 +16,63 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      html, body { margin: 0; padding: 0; background: #111; color: #fff; font-family: Inter, system-ui, sans-serif; min-height: 100vh; }
+      #boot-loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #111; z-index: 1; }
+      #boot-loader .logo { font-size: 42px; font-weight: 800; color: #e50914; letter-spacing: -1px; margin-bottom: 24px; }
+      #boot-loader .spinner { width: 36px; height: 36px; border: 3px solid #333; border-top-color: #e50914; border-radius: 50%; animation: spin 0.8s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      #boot-error { display: none; position: fixed; inset: 0; padding: 24px; background: #111; color: #fff; overflow: auto; z-index: 9999; font-size: 14px; line-height: 1.5; }
+      #boot-error h1 { color: #e50914; font-size: 20px; margin: 0 0 12px; }
+      #boot-error pre { background: #000; padding: 12px; border-radius: 6px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+      #boot-error .box { background: #2a1f00; border: 1px solid #aa8800; padding: 12px; border-radius: 6px; margin-bottom: 16px; }
+      #boot-error ul { margin: 8px 0; padding-left: 20px; }
+    </style>
   </head>
   <body>
+    <div id="boot-loader">
+      <div class="logo">NetPlay</div>
+      <div class="spinner"></div>
+    </div>
+    <div id="boot-error">
+      <h1>NetPlay — não conseguiu carregar</h1>
+      <div id="boot-error-content"></div>
+    </div>
     <div id="root"></div>
+    <script>
+      (function() {
+        var bootErrors = [];
+        function showError(title, details) {
+          var loader = document.getElementById('boot-loader');
+          if (loader) loader.style.display = 'none';
+          var box = document.getElementById('boot-error');
+          var content = document.getElementById('boot-error-content');
+          box.style.display = 'block';
+          var html = '<p><strong>' + title + '</strong></p><pre>' + String(details).replace(/[<>&]/g, function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}) + '</pre>';
+          html += '<p style="margin-top:16px;opacity:0.7;font-size:12px;">URL: ' + location.href + '<br>UA: ' + navigator.userAgent + '</p>';
+          content.innerHTML = html;
+        }
+        window.addEventListener('error', function(e) {
+          bootErrors.push(e);
+          var msg = (e.error && e.error.stack) || e.message || 'erro desconhecido';
+          if (e.filename) msg += '\n\nArquivo: ' + e.filename + ':' + e.lineno + ':' + e.colno;
+          showError('Erro de JavaScript:', msg);
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+          bootErrors.push(e);
+          var r = e.reason;
+          var msg = (r && r.stack) || (r && r.message) || String(r);
+          showError('Promise rejeitada:', msg);
+        });
+        // Se passar 12s e o React não montou nada no #root, mostra timeout
+        setTimeout(function() {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0 && bootErrors.length === 0) {
+            showError('Timeout de inicialização (12s):', 'O app não conseguiu montar. Possíveis causas:\n\n1. Algum arquivo .js não carregou (problema de rede ou rewrite errado)\n2. Variável de ambiente VITE_* faltando no Vercel\n3. Bundle quebrado\n\nAbra o DevTools do navegador (Console) para ver o erro exato.');
+          }
+        }, 12000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

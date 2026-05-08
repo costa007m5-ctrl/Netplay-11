@@ -54,6 +54,10 @@ window.addEventListener('unhandledrejection', (e) => {
   console.error('Unhandled promise rejection:', e.reason);
 });
 
+// Esconde o loader inicial assim que o React monta
+const bootLoader = document.getElementById('boot-loader');
+if (bootLoader) bootLoader.style.display = 'none';
+
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
     <BrowserRouter>
