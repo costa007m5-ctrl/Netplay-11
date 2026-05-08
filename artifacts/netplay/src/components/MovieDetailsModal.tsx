@@ -1059,7 +1059,7 @@ const MovieDetailsModal = React.memo(({
                         {ep.episode}
                       </div>
                       
-                      <div className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10" onClick={(e) => { e.stopPropagation(); handlePlay(ep.videoUrl); }}>
+                      <div className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10" onClick={(e) => { e.stopPropagation(); handlePlay(ep.videoUrl || ep.videoUrl2 || '', 0, 'netflix'); }}>
                         <img 
                           src={ep.still_path || backgroundUrl} 
                           alt={ep.title} 
@@ -1196,7 +1196,7 @@ const MovieDetailsModal = React.memo(({
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-transparent" />
                 <button 
-                  onClick={() => handlePlay(selectedEpisodeDetails.videoUrl)}
+                  onClick={() => handlePlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix')}
                   className="absolute inset-0 flex items-center justify-center group-hover:bg-black/20 transition-all"
                 >
                   <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl scale-90 group-hover:scale-100 transition-transform">
@@ -1225,7 +1225,7 @@ const MovieDetailsModal = React.memo(({
                 
                 <div className="pt-4 flex gap-4">
                    <button
-                     onClick={(e) => { e.stopPropagation(); handlePlay(selectedEpisodeDetails.videoUrl); }}
+                     onClick={(e) => { e.stopPropagation(); handlePlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix'); }}
                      className="bg-white hover:bg-gray-200 text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
                    >
                       <Play size={16} fill="black" /> {getVideoSourceType(selectedEpisodeDetails.videoUrl)}

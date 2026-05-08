@@ -551,23 +551,47 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
   const loadingFacts = useMemo(() => {
     const facts = [
-      `Conectando a ${title || 'este filme'}...`,
-      "Ajustando configurações de servidor...",
-      "Preparando a melhor resolução possível...",
-      "Baixando os primeiros fragmentos de vídeo...",
-      "Conectando ao cluster mais próximo...",
-      "Sincronizando áudio e vídeo..."
+      `Resolvendo link de ${title || 'este conteúdo'}...`,
+      "Conectando ao servidor de streaming...",
+      "Verificando autenticação de sessão...",
+      "Carregando manifesto de vídeo...",
+      "Baixando primeiros fragmentos...",
+      "Sincronizando áudio e vídeo...",
+      "Preparando melhor qualidade disponível..."
     ];
-    return facts.sort(() => Math.random() - 0.5); // Shuffle
+    return facts; // Keep ordered to reflect real loading phases
   }, [title]);
 
+  const prefetchStreamHost = useCallback((url: string) => {
+    try {
+      const urlObj = new URL(url);
+      const existing = document.querySelector(`link[rel="preconnect"][href="${urlObj.origin}"]`);
+      if (existing) return;
+      const preconnect = document.createElement('link');
+      preconnect.rel = 'preconnect';
+      preconnect.href = urlObj.origin;
+      preconnect.crossOrigin = 'anonymous';
+      document.head.appendChild(preconnect);
+      const dns = document.createElement('link');
+      dns.rel = 'dns-prefetch';
+      dns.href = urlObj.origin;
+      document.head.appendChild(dns);
+      setTimeout(() => { preconnect.remove(); dns.remove(); }, 60000);
+    } catch (e) {}
+  }, []);
+
+  // Drive loading message from progress phases rather than a blind timer
   useEffect(() => {
     if (!isLoading) return;
-    const interval = setInterval(() => {
-      setLoadingMessageIndex(prev => (prev + 1) % loadingFacts.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isLoading, loadingFacts.length]);
+    // Map progress ranges to message indices (matching loadingFacts order)
+    if (loadingProgress < 15) setLoadingMessageIndex(0);       // Resolvendo link...
+    else if (loadingProgress < 30) setLoadingMessageIndex(1);  // Conectando ao servidor...
+    else if (loadingProgress < 45) setLoadingMessageIndex(2);  // Verificando autenticação...
+    else if (loadingProgress < 60) setLoadingMessageIndex(3);  // Carregando manifesto...
+    else if (loadingProgress < 75) setLoadingMessageIndex(4);  // Baixando fragmentos...
+    else if (loadingProgress < 88) setLoadingMessageIndex(5);  // Sincronizando...
+    else setLoadingMessageIndex(6);                             // Preparando qualidade...
+  }, [isLoading, loadingProgress]);
 
   const hasStartedPlayedRef = useRef(false);
   const recsDismissedRef = useRef(false);
@@ -695,11 +719,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               videoToPlayRef.current = videoToPlay;
               attemptStartHlsLoad();
               
-              if (finalVerificationUrl) {
+                      if (finalVerificationUrl) {
+                // Advance progress to show "verification handshake" phase
+                setLoadingProgress(prev => Math.max(prev, 20));
                 // Fallback: If iframe never fires onLoad or is blocked, start anyway
                 setTimeout(() => {
                   if (!startedHlsRef.current) {
                     iframeLoadedRef.current = true;
+                    setLoadingProgress(prev => Math.max(prev, 35));
                     attemptStartHlsLoad();
                   }
                 }, 2500);
@@ -1082,17 +1109,32 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
   }, [autoRotate, lockOrientation]);
 
-  // Smooth animated loading progress (1%→85% while loading, paused at HLS milestones)
+  // Trigger DNS prefetch / preconnect early when a video URL is ready
+  useEffect(() => {
+    if (parsedUrls.video_url) {
+      prefetchStreamHost(parsedUrls.video_url);
+    }
+    if (finalVerificationUrl) {
+      prefetchStreamHost(finalVerificationUrl);
+    }
+  }, [parsedUrls.video_url, finalVerificationUrl, prefetchStreamHost]);
+
+  // Smooth animated loading progress (1%→92% while loading, driven by real HLS milestones)
+  // Phase 0-25%: URL extraction + initial connection setup
+  // Phase 25-55%: Verification handshake / manifest request
+  // Phase 55-85%: HLS manifest parsed + first fragments (driven by HLS events)
+  // Phase 85-92%: Slow crawl until 'playing' event fires
   useEffect(() => {
     if (!isLoading || !!error) return;
 
     const interval = setInterval(() => {
       setLoadingProgress(prev => {
-        if (prev >= 85) return prev;
+        if (prev >= 92) return prev;
         if (prev < 15) return prev + 2.5;
         if (prev < 40) return prev + 1.2;
         if (prev < 65) return prev + 0.5;
-        return prev + 0.15;
+        if (prev < 85) return prev + 0.15;
+        return prev + 0.04; // Very slow crawl past 85% — real events will jump it to 100%
       });
     }, 300);
 
@@ -1403,6 +1445,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           sandbox="allow-scripts allow-same-origin"
           onLoad={() => {
             iframeLoadedRef.current = true;
+            setLoadingProgress(prev => Math.max(prev, 35));
             attemptStartHlsLoad();
           }}
         />
@@ -2027,10 +2070,17 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                     key={ep.id}
                     onClick={() => {
                         setShowEpisodesSidebar(false);
+                        const epUrl = ep.videoUrl || ep.videoUrl2 || "";
+                        if (epUrl) prefetchStreamHost(epUrl);
                         if (onSelectEpisode) {
                            onSelectEpisode(ep);
                         } else {
-                           setActiveSrc(ep.videoUrl || ep.videoUrl2 || "");
+                           // Reset player state before switching
+                           setIsLoading(true);
+                           setLoadingProgress(0);
+                           setError(null);
+                           setSessionKey(Date.now());
+                           setActiveSrc(epUrl);
                         }
                     }}
                     className={`w-full text-left p-3 rounded-xl flex gap-4 items-center group transition-all duration-300 ${isActive ? 'bg-red-600/20 border border-red-600/50 shadow-[0_0_20px_rgba(220,38,38,0.2)]' : 'hover:bg-white/5 border border-transparent'}`}
