@@ -1466,7 +1466,11 @@ const MovieDetailRouteWrapper = ({
   
   const videoUrl = useMemo(() => {
     if (!movie) return '';
-    return episodeUrlFromState || movie.video_url || movie.videoUrl || '';
+    // For series, if no specific episode URL was requested, start from the first episode
+    const firstEpisodeUrl = movie.type === 'series' && movie.episodes && movie.episodes.length > 0
+      ? movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || ''
+      : '';
+    return episodeUrlFromState || movie.video_url || movie.videoUrl || firstEpisodeUrl || '';
   }, [movie, episodeUrlFromState]);
 
   const savedProgress = useMemo(() => {
@@ -4566,7 +4570,6 @@ export default function App() {
                 appSettings={effectiveAppSettings}
               />
             } />
-            <Route path="*" element={<Navigate to="/menu" replace />} />
           </Routes>
         </AnimatePresence>
       </main>

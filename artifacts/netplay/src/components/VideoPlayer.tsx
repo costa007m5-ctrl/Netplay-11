@@ -29,47 +29,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
-    // KingX (via Xapiverse/Terabox) now requires Captcha on direct M3U8 links. 
-    // We force using their native player via iframe by NOT extracting here if it's KingX wrapper.
+
     if (isKing) {
-      return url;
-    }
-    
-    if (isKing && false) {
       try {
-        let searchString = '';
-        if (url.includes('#')) {
-          searchString = url.split('#')[1];
-        } else if (url.includes('?')) {
-          searchString = url.split('?').slice(1).join('?');
+        // Format 1: player.kingx.dev/#video_url=<encoded>&subtitle_url=<encoded>&expires=...
+        if (url.includes('player.kingx.dev') && url.includes('#')) {
+          const hash = url.split('#')[1] || '';
+          // Decode %26 to & so real param separators emerge
+          const normalized = hash.replace(/%26/g, '&').replace(/&amp;/g, '&');
+          if (type === 'video') {
+            const m = normalized.match(/(?:^|&)video_url=([^&]+)/i);
+            if (m?.[1]) return decodeURIComponent(m[1]);
+          } else {
+            const m = normalized.match(/(?:^|&)subtitle_url=([^&]+)/i);
+            if (m?.[1]) return decodeURIComponent(m[1]);
+          }
         }
-        
-        if (searchString) {
-           const normalizedSearch = searchString.replace(/%26/g, '&').replace(/&amp;/g, '&');
-           if (type === 'video') {
-              if (url.includes('player.kingx.dev/?url=')) {
-                  const match = url.match(/[\?&]url=(.+)$/i);
-                  if (match && match[1]) {
-                     let v = match[1];
-                     if (v.includes('&subtitle_url=')) {
-                        v = v.split('&subtitle_url=')[0];
-                     }
-                     return decodeURIComponent(v);
-                  }
-              }
-              const vMatch = normalizedSearch.match(/video_url=([^&]+(?:&[^&]+)*?)(?:&subtitle_url=|$)/i);
-              if (vMatch && vMatch[1]) {
-                 return decodeURIComponent(vMatch[1]);
-              }
-           } else if (type === 'subtitle') {
-              const subMatch = normalizedSearch.match(/subtitle_url=([^&]+(?:&[^&]+)*?)(?:&video_url=|$)/i);
-              if (subMatch && subMatch[1]) {
-                 return decodeURIComponent(subMatch[1]);
-              }
-           }
+
+        // Format 2: player.kingx.dev/?url=<encoded> (older format)
+        if (url.includes('player.kingx.dev') && url.includes('url=') && type === 'video') {
+          const m = url.match(/[?&]url=([^&#]+)/i);
+          if (m?.[1]) {
+            let v = decodeURIComponent(m[1]);
+            if (v.includes('&subtitle_url=')) v = v.split('&subtitle_url=')[0];
+            return v;
+          }
+        }
+
+        // Format 3: direct teradl.kingx.dev m3u8 URL — already playable
+        if (url.includes('teradl.kingx.dev') && url.includes('.m3u8') && type === 'video') {
+          return url;
         }
       } catch (e) {}
+      // Could not extract — fall through to return null (Netflix player will load the URL as-is)
+      return null;
     }
+
     return null;
   };
 
