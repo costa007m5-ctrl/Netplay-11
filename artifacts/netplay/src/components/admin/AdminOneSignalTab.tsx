@@ -7,14 +7,22 @@ export const AdminOneSignalTab: React.FC = () => {
 
   const onesignalAppId = import.meta.env.VITE_ONESIGNAL_APP_ID;
 
+  const adminSecret = import.meta.env.VITE_ADMIN_SECRET as string | undefined;
+
   const handleTestNotification = async () => {
     setIsSending(true);
     setTestStatus(null);
+    if (!adminSecret) {
+      setTestStatus('Falha: VITE_ADMIN_SECRET não configurado nos Secrets do ambiente.');
+      setIsSending(false);
+      return;
+    }
     try {
       const response = await fetch('/api/notifications/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminSecret}`,
         },
         body: JSON.stringify({
           title: 'Teste de OneSignal',
