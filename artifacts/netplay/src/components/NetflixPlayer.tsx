@@ -229,6 +229,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       setActiveSubtitleUrl(parsedUrls.subtitle_url);
       setSessionKey(Date.now());
       setShowStuckButton(false);
+      setAutoplayBlocked(false);
     }
   }, [parsedUrls.video_url, parsedUrls.subtitle_url]);
 
@@ -1909,24 +1910,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               </div>
             </div>
             
-            {autoplayBlocked && (
-               <motion.div 
-                 initial={{ opacity: 0, scale: 0.9 }}
-                 animate={{ opacity: 1, scale: 1 }}
-                 className="mt-6 z-50 pointer-events-auto"
-               >
-                 <button
-                   onClick={(e) => {
-                     e.stopPropagation();
-                     setAutoplayBlocked(false);
-                     videoRef.current?.play().catch(()=>console.warn("Still blocked"));
-                   }}
-                   className="bg-red-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-[14px] md:text-[18px] italic shadow-[0_0_40px_rgba(220,38,38,0.5)] hover:scale-105 hover:bg-white hover:text-red-600 transition-all flex items-center gap-4 animate-bounce"
-                 >
-                   <Play size={28} fill="currentColor" /> Tocar Para Iniciar
-                 </button>
-               </motion.div>
-            )}
 
             <motion.p 
               key={loadingMessageIndex}
@@ -1938,56 +1921,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               {loadingFacts[loadingMessageIndex]}
             </motion.p>
 
-            {showStuckButton && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-8 flex flex-col items-center gap-4"
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleReparar();
-                  }}
-                  className="bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[11px] italic shadow-2xl hover:scale-105 transition-all flex items-center gap-2"
-                >
-                  <RotateCw size={18} /> Reparar Conexão
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsLoading(false);
-                    setLoadingProgress(100);
-                    setShowLogoOverlay(false);
-                    try {
-                      if (!document.fullscreenElement) {
-                        document.documentElement.requestFullscreen().catch(() => {});
-                      }
-                      if (screen.orientation && (screen.orientation as any).lock) {
-                        (screen.orientation as any).lock('landscape').catch(() => {});
-                      }
-                    } catch(e) {}
-                    if (videoRef.current) videoRef.current.play().catch(() => {});
-                    // play() will trigger handlePlaying which locks orientation.
-                  }}
-                  className="bg-red-600/20 text-red-500 border border-red-600/30 px-8 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] italic hover:bg-red-600 hover:text-white transition-all"
-                >
-                  Iniciar Manualmente
-                </button>
-                {onSwitchPlayer && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSwitchPlayer();
-                    }}
-                    className="mt-2 bg-blue-600/20 text-blue-500 border border-blue-600/30 px-8 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] italic hover:bg-blue-600 hover:text-white transition-all w-full flex justify-center items-center gap-2"
-                  >
-                    <span>Abrir Player Nativo (Rápido)</span>
-                  </button>
-                )}
-                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest italic animate-pulse mt-2">Servidor Instável? Tente o Player Nativo</p>
-              </motion.div>
-            )}
           </motion.div>
         </div>
       )}
@@ -2276,13 +2209,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                     >
                       <PictureInPicture size={20} className="text-white" />
                       <span className="text-[10px] font-bold text-white uppercase tracking-widest">Mini Player</span>
-                    </button>
-                    <button 
-                      onClick={toggleReparar} 
-                      className="py-3 px-4 bg-white/5 hover:bg-white/10 rounded-xl flex flex-col items-center justify-center gap-2 transition-all border border-white/5"
-                    >
-                      <RotateCw size={20} className="text-white" />
-                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">Reparar Vídeo</span>
                     </button>
                     {onSwitchPlayer && (
                       <button 

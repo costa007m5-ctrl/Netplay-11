@@ -611,6 +611,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     // Calcula a URL correta para cada tipo de fonte
     const playerSrc = (() => {
       if (extractedVideoUrl) return extractedVideoUrl;
+      // Enquanto estiver extraindo um link TeraBox, não passa a URL bruta de compartilhamento
+      // para o player — isso evita o player travar tentando carregar uma página web como vídeo
+      if (isExtractingTerabox) return "";
+      if (isTeraBox) return ""; // Link TeraBox não extraído ainda — aguarda extração
       if (isDriveVideo && driveId) return `https://drive.google.com/file/d/${driveId}/preview?autoplay=1`;
       if (isYouTube) {
         const ytId = extractYouTubeId(url);
