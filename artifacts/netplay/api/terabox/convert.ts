@@ -1,14 +1,13 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { callTeraboxApi, pickBestUrl, extractErrorDetails } from "../_lib/terabox";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ success: false, error: "Method not allowed" });
     return;
   }
 
-  const body = req.body || {};
-  const url = body.url;
+  const body: any = req.body || {};
+  const url: unknown = body.url;
   if (!url || typeof url !== "string") {
     res.status(400).json({ success: false, error: "url body param required" });
     return;
@@ -21,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const data = await callTeraboxApi(url, apiKey);
+    const data: any = await callTeraboxApi(url, apiKey);
 
     const list: any[] = Array.isArray(data.list)
       ? data.list

@@ -54,12 +54,11 @@ export async function callTeraboxApi(url: string, apiKey: string) {
   return response.data;
 }
 
-export function extractErrorDetails(error: unknown): string {
-  const err = error as { response?: { data?: unknown }; message?: string };
-  if (err?.response?.data != null) {
-    return typeof err.response.data === "string"
-      ? err.response.data
-      : JSON.stringify(err.response.data);
+export function extractErrorDetails(error: any): string {
+  if (error?.response?.data != null) {
+    return typeof error.response.data === "string"
+      ? error.response.data
+      : JSON.stringify(error.response.data);
   }
-  return err?.message ?? "unknown error";
+  return error?.message ?? "unknown error";
 }
