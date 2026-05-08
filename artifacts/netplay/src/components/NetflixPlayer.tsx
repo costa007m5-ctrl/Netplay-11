@@ -1053,8 +1053,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const lockOrientation = useCallback(async () => {
     if (!autoRotate) return;
     try {
+      // Fullscreen is required before orientation lock on Android Chrome
+      if (!document.fullscreenElement) {
+        const el = containerRef.current || document.documentElement;
+        await (el.requestFullscreen?.() ?? Promise.resolve()).catch(() => {});
+      }
       if (screen.orientation && (screen.orientation as any).lock) {
         await (screen.orientation as any).lock('landscape').catch(() => {});
+        setIsLandscape(true);
       }
     } catch (e) {
       console.warn("Orientation lock not supported", e);
