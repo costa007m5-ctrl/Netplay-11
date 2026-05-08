@@ -33,35 +33,32 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     if (isKing) {
       try {
         // Format 1: player.kingx.dev/#video_url=<encoded>&subtitle_url=<encoded>&expires=...
+        // IMPORTANT: Use URLSearchParams to correctly handle %26 inside the video URL value.
+        // Manual regex with %26→& replacement would break the m3u8 URL query params.
         if (url.includes('player.kingx.dev') && url.includes('#')) {
           const hash = url.split('#')[1] || '';
-          // Decode %26 to & so real param separators emerge
-          const normalized = hash.replace(/%26/g, '&').replace(/&amp;/g, '&');
+          const params = new URLSearchParams(hash);
           if (type === 'video') {
-            const m = normalized.match(/(?:^|&)video_url=([^&]+)/i);
-            if (m?.[1]) return decodeURIComponent(m[1]);
+            const v = params.get('video_url');
+            if (v) return v;
           } else {
-            const m = normalized.match(/(?:^|&)subtitle_url=([^&]+)/i);
-            if (m?.[1]) return decodeURIComponent(m[1]);
+            const s = params.get('subtitle_url');
+            if (s) return s;
           }
         }
 
         // Format 2: player.kingx.dev/?url=<encoded> (older format)
         if (url.includes('player.kingx.dev') && url.includes('url=') && type === 'video') {
-          const m = url.match(/[?&]url=([^&#]+)/i);
-          if (m?.[1]) {
-            let v = decodeURIComponent(m[1]);
-            if (v.includes('&subtitle_url=')) v = v.split('&subtitle_url=')[0];
-            return v;
-          }
+          const params = new URLSearchParams(url.split('?')[1] || '');
+          const v = params.get('url');
+          if (v) return v;
         }
 
-        // Format 3: direct teradl.kingx.dev m3u8 URL — already playable
+        // Format 3: direct teradl.kingx.dev m3u8 URL — already playable as-is
         if (url.includes('teradl.kingx.dev') && url.includes('.m3u8') && type === 'video') {
           return url;
         }
       } catch (e) {}
-      // Could not extract — fall through to return null (Netflix player will load the URL as-is)
       return null;
     }
 
