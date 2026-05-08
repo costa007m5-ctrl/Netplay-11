@@ -1,5 +1,24 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createClient } from "@supabase/supabase-js";
+
+/** Call Supabase REST API directly — no SDK, no TS type conflicts. */
+async function supabaseRequest(
+  supabaseUrl: string,
+  serviceKey: string,
+  path: string,
+  options: RequestInit = {},
+): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const res = await fetch(`${supabaseUrl}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      ...(options.headers ?? {}),
+    },
+  });
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, status: res.status, data };
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,46 +30,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) return res.status(401).json({ error: "Authorization header required" });
 
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+  const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
   if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
   if (!serviceKey) return res.status(503).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
 
-  // Decode the JWT to extract the user ID (sub claim).
-  // supabase.auth.getUser() exists at runtime but is missing from SupabaseAuthClient
-  // types in @supabase/supabase-js v2.105+, so we decode manually and use
-  // auth.admin.getUserById() — which IS correctly typed on the admin client.
-  let userId: string;
-  try {
-    const jwtPayload = JSON.parse(
-      Buffer.from(token.split(".")[1], "base64").toString("utf8"),
-    ) as { sub?: string; exp?: number };
-    if (!jwtPayload.sub) throw new Error("missing sub");
-    if (jwtPayload.exp && jwtPayload.exp < Math.floor(Date.now() / 1000)) {
-      return res.status(401).json({ error: "Token expired" });
-    }
-    userId = jwtPayload.sub;
-  } catch {
-    return res.status(401).json({ error: "Invalid token format" });
-  }
+  // 1. Verify the user's JWT and get their user ID via Supabase Auth REST API.
+  //    POST /auth/v1/token with the access token returns the user object.
+  const authRes = await supabaseRequest(supabaseUrl, serviceKey, "/auth/v1/user", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
 
-  // Service-role client: validate user exists and check admin_users table
-  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-
-  const { data: userRecord, error: userErr } = await supabase.auth.admin.getUserById(userId);
-  if (userErr || !userRecord?.user) {
+  if (!authRes.ok) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
 
-  const { data: adminRow } = await supabase
-    .from("admin_users")
-    .select("id")
-    .eq("user_id", userRecord.user.id)
-    .single();
+  const authUser = authRes.data as { id?: string } | null;
+  const userId = authUser?.id;
+  if (!userId) return res.status(401).json({ error: "Could not identify user" });
 
-  if (!adminRow) return res.status(403).json({ error: "Not an admin" });
+  // 2. Check if the user is in admin_users table via Supabase PostgREST.
+  const adminRes = await supabaseRequest(
+    supabaseUrl,
+    serviceKey,
+    `/rest/v1/admin_users?user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`,
+  );
 
+  const adminRows = Array.isArray(adminRes.data) ? adminRes.data : [];
+  if (!adminRows.length) return res.status(403).json({ error: "Not an admin" });
+
+  // 3. Send the OneSignal notification.
   const appId = process.env.ONESIGNAL_APP_ID ?? process.env.VITE_ONESIGNAL_APP_ID ?? "";
   const restApiKey = process.env.ONESIGNAL_REST_API_KEY ?? "";
 
