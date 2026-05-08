@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import screenfull from 'screenfull';
 import NetflixPlayer from './NetflixPlayer';
-import { X, Maximize, ExternalLink, Users, Smile, Send, Play, WifiOff } from 'lucide-react';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -419,28 +418,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     };
   }, []);
 
-  // Detectar fonte e definir estilo automaticamente
+  // Sempre usar o Netflix Player como único player
   useEffect(() => {
-    const url = movie.videoUrl || '';
-    const isDrive = url.includes('drive.google.com');
-    const isKingXUrl = url.includes('kingx.dev') || url.includes('teradl.kingx.dev');
-    const isTera = url.includes('terabox') || url.includes('teradl') || url.includes('kingx');
-
-    if (isDrive) {
-      setDrivePlayMethod('iframe');
-      setPlayerStyle('standard'); // Usar o fluxo padrão que renderiza o iframe no final
-      requestLandscape();
-    } else if (isKingXUrl) {
-      setPlayerStyle('netflix');
-      requestLandscape();
-    } else if (isTera) {
-      setPlayerStyle('netflix');
-      requestLandscape();
-    } else {
-      // Outros links vão para o Netflix Player por padrão para melhor compatibilidade
-      setPlayerStyle('netflix');
-      requestLandscape();
-    }
+    setPlayerStyle('netflix');
+    requestLandscape();
   }, [movie.videoUrl]);
 
   const requestLandscape = async () => {
@@ -542,10 +523,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
-  // FIX 2: Não bloqueia mais com spinner. O Netflix Player já exibe a tela de carregamento elegante
-  // enquanto a extração do Terabox acontece em segundo plano.
-
-  if (isMP4 && playerStyle === 'netflix') {
+  // NetflixPlayer é o único player — todos os links são roteados aqui
+  {
     const currentIndex = movie.type === 'series' && movie.episodes 
       ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
       : -1;
@@ -564,10 +543,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       videoUrlOptions.push({ id: 'hd', label: 'Alta Definição (HD)', url: movie.videoUrl2 });
     }
 
+    // Calcula a URL correta para cada tipo de fonte
+    const playerSrc = (() => {
+      if (extractedVideoUrl) return extractedVideoUrl;
+      if (isDriveVideo && driveId) return `https://drive.google.com/file/d/${driveId}/preview?autoplay=1`;
+      if (isYouTube) {
+        const ytId = extractYouTubeId(url);
+        return ytId ? `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&showinfo=0&modestbranding=1` : url;
+      }
+      if (isMega) return url.replace('/file/', '/embed/').replace('/#!', '/embed/#!');
+      if (isGDPlayer) return url;
+      return finalVideoUrl || url || "";
+    })();
+
     return (
       <div className="relative w-full h-full">
         <NetflixPlayer 
-          src={extractedVideoUrl || finalVideoUrl || url || ""}
+          src={playerSrc}
           verificationUrl={isKingX ? (movie.videoUrl || undefined) : undefined}
           subtitleUrl={extractedSubtitleUrl || undefined}
           title={displayTitle}
@@ -597,14 +589,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           roomId={roomId}
           profile={profile}
           maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
-          onSwitchPlayer={() => {
-            if (isDriveVideo) {
-              setDrivePlayMethod('iframe');
-              setPlayerStyle('standard');
-            } else {
-              setPlayerStyle('standard');
-            }
-          }}
           autoNextOffset={
             movie.type === 'series' && currentIndex !== -1 
               ? movie.episodes?.[currentIndex]?.credits_time 
@@ -620,7 +604,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               const isMovie = movie.type !== 'series';
               const seriesCreditsTime = currentIndex !== -1 && movie.episodes?.[currentIndex]?.credits_time !== undefined 
                   ? movie.episodes[currentIndex].credits_time 
-                  : 30; // default 30 se não definido
+                  : 30;
               const isFinished = finalDuration > 0 && (isMovie ? (finalDuration - time <= 450) : (finalDuration - time <= seriesCreditsTime!));
 
               if (isFinished && isMovie) {
@@ -660,237 +644,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     );
   }
 
-  // Player Especial (Iframe do KingX)
-  if (playerStyle === 'special' && isKingX) {
-    if (isBackgroundMode) return null; // Background mode not fully supported for special player overlays yet
-    return (
-      <div className="fixed inset-0 z-[200] bg-black">
-        <div className="absolute top-6 left-6 z-[210] flex items-center gap-4">
-          <button 
-            onClick={onClose}
-            className="p-3 bg-black/60 backdrop-blur-md rounded-full text-white hover:scale-110 transition-transform"
-          >
-            <X size={24} />
-          </button>
-          <h2 className="text-white font-black italic uppercase tracking-tighter text-lg drop-shadow-lg">{movie.title || movie.name}</h2>
-        </div>
-        <div className="absolute top-6 right-6 z-[210]">
-          <button 
-            onClick={() => setPlayerStyle('netflix')}
-            className="bg-red-600 text-white px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl"
-          >
-            Voltar para Netflix Player
-          </button>
-        </div>
-        <iframe 
-          src={url}
-          className="w-full h-full border-none"
-          allow="autoplay; encrypted-media; fullscreen"
-          allowFullScreen
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div 
-      ref={containerRef}
-      className={isBackgroundMode ? "absolute inset-0 z-0 bg-black flex items-center justify-center overflow-hidden select-none pointer-events-auto" : "fixed inset-0 z-[200] flex items-center justify-center bg-black overflow-hidden select-none"}
-    >
-      {/* Banner de Fundo (Papel de Parede) */}
-      <div className="absolute inset-0 z-0">
-        <img 
-          src={movie.backdrop_path.startsWith('http') ? movie.backdrop_path : `https://image.tmdb.org/t/p/original/${movie.backdrop_path}`}
-          alt=""
-          className="w-full h-full object-cover opacity-20 blur-xl"
-          referrerPolicy="no-referrer"
-        />
-        <div className="absolute inset-0 bg-black/60"></div>
-      </div>
-
-      <div className="w-full h-full relative flex flex-col z-10">
-        {/* Topo: Voltar e Título */}
-        <div className="absolute top-0 left-0 right-0 p-4 md:p-6 flex items-center justify-between z-50 bg-gradient-to-b from-black/90 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={onClose}
-              className="text-white hover:scale-110 transition-transform p-2 bg-black/60 rounded-full backdrop-blur-md"
-            >
-              <X size={28} />
-            </button>
-            <h2 className="text-white font-bold text-lg md:text-xl drop-shadow-lg truncate max-w-[200px] md:max-w-md">
-              {movie.title || movie.name}
-            </h2>
-          </div>
-          <div className="flex items-center gap-2 md:gap-4">
-            {roomId && (
-              <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/10">
-                <Users size={14} className="text-red-500" />
-                <span className="text-xs font-bold text-white">{participants.length}</span>
-              </div>
-            )}
-            {(isDriveVideo || isGooglePhotos || isTeraBox) && (
-              <a 
-                href={movie.videoUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-white hover:scale-105 transition-transform px-3 py-2 md:px-4 md:py-2 bg-red-600/90 rounded-full backdrop-blur-md text-xs md:text-sm font-bold"
-              >
-                <ExternalLink size={16} />
-                <span className="hidden md:inline">
-                  {isGooglePhotos ? 'Abrir no Google Fotos' : isTeraBox ? 'Abrir no TeraBox' : 'Abrir no Navegador'}
-                </span>
-              </a>
-            )}
-            <button 
-              onClick={toggleFullscreen}
-              className="text-white hover:scale-110 transition-transform p-2 bg-black/60 rounded-full backdrop-blur-md"
-            >
-              <Maximize size={24} />
-            </button>
-            {isMP4 && playerStyle === 'standard' && (
-              <button 
-                onClick={() => setPlayerStyle('netflix')}
-                className="text-white hover:scale-110 transition-transform px-3 py-1 bg-red-600 rounded-full text-[10px] font-bold"
-              >
-                Netflix Player
-              </button>
-            )}
-          </div>
-        </div>
-        
-        {/* Player Area */}
-        <div className="relative flex-1 w-full h-full flex flex-col items-center justify-center">
-          {!isOnline && (
-            <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mb-8 border border-red-600/30">
-                <WifiOff size={48} className="text-red-600" />
-              </div>
-              <h3 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter italic font-display">Sem Internet</h3>
-              <p className="text-gray-400 max-w-md mb-8 font-medium">
-                Parece que você está offline. Verifique sua conexão para continuar assistindo.
-              </p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-700 transition-all shadow-[0_10px_30px_rgba(220,38,38,0.3)]"
-              >
-                Tentar Novamente
-              </button>
-            </div>
-          )}
-          
-          {isDirectVideo && (finalVideoUrl || extractedVideoUrl) ? (
-            <div className="relative w-full h-full flex items-center justify-center">
-              <video
-                ref={videoRef}
-                src={extractedVideoUrl || finalVideoUrl || ""}
-                controls
-                autoPlay
-                className="w-full h-full outline-none"
-                controlsList="nodownload"
-                onError={() => {
-                  if (isDriveVideo) {
-                    console.warn(`Falha ao carregar vídeo do Drive usando proxy. Tentando iframe...`);
-                    setDrivePlayMethod('iframe');
-                  }
-                }}
-              >
-                {extractedSubtitleUrl && (
-                  <track 
-                    kind="subtitles" 
-                    src={extractedSubtitleUrl} 
-                    srcLang="pt" 
-                    label="Português" 
-                    default 
-                  />
-                )}
-              </video>
-              
-              {/* Watch Party Emotes Overlay */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden z-50">
-                {emotes.map(emote => (
-                  <div
-                    key={emote.id}
-                    className="absolute text-4xl md:text-6xl animate-bounce transition-all duration-1000 opacity-0 animate-in fade-in slide-in-from-bottom-10"
-                    style={{ left: `${emote.x}%`, top: `${emote.y}%` }}
-                  >
-                    {emote.emoji}
-                  </div>
-                ))}
-              </div>
-
-              {/* Watch Party Controls */}
-              {roomId && (
-                <div className="absolute bottom-24 right-8 flex flex-col gap-4 pointer-events-auto z-[60]">
-                  <div className="relative">
-                    {showEmotePicker && (
-                      <div className="absolute bottom-full right-0 mb-4 bg-black/90 p-4 rounded-2xl border border-white/10 backdrop-blur-xl flex gap-3 animate-in slide-in-from-bottom-4">
-                        {['❤️', '🔥', '😂', '😮', '😢', '👏'].map(emoji => (
-                          <button
-                            key={emoji}
-                            onClick={() => sendEmote(emoji)}
-                            className="text-3xl hover:scale-125 transition-transform active:scale-90"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => setShowEmotePicker(!showEmotePicker)}
-                      className="bg-white/10 hover:bg-white/20 text-white p-4 rounded-full backdrop-blur-md border border-white/20 transition-all active:scale-90 shadow-2xl"
-                    >
-                      <Smile size={24} />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : isEmbeddable && embedUrl ? (
-            <>
-              <iframe
-                key={orientationKey}
-                ref={iframeRef}
-                src={embedUrl}
-                className="w-full h-full border-none"
-                allow="autoplay; encrypted-media; fullscreen; screen-orientation"
-                allowFullScreen
-                referrerPolicy="no-referrer"
-              ></iframe>
-            </>
-          ) : isGooglePhotos || isTeraBox ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-white p-8 text-center max-w-2xl mx-auto">
-              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mb-6 border border-white/20">
-                <ExternalLink size={40} className="text-white" />
-              </div>
-              <h3 className="text-2xl md:text-3xl font-bold mb-4">
-                {isGooglePhotos ? 'Google Fotos Detectado' : 'TeraBox Detectado'}
-              </h3>
-              <p className="text-gray-400 mb-8 leading-relaxed">
-                {isGooglePhotos 
-                  ? "Por motivos de segurança, o Google Fotos não permite que seus vídeos sejam reproduzidos dentro de outros sites."
-                  : "O TeraBox requer que você esteja logado na plataforma deles para assistir aos vídeos compartilhados."}
-                Clique no botão abaixo para assistir com segurança diretamente no {isGooglePhotos ? 'Google Fotos' : 'TeraBox'}.
-              </p>
-              <a 
-                href={movie.videoUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-200 transition-all flex items-center gap-3 shadow-xl hover:scale-105 active:scale-95"
-              >
-                <ExternalLink size={24} />
-                Assistir no {isGooglePhotos ? 'Google Fotos' : 'TeraBox'}
-              </a>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-white p-8 text-center">
-              <h3 className="text-2xl font-bold mb-2">Vídeo não disponível</h3>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // Fallback (nunca deve ser alcançado pois o bloco acima sempre retorna)
+  return null;
 };
 
 export default VideoPlayer;

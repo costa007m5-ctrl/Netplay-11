@@ -159,7 +159,21 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const lowerSrc = parsedUrls.video_url.toLowerCase();
     
     // Se o link for explicitamente para ser embutido e tocar como uma página Web (Iframe)
-    if (lowerSrc.includes('player.kingx.dev') || lowerSrc.includes('teradl.kingx.dev') || lowerSrc.includes('kingx') || lowerSrc.includes('/embed/') || lowerSrc.includes('iframe') || lowerSrc.includes('superflix') || lowerSrc.includes('embed.')) {
+    if (
+      lowerSrc.includes('player.kingx.dev') ||
+      lowerSrc.includes('teradl.kingx.dev') ||
+      lowerSrc.includes('kingx') ||
+      lowerSrc.includes('/embed/') ||
+      lowerSrc.includes('/preview?') ||
+      lowerSrc.includes('iframe') ||
+      lowerSrc.includes('superflix') ||
+      lowerSrc.includes('embed.') ||
+      lowerSrc.includes('drive.google.com/file/') ||
+      lowerSrc.includes('youtube.com/embed/') ||
+      lowerSrc.includes('mega.nz/embed') ||
+      lowerSrc.includes('gdplayer.to') ||
+      lowerSrc.includes('gdplayer.org')
+    ) {
       return true;
     }
     
