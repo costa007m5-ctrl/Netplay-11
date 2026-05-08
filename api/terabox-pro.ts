@@ -15,16 +15,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const upstream = await fetch(
-      `https://xapiverse.com/api/terabox-pro?url=${encodeURIComponent(url)}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "xAPIverse-Key": apiKey,
-        },
-        signal: AbortSignal.timeout(15000),
+    const upstream = await fetch("https://xapiverse.com/api/terabox-pro", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "xAPIverse-Key": apiKey,
       },
-    );
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(15000),
+    });
 
     let data: unknown;
     try {

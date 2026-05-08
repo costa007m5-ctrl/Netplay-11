@@ -17,8 +17,9 @@ router.get("/terabox-pro", async (req, res) => {
   }
 
   try {
-    const response = await axios.get(
-      `https://xapiverse.com/api/terabox-pro?url=${encodeURIComponent(url)}`,
+    const response = await axios.post(
+      "https://xapiverse.com/api/terabox-pro",
+      { url },
       {
         headers: {
           "Content-Type": "application/json",
