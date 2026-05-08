@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef, Suspense } from 'react';
-import OneSignal from 'react-onesignal';
 import { Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Banner from './components/Banner';
 import Row from './components/Row';
-import NetflixPlayer from './components/NetflixPlayer';
-import VideoPlayer from './components/VideoPlayer';
-import CustomUrlModal from './components/CustomUrlModal';
-import MovieDetailsModal from './components/MovieDetailsModal';
-import WatchPartyModal from './components/WatchPartyModal';
-import SettingsModal from './components/SettingsModal';
 import Login from './components/Login';
 import ProfileSelection from './components/ProfileSelection';
-import IntroVignette from './components/IntroVignette';
 import StreamingHub from './components/StreamingHub';
 import CollectionsCarousel from './components/CollectionsCarousel';
+
+// Lazy-load heavy components only when actually needed (huge initial bundle savings)
+const VideoPlayer = React.lazy(() => import('./components/VideoPlayer'));
+const CustomUrlModal = React.lazy(() => import('./components/CustomUrlModal'));
+const MovieDetailsModal = React.lazy(() => import('./components/MovieDetailsModal'));
+const WatchPartyModal = React.lazy(() => import('./components/WatchPartyModal'));
+const SettingsModal = React.lazy(() => import('./components/SettingsModal'));
+const IntroVignette = React.lazy(() => import('./components/IntroVignette'));
 import { CATEGORIES } from './constants';
 import tmdb, { requests, getMovieLogo } from './services/tmdb';
 import { notificationService } from './services/notificationService';
@@ -27,7 +27,7 @@ import NewReleasesRow from './components/NewReleasesRow';
 import CinemaRow from './components/CinemaRow';
 import Top10Row from './components/Top10Row';
 import AppInfo from './components/AppInfo';
-import UniverseView from './components/UniverseView';
+const UniverseView = React.lazy(() => import('./components/UniverseView'));
 
 const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
 const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'));
@@ -1828,15 +1828,25 @@ export default function App() {
   const [providerData, setProviderData] = useState<any>(null);
 
   useEffect(() => {
-    try {
-      OneSignal.init({
-        appId: import.meta.env.VITE_ONESIGNAL_APP_ID || "581f23c1-2b57-4646-8780-6cd2ccbba30e",
-        allowLocalhostAsSecureOrigin: true,
-      }).then(() => {
-        OneSignal.Slidedown.promptPush();
+    // Defer OneSignal init until browser is idle (after first paint) — saves ~150kb on initial render
+    const initOneSignal = () => {
+      import('react-onesignal').then(({ default: OneSignal }) => {
+        try {
+          OneSignal.init({
+            appId: import.meta.env.VITE_ONESIGNAL_APP_ID || "581f23c1-2b57-4646-8780-6cd2ccbba30e",
+            allowLocalhostAsSecureOrigin: true,
+          }).then(() => {
+            OneSignal.Slidedown.promptPush();
+          });
+        } catch (e) {
+          console.warn("OneSignal init error:", e);
+        }
       });
-    } catch (e) {
-      console.warn("OneSignal init error:", e);
+    };
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(initOneSignal, { timeout: 3000 });
+    } else {
+      setTimeout(initOneSignal, 2000);
     }
   }, []);
 
@@ -4271,11 +4281,13 @@ export default function App() {
 
   if (loading || showIntro) {
     return (
-      <IntroVignette 
-        isLoading={loading} 
-        onComplete={() => setShowIntro(false)} 
-        movies={myMovies}
-      />
+      <Suspense fallback={<div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
+        <IntroVignette 
+          isLoading={loading} 
+          onComplete={() => setShowIntro(false)} 
+          movies={myMovies}
+        />
+      </Suspense>
     );
   }
 
@@ -4340,6 +4352,7 @@ export default function App() {
   if (activeTab === 'admin') {
     if (!isAdmin) return <Navigate to="/menu" replace />;
     return (
+      <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-red-600" size={48} /></div>}>
       <AdminPanel 
         movies={myMovies}
         streamingProviders={streamingProviders}
@@ -4364,6 +4377,7 @@ export default function App() {
         onRefreshCategoryImages={refreshCategoryImages}
         onUpdateCategoryImage={updateCategoryImage}
       />
+      </Suspense>
     );
   }
 
@@ -4539,6 +4553,7 @@ export default function App() {
 
         {/* Modal Routes */}
         <AnimatePresence mode="wait">
+        <Suspense fallback={null}>
           {/* @ts-expect-error - React-Router Types might not include key, but React allows it */}
           <Routes location={location} key={location.pathname}>
             <Route path="/movie/:movieId" element={
@@ -4573,9 +4588,11 @@ export default function App() {
               />
             } />
           </Routes>
+        </Suspense>
         </AnimatePresence>
       </main>
 
+      <Suspense fallback={null}>
       {isSettingsOpen && (
         <SettingsModal 
           settings={appSettings}
@@ -4607,6 +4624,7 @@ export default function App() {
           scannerState={scannerState}
         />
       )}
+      </Suspense>
 
         {/* Indicadores de Scanner em Segundo Plano */}
       <div className="fixed bottom-16 right-4 md:bottom-8 md:right-8 z-[150] flex flex-col gap-4 items-end pointer-events-none">

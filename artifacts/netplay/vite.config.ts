@@ -41,6 +41,30 @@ export default defineConfig(async () => {
     build: {
       outDir: path.resolve(import.meta.dirname, "dist/public"),
       emptyOutDir: true,
+      target: "es2020",
+      cssCodeSplit: true,
+      sourcemap: false,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes("node_modules")) return undefined;
+            if (id.includes("hls.js")) return "vendor-hls";
+            if (id.includes("firebase")) return "vendor-firebase";
+            if (id.includes("@supabase")) return "vendor-supabase";
+            if (id.includes("framer-motion") || id.includes("/motion/")) return "vendor-motion";
+            if (id.includes("lucide-react") || id.includes("react-icons")) return "vendor-icons";
+            if (id.includes("@radix-ui")) return "vendor-radix";
+            if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+            if (id.includes("react-dom") || id.includes("react-router") || id.includes("/react/")) return "vendor-react";
+            return "vendor";
+          },
+        },
+      },
+    },
+    optimizeDeps: {
+      include: ["react", "react-dom", "react-router-dom", "motion/react"],
     },
     server: {
       port,
