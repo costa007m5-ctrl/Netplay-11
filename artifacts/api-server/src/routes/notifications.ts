@@ -26,7 +26,8 @@ router.post("/notifications/send", async (req, res) => {
     targetUrl?: string;
   };
 
-  const appId = process.env.VITE_ONESIGNAL_APP_ID;
+  const appId =
+    process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID;
   const restApiKey = process.env.ONESIGNAL_REST_API_KEY;
 
   if (!restApiKey) {
@@ -34,7 +35,9 @@ router.post("/notifications/send", async (req, res) => {
     return;
   }
   if (!appId) {
-    res.status(503).json({ error: "VITE_ONESIGNAL_APP_ID not configured" });
+    res
+      .status(503)
+      .json({ error: "ONESIGNAL_APP_ID not configured" });
     return;
   }
 
