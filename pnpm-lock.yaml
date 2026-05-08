@@ -157,6 +157,9 @@ importers:
 
   .:
     devDependencies:
+      '@vercel/node':
+        specifier: ^5.7.15
+        version: 5.7.15(rollup@4.59.0)
       prettier:
         specifier: ^3.8.1
         version: 3.8.1

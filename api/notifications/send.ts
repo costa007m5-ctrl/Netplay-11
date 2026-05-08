@@ -1,23 +1,20 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-/** Call Supabase REST API directly — no SDK, no TS type conflicts. */
-async function supabaseRequest(
+/** Thin wrapper around Supabase REST — no SDK, no TS type conflicts. */
+async function supabaseGet(
   supabaseUrl: string,
   serviceKey: string,
   path: string,
-  options: RequestInit = {},
-): Promise<{ ok: boolean; status: number; data: unknown }> {
-  const res = await fetch(`${supabaseUrl}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      ...(options.headers ?? {}),
-    },
-  });
+  userToken?: string,
+): Promise<{ ok: boolean; data: unknown }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    apikey: serviceKey,
+    Authorization: `Bearer ${userToken ?? serviceKey}`,
+  };
+  const res = await fetch(`${supabaseUrl}${path}`, { headers });
   const data = await res.json().catch(() => null);
-  return { ok: res.ok, status: res.status, data };
+  return { ok: res.ok, data };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -36,35 +33,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
   if (!serviceKey) return res.status(503).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
 
-  // 1. Verify the user's JWT and get their user ID via Supabase Auth REST API.
-  //    POST /auth/v1/token with the access token returns the user object.
-  const authRes = await supabaseRequest(supabaseUrl, serviceKey, "/auth/v1/user", {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  // 1. Verify the user JWT via Supabase Auth REST (GET /auth/v1/user with user token)
+  const authResult = await supabaseGet(supabaseUrl, serviceKey, "/auth/v1/user", token);
+  if (!authResult.ok) return res.status(401).json({ error: "Invalid or expired session" });
 
-  if (!authRes.ok) {
-    return res.status(401).json({ error: "Invalid or expired session" });
-  }
-
-  const authUser = authRes.data as { id?: string } | null;
-  const userId = authUser?.id;
+  const userId = (authResult.data as { id?: string } | null)?.id;
   if (!userId) return res.status(401).json({ error: "Could not identify user" });
 
-  // 2. Check if the user is in admin_users table via Supabase PostgREST.
-  const adminRes = await supabaseRequest(
+  // 2. Check admin_users table via PostgREST (service key bypasses RLS)
+  const adminResult = await supabaseGet(
     supabaseUrl,
     serviceKey,
     `/rest/v1/admin_users?user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`,
   );
+  const rows = Array.isArray(adminResult.data) ? adminResult.data : [];
+  if (!rows.length) return res.status(403).json({ error: "Not an admin" });
 
-  const adminRows = Array.isArray(adminRes.data) ? adminRes.data : [];
-  if (!adminRows.length) return res.status(403).json({ error: "Not an admin" });
-
-  // 3. Send the OneSignal notification.
+  // 3. Send OneSignal notification
   const appId = process.env.ONESIGNAL_APP_ID ?? process.env.VITE_ONESIGNAL_APP_ID ?? "";
   const restApiKey = process.env.ONESIGNAL_REST_API_KEY ?? "";
-
   if (!restApiKey) return res.status(503).json({ error: "ONESIGNAL_REST_API_KEY not configured" });
   if (!appId) return res.status(503).json({ error: "ONESIGNAL_APP_ID not configured" });
 

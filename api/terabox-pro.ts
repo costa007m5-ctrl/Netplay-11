@@ -27,9 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const data = await upstream.json();
     return res.status(upstream.status).json(data);
-  } catch (err: any) {
-    return res
-      .status(500)
-      .json({ error: "Failed to fetch from Terabox API", details: err.message });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "unknown error";
+    return res.status(500).json({ error: "Failed to fetch from Terabox API", details: msg });
   }
 }
