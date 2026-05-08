@@ -1114,7 +1114,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
              videoRef.current.play().catch(e => console.warn("Safety timeout autoplay blocked", e));
           }
         }
-      }, 60000); // 60 seconds for long buffering / network delays
+      }, 15000); // 15 seconds safety timeout
     }
 
     return () => {
@@ -1153,7 +1153,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (isLoading) {
       timer = setTimeout(() => {
         setShowStuckButton(true);
-      }, 30000); // 30s para mostrar botão de "Reparar" em casos de grande lentidão
+      }, 10000); // 10s para mostrar botão de "Reparar"
     }
     return () => clearTimeout(timer);
   }, [isLoading]);
@@ -1994,6 +1994,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className="absolute top-0 right-0 bottom-0 w-full md:w-[400px] bg-black/95 border-l border-white/10 z-[400] flex flex-col shadow-2xl backdrop-blur-xl"
             onMouseLeave={() => resetControlsTimer()}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">Episódios</h2>

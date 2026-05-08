@@ -367,6 +367,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           }
         } catch (e) {
           console.error("Failed to extract Terabox via API", e);
+          // On failure, fall back to original URL so player doesn't get stuck
+          setExtractedVideoUrl(u);
+          setFinalVideoUrl(u);
         } finally {
           setIsExtractingTerabox(false);
         }
