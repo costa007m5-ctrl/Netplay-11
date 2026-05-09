@@ -636,9 +636,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     return () => clearTimeout(timer);
   }, [isLoading, error]);
 
-  // Note: auto-fallback to iframe was removed by user request. The Netflix
-  // player is the only desired playback mode. The "Tentativa 2 (Nativa)" button
-  // shown on the error screen remains as a manual escape hatch.
+  useEffect(() => {
+    if (error && (src.includes('kingx.dev') || src.includes('terabox') || src.includes('teradl'))) {
+       console.log("Auto-switching to Iframe mode due to playback error on KingX/Terabox link");
+       setForcedIframeMode(true);
+       setError(null);
+       setIsLoading(true);
+    }
+  }, [error, src]);
 
   useEffect(() => {
     if (isIframeMode && (src.includes('kingx.dev') || src.includes('terabox'))) {
@@ -783,6 +788,28 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               if (data.fatal) {
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
 
+                 const respCode = data.response?.code;
+                 // 451 = our proxy detected upstream "need verify" (Terabox session required).
+                 // 403/404 = link expired or blocked. In all these cases, fallback to iframe IMMEDIATELY
+                 // since the original kingx.dev player has the user's session/cookies.
+                 const needsIframeFallback =
+                   respCode === 451 ||
+                   respCode === 403 ||
+                   respCode === 404 ||
+                   data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR ||
+                   data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_VERSIONS_ERROR;
+
+                 if (needsIframeFallback && iframeFallbackUrl) {
+                   console.warn(`[NetflixPlayer] HLS failed (${data.details}/${respCode}) — switching to iframe fallback`);
+                   setQualityToast("Carregando player original...");
+                   setTimeout(() => setQualityToast(null), 3000);
+                   try { hls.destroy(); } catch {}
+                   hlsRef.current = null;
+                   setForcedIframeMode(true);
+                   setIsLoading(false);
+                   return;
+                 }
+
                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                    if (retryCountRef.current < 5) { 
                      retryCountRef.current++;
@@ -793,16 +820,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                        // Reload source completely if manifest failed to load, else try to recover chunks
                        if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
                            data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
-                           data.response?.code === 403 || data.response?.code === 404 ||
-                           data.response?.code === 451) {
+                           data.response?.code === 403 || data.response?.code === 404) {
                            hls.loadSource(videoToPlay);
                        } else {
                            hls.startLoad();
                        }
                      }, retryDelay);
                    } else {
-                     setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado ou o servidor está bloqueado. Tente o player nativo.", type: 'network' });
-                     setIsLoading(false);
+                     // Last resort: try iframe fallback if available before showing error
+                     if (iframeFallbackUrl) {
+                       console.warn("[NetflixPlayer] HLS exhausted retries — switching to iframe fallback");
+                       setQualityToast("Carregando player original...");
+                       setTimeout(() => setQualityToast(null), 3000);
+                       try { hls.destroy(); } catch {}
+                       hlsRef.current = null;
+                       setForcedIframeMode(true);
+                       setIsLoading(false);
+                     } else {
+                       setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado ou o servidor está bloqueado. Tente o player nativo.", type: 'network' });
+                       setIsLoading(false);
+                     }
                    }
                  }
                  else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
