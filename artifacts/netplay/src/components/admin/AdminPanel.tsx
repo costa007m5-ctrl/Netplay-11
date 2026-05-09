@@ -1082,22 +1082,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const addEpisode = (form: any, setForm: (data: any) => void) => {
+  const addEpisode = (form: any, setForm: (data: any) => void, targetSeason?: number) => {
     const episodes = form.episodes || [];
-    const lastEp = episodes[episodes.length - 1];
-    const nextEp = lastEp ? lastEp.episode + 1 : 1;
-    const season = lastEp ? lastEp.season : 1;
+    // Determina a temporada: usa a passada, senão a maior já existente, senão 1
+    const season = targetSeason
+      ?? (episodes.length ? Math.max(...episodes.map((e: any) => Number(e.season) || 1)) : 1);
+    // Próximo episódio = maior episódio dessa temporada + 1
+    const inSeason = episodes.filter((e: any) => Number(e.season) === season);
+    const nextEp = inSeason.length ? Math.max(...inSeason.map((e: any) => Number(e.episode) || 0)) + 1 : 1;
 
     const newEp = {
       id: Math.random().toString(36).substr(2, 9),
       title: `Episódio ${nextEp}`,
-      season: season,
+      season,
       episode: nextEp,
       videoUrl: '',
       overview: ''
     };
 
-    setForm({ ...form, episodes: [...episodes, newEp] });
+    // Ordena já inserindo na posição certa
+    const merged = [...episodes, newEp].sort((a: any, b: any) =>
+      (Number(a.season) - Number(b.season)) || (Number(a.episode) - Number(b.episode))
+    );
+    setForm({ ...form, episodes: merged });
   };
 
   const removeEpisode = (form: any, setForm: (data: any) => void, id: string) => {
@@ -1108,9 +1115,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const updateEpisode = (_form: any, setForm: (data: any) => void, id: string, field: string, value: any) => {
     setForm((prev: any) => {
       if (!prev) return prev;
-      const episodes = (prev.episodes || []).map((e: any) =>
+      let episodes = (prev.episodes || []).map((e: any) =>
         e.id === id ? { ...e, [field]: value } : e
       );
+      // Quando muda temporada/episódio, mantém a lista ordenada
+      if (field === 'season' || field === 'episode') {
+        episodes = [...episodes].sort((a: any, b: any) =>
+          (Number(a.season) - Number(b.season)) || (Number(a.episode) - Number(b.episode))
+        );
+      }
       return { ...prev, episodes };
     });
   };
@@ -3157,8 +3170,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
 
                         <div className="space-y-4 max-h-[400px] overflow-y-auto no-scrollbar">
-                           {(newMovie.episodes || []).map((ep: any, idx: number) => (
-                             <div key={ep.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3 relative group">
+                           {(newMovie.episodes || []).map((ep: any, idx: number, arr: any[]) => {
+                             const prev = idx > 0 ? arr[idx - 1] : null;
+                             const next = idx < arr.length - 1 ? arr[idx + 1] : null;
+                             const isFirstOfSeason = !prev || Number(prev.season) !== Number(ep.season);
+                             const isLastOfSeason = !next || Number(next.season) !== Number(ep.season);
+                             const epsInSeason = arr.filter(e => Number(e.season) === Number(ep.season)).length;
+                             return (
+                             <React.Fragment key={ep.id}>
+                             {isFirstOfSeason && (
+                               <div className="flex items-center gap-2 pt-2 pb-1 sticky top-0 bg-black/80 backdrop-blur z-10">
+                                 <div className="h-px flex-1 bg-gradient-to-r from-red-500/40 to-transparent" />
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-red-500 px-2">Temporada {ep.season} <span className="text-gray-500">({epsInSeason} ep)</span></span>
+                                 <div className="h-px flex-1 bg-gradient-to-l from-red-500/40 to-transparent" />
+                               </div>
+                             )}
+                             <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3 relative group">
                                 <button 
                                   onClick={() => removeEpisode(newMovie, setNewMovie, ep.id)}
                                   className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all z-10"
@@ -3226,7 +3253,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                   </div>
                                 </div>
                              </div>
-                           ))}
+                             {isLastOfSeason && (
+                               <button
+                                 type="button"
+                                 onClick={() => addEpisode(newMovie, setNewMovie, Number(ep.season))}
+                                 className="w-full bg-white/5 border border-dashed border-white/10 hover:bg-red-600/20 hover:border-red-500/40 rounded-xl py-2 flex items-center justify-center gap-2 transition-all text-[10px] font-black uppercase text-gray-500 hover:text-red-400"
+                               >
+                                 <Plus size={12} />+ Episódio na Temp {ep.season}
+                               </button>
+                             )}
+                             </React.Fragment>
+                             );
+                           })}
                         </div>
                       </div>
                     )}
@@ -3637,9 +3675,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto no-scrollbar pr-2">
-                         {(editingMovie.episodes || []).map((ep: any) => (
-                           <div key={ep.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3 relative group">
+                      <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto no-scrollbar pr-2">
+                         {(editingMovie.episodes || []).map((ep: any, idx: number, arr: any[]) => {
+                           const prev = idx > 0 ? arr[idx - 1] : null;
+                           const next = idx < arr.length - 1 ? arr[idx + 1] : null;
+                           const isFirstOfSeason = !prev || Number(prev.season) !== Number(ep.season);
+                           const isLastOfSeason = !next || Number(next.season) !== Number(ep.season);
+                           const epsInSeason = arr.filter(e => Number(e.season) === Number(ep.season)).length;
+                           return (
+                           <React.Fragment key={ep.id}>
+                           {isFirstOfSeason && (
+                             <div className="flex items-center gap-2 pt-3 pb-1 sticky top-0 bg-black/80 backdrop-blur z-10">
+                               <div className="h-px flex-1 bg-gradient-to-r from-red-500/40 to-transparent" />
+                               <span className="text-[11px] font-black uppercase tracking-widest text-red-500 px-2">Temporada {ep.season} <span className="text-gray-500">({epsInSeason} ep)</span></span>
+                               <div className="h-px flex-1 bg-gradient-to-l from-red-500/40 to-transparent" />
+                             </div>
+                           )}
+                           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3 relative group">
                               <button 
                                 type="button"
                                 onClick={() => removeEpisode(editingMovie, setEditingMovie, ep.id)}
@@ -3736,14 +3788,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                 />
                               </div>
                            </div>
-                         ))}
+                           {isLastOfSeason && (
+                             <button
+                               type="button"
+                               onClick={() => addEpisode(editingMovie, setEditingMovie, Number(ep.season))}
+                               className="w-full bg-white/5 border border-dashed border-white/10 hover:bg-red-600/20 hover:border-red-500/40 rounded-xl py-2 flex items-center justify-center gap-2 transition-all text-[10px] font-black uppercase text-gray-500 hover:text-red-400"
+                             >
+                               <Plus size={12} />+ Episódio na Temp {ep.season}
+                             </button>
+                           )}
+                           </React.Fragment>
+                           );
+                         })}
                          <button 
                             type="button"
-                            onClick={() => addEpisode(editingMovie, setEditingMovie)}
-                            className="bg-white/5 border border-dashed border-white/10 hover:bg-white/10 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 transition-all min-h-[120px]"
+                            onClick={() => {
+                              const seasons = (editingMovie.episodes || []).map((e: any) => Number(e.season));
+                              const nextSeason = seasons.length ? Math.max(...seasons) + 1 : 1;
+                              addEpisode(editingMovie, setEditingMovie, nextSeason);
+                            }}
+                            className="bg-white/5 border border-dashed border-white/10 hover:bg-white/10 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 transition-all min-h-[80px]"
                          >
                             <Plus size={20} className="text-gray-500" />
-                            <span className="text-[10px] font-black uppercase text-gray-500">Novo Episódio</span>
+                            <span className="text-[10px] font-black uppercase text-gray-500">Nova Temporada</span>
                          </button>
                       </div>
                     </div>
