@@ -3234,7 +3234,8 @@ export default function App() {
         collection_id: movie.collection_id,
         collection_name: movie.collection_name,
         collection_poster_path: movie.collection_poster_path,
-        collection_logo_path: movie.collection_logo_path
+        collection_logo_path: movie.collection_logo_path,
+        preferred_quality: (movie as any).preferredQuality || (movie as any).preferred_quality || null
       };
 
       if (movie.type === 'series' && Array.isArray(movie.episodes)) {
@@ -3318,7 +3319,8 @@ export default function App() {
         collection_id: movie.collection_id,
         collection_name: movie.collection_name,
         collection_poster_path: movie.collection_poster_path,
-        collection_logo_path: movie.collection_logo_path
+        collection_logo_path: movie.collection_logo_path,
+        preferred_quality: (movie as any).preferredQuality || (movie as any).preferred_quality || null
       };
 
       const { error } = await supabase.from('movies').insert([movieData]);
@@ -3476,6 +3478,7 @@ export default function App() {
           id: m.id,
           videoUrl: m.video_url,
           videoUrl2: m.video_url_2,
+          preferredQuality: m.preferred_quality || undefined,
           vote_average: m.vote_average || m.rating || 0,
           rating: m.rating || m.vote_average || 0,
           release_date: m.release_date || '',
