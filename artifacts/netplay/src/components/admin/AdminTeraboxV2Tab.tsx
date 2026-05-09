@@ -152,11 +152,15 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
         const searchRes = resSearch.data.results || [];
         let bestMatch = searchRes && searchRes.length > 0 ? searchRes[0] : null;
 
+        const availableQualities = item.fast_stream_url && typeof item.fast_stream_url === 'object'
+          ? Object.keys(item.fast_stream_url).filter(k => /^\d+p$/.test(k))
+          : [];
         mapped.push({
           imported_filename: filename,
           url: folderUrl,
           tmdb_match: bestMatch,
-          selected: true
+          selected: true,
+          availableQualities,
         });
       }
 
@@ -206,6 +210,9 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
           episode: idx + 1,
           folderUrl: sf.folderUrl,
           selected: true,
+          availableQualities: item.fast_stream_url && typeof item.fast_stream_url === 'object'
+            ? Object.keys(item.fast_stream_url).filter((k: string) => /^\d+p$/.test(k))
+            : [],
         }));
       } catch (e: any) {
         setSeasonScanStatus(`Erro na Temporada ${sf.season}: ${e.message}`);
@@ -672,10 +679,12 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
                         title="Qualidade fixa pra esse episódio (auto = melhor disponível)"
                       >
                         <option value="auto">Auto</option>
-                        <option value="1080p">1080p</option>
-                        <option value="720p">720p</option>
-                        <option value="480p">480p</option>
-                        <option value="360p">360p</option>
+                        {(() => {
+                          const order = ['1080p','720p','480p','360p','240p'];
+                          const avail: string[] = (file as any).availableQualities || [];
+                          const list = avail.length ? order.filter(q => avail.includes(q)) : order.slice(0, 4);
+                          return list.map(q => <option key={q} value={q}>{q}</option>);
+                        })()}
                       </select>
                       <span className="text-[10px] text-green-500 font-bold shrink-0 flex items-center gap-1"><Zap size={10} /> Dinâmico</span>
                     </div>
@@ -790,10 +799,12 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
                         title="Qualidade fixa pra esse item (auto = sistema escolhe a melhor que funciona)"
                       >
                         <option value="auto">Auto</option>
-                        <option value="1080p">1080p</option>
-                        <option value="720p">720p</option>
-                        <option value="480p">480p</option>
-                        <option value="360p">360p</option>
+                        {(() => {
+                          const order = ['1080p','720p','480p','360p','240p'];
+                          const avail: string[] = (res as any).availableQualities || [];
+                          const list = avail.length ? order.filter(q => avail.includes(q)) : order.slice(0, 4);
+                          return list.map(q => <option key={q} value={q}>{q}</option>);
+                        })()}
                       </select>
                    </div>
                 </div>
