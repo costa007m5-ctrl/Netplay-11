@@ -3,7 +3,7 @@ import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Pl
 import Hls from 'hls.js';
 import { Movie } from '../../types';
 import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
-import { makeDynamicRef, isDynamicRef } from '../../services/terabox';
+import { makeDynamicRef, makeDynamicRefV2, isDynamicRef } from '../../services/terabox';
 
 export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
   const [testUrl, setTestUrl] = useState('');
@@ -31,6 +31,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const [seasonSaveLoading, setSeasonSaveLoading] = useState(false);
   const [enrichingTmdb, setEnrichingTmdb] = useState(false);
   const [enrichStatus, setEnrichStatus] = useState('');
+  const [seasonApiVersion, setSeasonApiVersion] = useState<'v1' | 'v2'>('v2');
   const [seasonScanStatus, setSeasonScanStatus] = useState('');
 
   // For Mass Update
@@ -199,10 +200,11 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     setSeasonScanResults({});
     const results: Record<number, any[]> = {};
 
+    const endpoint = seasonApiVersion === 'v2' ? '/api/terabox-v2' : '/api/terabox-pro';
     for (const sf of validFolders) {
-      setSeasonScanStatus(`Escaneando Temporada ${sf.season}...`);
+      setSeasonScanStatus(`Escaneando Temporada ${sf.season} (${seasonApiVersion.toUpperCase()})...`);
       try {
-        const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(sf.folderUrl)}`);
+        const res = await fetch(`${endpoint}?url=${encodeURIComponent(sf.folderUrl)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao escanear pasta');
         const list: any[] = data.list || [];
@@ -212,6 +214,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           episode: idx + 1,
           folderUrl: sf.folderUrl,
           selected: true,
+          apiVersion: seasonApiVersion,
           availableQualities: item.fast_stream_url && typeof item.fast_stream_url === 'object'
             ? Object.keys(item.fast_stream_url).filter((k: string) => /^\d+p$/.test(k))
             : [],
@@ -295,7 +298,9 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
             title: file.tmdbTitle || `Episódio ${file.episode}`,
             season: file.season,
             episode: file.episode,
-            videoUrl: makeDynamicRef(file.folderUrl, file.filename),
+            videoUrl: file.apiVersion === 'v2'
+              ? makeDynamicRefV2(file.folderUrl, file.filename)
+              : makeDynamicRef(file.folderUrl, file.filename),
             overview: file.tmdbOverview || '',
             still_path: file.tmdbStillPath || (selectedSeries.backdrop_path
               ? `https://image.tmdb.org/t/p/w300${selectedSeries.backdrop_path}`
@@ -657,6 +662,21 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           ))}
         </div>
 
+        <div className="flex items-center gap-2 mb-3 bg-black/30 rounded-xl p-2 border border-white/5">
+          <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-2">API:</span>
+          <button
+            type="button"
+            onClick={() => setSeasonApiVersion('v1')}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${seasonApiVersion === 'v1' ? 'bg-purple-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+            title="API antiga (xapiverse). Limite ~5 arquivos por pasta."
+          >V1 (limite 5)</button>
+          <button
+            type="button"
+            onClick={() => setSeasonApiVersion('v2')}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${seasonApiVersion === 'v2' ? 'bg-green-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+            title="API nova (teraboxdl). Sem limite de arquivos. Recomendada para pastas grandes."
+          >V2 (sem limite) ⭐</button>
+        </div>
         <div className="flex gap-3">
           <button
             onClick={handleScanAllSeasons}
@@ -664,7 +684,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
             className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
           >
             {seasonScanning ? <RefreshCw size={14} className="animate-spin" /> : <Layers size={14} />}
-            {seasonScanning ? seasonScanStatus : 'Escanear Temporadas'}
+            {seasonScanning ? seasonScanStatus : `Escanear Temporadas (${seasonApiVersion.toUpperCase()})`}
           </button>
           {Object.keys(seasonScanResults).length > 0 && (
             <button
