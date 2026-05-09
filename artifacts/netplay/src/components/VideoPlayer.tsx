@@ -3,7 +3,7 @@ import screenfull from 'screenfull';
 import NetflixPlayer from './NetflixPlayer';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
-import { isDynamicRef, resolveTeraboxUrl } from '../services/terabox';
+import { isDynamicRef, parseDynamicRef } from '../services/terabox';
 
 interface VideoPlayerProps {
   movie: Movie;
@@ -342,19 +342,83 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isDynamicRef(u)) {
         setIsExtractingTerabox(true);
         try {
-          // Honor preferredQuality from episode/movie to skip probe and fetch only the chosen quality
-          const epPref = movie.type === 'series' && movie.episodes
-            ? (movie.episodes.find(ep => ep.videoUrl === u || ep.videoUrl2 === u) as any)?.preferredQuality
-            : undefined;
+          const { folderUrl, filename, v2 } = parseDynamicRef(u);
+          const endpoint = v2 ? '/api/terabox-v2' : '/api/terabox-pro';
+
+          // Honor preferredQuality from episode/movie
+          const urlMatchEp = movie.type === 'series' && movie.episodes
+            ? movie.episodes.find(ep => ep.videoUrl === u || ep.videoUrl2 === u)
+            : null;
+          const epPref = (urlMatchEp as any)?.preferredQuality;
           const moviePref = (movie as any).preferredQuality;
-          const preferred = (epPref && epPref !== 'auto') ? epPref
+          const preferred: string | null = (epPref && epPref !== 'auto') ? epPref
                            : (moviePref && moviePref !== 'auto') ? moviePref
                            : null;
-          const resolved = await resolveTeraboxUrl(u, { preferredQuality: preferred });
-          setExtractedVideoUrl(resolved);
-          setFinalVideoUrl(resolved);
-        } catch (e) {
-          console.error("Failed to resolve dynamic Terabox ref", e);
+
+          const res = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || `Falha ao resolver Terabox (${res.status})`);
+
+          const list: any[] = Array.isArray(data.list) ? data.list : [];
+          if (list.length === 0) throw new Error('Pasta vazia ou expirada');
+
+          // Find file by filename (fallback to first)
+          let file: any = null;
+          if (filename) {
+            file = list.find(f => (f.filename || f.name) === filename)
+                || list.find(f => (f.filename || f.name || '').toLowerCase() === filename.toLowerCase());
+          }
+          if (!file) file = list[0];
+
+          // Build COMPLETE quality list
+          const fs = file.fast_stream_url || {};
+          const nativeQuality: string | undefined = typeof file.quality === 'string' ? file.quality : undefined;
+          const ladderRank: Record<string, number> = { '240p': 1, '360p': 2, '480p': 3, '720p': 4, '1080p': 5 };
+          const nativeRank = nativeQuality && ladderRank[nativeQuality] ? ladderRank[nativeQuality] : 99;
+          const qualityOrder = [
+            { k: '1080p', label: '1080p (Full HD)' },
+            { k: '720p',  label: '720p (HD)' },
+            { k: '480p',  label: '480p (SD)' },
+            { k: '360p',  label: '360p' },
+            { k: '240p',  label: '240p' },
+          ];
+          const qualityList: { id: string; label: string; url: string }[] = [];
+          for (const q of qualityOrder) {
+            if (fs[q.k] && typeof fs[q.k] === 'string') {
+              const rank = ladderRank[q.k] || 0;
+              if (rank > nativeRank) continue;
+              qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
+            }
+          }
+          const directUrl = file.normal_dlink || file.url || file.stream_url || file.dlink;
+          if (directUrl && !qualityList.some(q => q.url === directUrl)) {
+            qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
+          }
+
+          if (qualityList.length === 0) throw new Error('Nenhum link de stream para este arquivo');
+
+          // Pick initial: preferred (if available) else best
+          let initial = qualityList[0];
+          if (preferred) {
+            const found = qualityList.find(q => q.id === preferred);
+            if (found) {
+              initial = found;
+              // reorder so preferred is first
+              const others = qualityList.filter(q => q.id !== found.id);
+              qualityList.length = 0;
+              qualityList.push(found, ...others);
+              console.log(`[VideoPlayer] dyn-ref: qualidade preferida "${preferred}" aplicada`);
+            }
+          }
+
+          setExtractedVideoUrl(initial.url);
+          setFinalVideoUrl(initial.url);
+          setExtractedQualities(qualityList);
+          const subUrl = file.subtitle_url || data.subtitle || data.subtitle_url;
+          if (subUrl) setExtractedSubtitleUrl(subUrl);
+          console.log(`[VideoPlayer] dyn-ref: ${qualityList.length} qualidades disponíveis (${qualityList.map(q => q.id).join(', ')})`);
+        } catch (e: any) {
+          console.error('[VideoPlayer] dyn-ref falhou:', e?.message || e);
           setExtractedVideoUrl(u);
           setFinalVideoUrl(u);
         } finally {
