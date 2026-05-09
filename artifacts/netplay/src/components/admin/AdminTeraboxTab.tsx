@@ -201,14 +201,52 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     const results: Record<number, any[]> = {};
 
     const endpoint = seasonApiVersion === 'v2' ? '/api/terabox-v2' : '/api/terabox-pro';
+    const MAX_PAGES = 20; // safety cap (~ thousands of files)
     for (const sf of validFolders) {
-      setSeasonScanStatus(`Escaneando Temporada ${sf.season} (${seasonApiVersion.toUpperCase()})...`);
       try {
-        const res = await fetch(`${endpoint}?url=${encodeURIComponent(sf.folderUrl)}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Falha ao escanear pasta');
-        const list: any[] = data.list || [];
-        results[sf.season] = list.map((item: any, idx: number) => ({
+        const allItems: any[] = [];
+        const seenNames = new Set<string>();
+        let page = 1;
+        let totalExpected: number | null = null;
+
+        while (page <= MAX_PAGES) {
+          setSeasonScanStatus(`Escaneando T${sf.season} (${seasonApiVersion.toUpperCase()}) — página ${page}, ${allItems.length} arquivos...`);
+          const pageUrl = `${endpoint}?url=${encodeURIComponent(sf.folderUrl)}${seasonApiVersion === 'v2' ? `&page=${page}` : ''}`;
+          const res = await fetch(pageUrl);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Falha página ${page}`);
+          const list: any[] = data.list || [];
+          if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
+
+          let newCount = 0;
+          for (const item of list) {
+            const name = item.filename || item.name;
+            if (!name || seenNames.has(name)) continue;
+            seenNames.add(name);
+            allItems.push(item);
+            newCount++;
+          }
+
+          // V1 doesn't paginate — stop after 1 page
+          if (seasonApiVersion === 'v1') break;
+          // No new items → stop
+          if (newCount === 0) break;
+          // Reached known total → stop
+          if (totalExpected != null && allItems.length >= totalExpected) break;
+          // Page returned less than ~5 → likely last page
+          if (list.length < 5) break;
+
+          page++;
+        }
+
+        // Sort naturally so episode numbering is consistent
+        allItems.sort((a, b) => {
+          const an = (a.filename || a.name || '').toLowerCase();
+          const bn = (b.filename || b.name || '').toLowerCase();
+          return an.localeCompare(bn, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        results[sf.season] = allItems.map((item: any, idx: number) => ({
           filename: item.filename || item.name || `arquivo_${idx + 1}`,
           season: sf.season,
           episode: idx + 1,
