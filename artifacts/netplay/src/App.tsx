@@ -2740,21 +2740,11 @@ export default function App() {
               const stillPath = tmdbEp?.still_path
                 ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
                 : ep.still_path;
-              return {
-                ...ep,
-                title: tmdbEp?.name || ep.title,
-                overview: tmdbEp?.overview || ep.overview || '',
-                still_path: stillPath,
-                // Blinda campos de reprodução
-                videoUrl: ep.videoUrl,
-                videoUrl2: (ep as any).videoUrl2,
-                preferredQuality: (ep as any).preferredQuality,
-                credits_time: (ep as any).credits_time,
-                file_name: (ep as any).file_name,
-                id: (ep as any).id,
-                season: ep.season,
-                episode: ep.episode,
-              };
+              const merged: any = { ...ep };
+              if (tmdbEp?.name) merged.title = tmdbEp.name;
+              if (tmdbEp?.overview) merged.overview = tmdbEp.overview;
+              if (stillPath !== undefined) merged.still_path = stillPath;
+              return merged;
             });
           }
 
@@ -3247,6 +3237,11 @@ export default function App() {
         collection_logo_path: movie.collection_logo_path
       };
 
+      if (movie.type === 'series' && Array.isArray(movie.episodes)) {
+        console.log('[handleUpdateMovie] Salvando série, primeira ep:', JSON.stringify(movie.episodes[0], null, 2));
+        const semVideoUrl = movie.episodes.filter((e: any) => !e.videoUrl && !e.video_url);
+        if (semVideoUrl.length) console.warn('[handleUpdateMovie] ATENÇÃO! Episódios sem videoUrl:', semVideoUrl.length, semVideoUrl);
+      }
       const { error } = await supabase.from('movies').update(updateData).eq('id', movie.id);
       
       if (error) {

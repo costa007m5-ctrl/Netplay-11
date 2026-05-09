@@ -1017,36 +1017,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       }
 
-      setForm({
-        ...form,
-        episodes: episodes.map((ep: any) => {
-          const tmdbEp = seasonDetails[Number(ep.season)]?.find(te => te.episode_number === Number(ep.episode));
-          // Só atualiza campos de METADADO. NUNCA toca em campos de reprodução
-          // (videoUrl, videoUrl2, preferredQuality, credits_time, file_name, id, season, episode).
-          // Sem isso, o player perdia referência e ficava só carregando.
-          const stillPath = tmdbEp?.still_path
-            ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
-            : ep.still_path;
-          return {
-            ...ep,
-            title: tmdbEp?.name || ep.title,
-            overview: tmdbEp?.overview || ep.overview || '',
-            still_path: stillPath,
-            release_date: tmdbEp?.air_date || ep.release_date,
-            rating: tmdbEp?.vote_average || ep.rating,
-            runtime: tmdbEp?.runtime || ep.runtime,
-            // Campos de reprodução: blindados (re-aplicados depois do spread)
-            videoUrl: ep.videoUrl,
-            videoUrl2: ep.videoUrl2,
-            preferredQuality: ep.preferredQuality,
-            credits_time: ep.credits_time,
-            file_name: ep.file_name,
-            id: ep.id,
-            season: ep.season,
-            episode: ep.episode,
-          };
-        })
+      console.log('[SyncEpisodesTMDB] ANTES — primeira ep:', JSON.stringify(episodes[0], null, 2));
+      const newEpisodes = episodes.map((ep: any) => {
+        const tmdbEp = seasonDetails[Number(ep.season)]?.find(te => te.episode_number === Number(ep.episode));
+        const stillPath = tmdbEp?.still_path
+          ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
+          : ep.still_path;
+        // Estratégia DEFENSIVA: começamos do `ep` original (não do tmdbEp), 
+        // e SÓ aplicamos campos de metadado encontrados no TMDB. 
+        // Isso evita que QUALQUER campo do tmdbEp vaze e atropele algo de reprodução.
+        const merged: any = { ...ep };
+        if (tmdbEp?.name) merged.title = tmdbEp.name;
+        if (tmdbEp?.overview) merged.overview = tmdbEp.overview;
+        if (stillPath !== undefined) merged.still_path = stillPath;
+        if (tmdbEp?.air_date) merged.release_date = tmdbEp.air_date;
+        if (tmdbEp?.vote_average !== undefined && tmdbEp?.vote_average !== null) merged.rating = tmdbEp.vote_average;
+        if (tmdbEp?.runtime) merged.runtime = tmdbEp.runtime;
+        return merged;
       });
+      console.log('[SyncEpisodesTMDB] DEPOIS — primeira ep:', JSON.stringify(newEpisodes[0], null, 2));
+      console.log('[SyncEpisodesTMDB] videoUrl preservado?', episodes.every((ep: any, i: number) => ep.videoUrl === newEpisodes[i].videoUrl));
+      setForm({ ...form, episodes: newEpisodes });
       alert('Episódios sincronizados com o TMDB com sucesso!');
     } catch (error) {
       console.error('Erro na sincronização TMDB:', error);
