@@ -445,13 +445,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                  qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
                }
 
-               // SMART PROBE BLOQUEANTE: aguarda o servidor testar todas as qualidades
-               // em paralelo ANTES de entregar uma URL pro player. Garante que o player
-               // só tenta qualidades funcionais — workers.dev às vezes retorna HTTP 200
-               // com body VAZIO em qualidades quebradas, então só checar status não basta.
-               // Timeout de 5s: se probe demorar/falhar, usa a lista original como fallback.
+               // OVERRIDE MANUAL: se o admin escolheu uma qualidade fixa pro filme/episódio,
+               // usar SÓ ela (pula probe). Episódio tem prioridade sobre filme.
+               const epPreferred = (urlMatchEp as any)?.preferredQuality as string | undefined;
+               const moviePreferred = (movie as any).preferredQuality as string | undefined;
+               const preferred = (epPreferred && epPreferred !== 'auto') ? epPreferred
+                                : (moviePreferred && moviePreferred !== 'auto') ? moviePreferred
+                                : null;
                let finalList = qualityList;
-               if (qualityList.length > 1) {
+               if (preferred) {
+                 const forced = qualityList.find(q => q.id === preferred);
+                 if (forced) {
+                   console.log(`[VideoPlayer] qualidade fixa do admin: ${preferred} (probe pulado)`);
+                   finalList = [forced];
+                 } else {
+                   console.warn(`[VideoPlayer] qualidade fixa "${preferred}" não disponível no link, caindo pro probe`);
+                 }
+               }
+
+               // SMART PROBE BLOQUEANTE: aguarda o servidor testar todas as qualidades
+               // em paralelo ANTES de entregar uma URL pro player. Só roda se admin não fixou qualidade.
+               // workers.dev às vezes retorna HTTP 200 com body VAZIO em qualidades quebradas.
+               // Timeout de 5s: se probe demorar/falhar, usa a lista original como fallback.
+               if (!preferred && qualityList.length > 1) {
                  const probeController = new AbortController();
                  probeAbortRef.current?.abort();
                  probeAbortRef.current = probeController;

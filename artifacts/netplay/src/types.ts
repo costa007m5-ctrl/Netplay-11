@@ -1,3 +1,5 @@
+export type PreferredQuality = 'auto' | '360p' | '480p' | '720p' | '1080p';
+
 export interface Episode {
   id: string;
   title: string;
@@ -11,6 +13,7 @@ export interface Episode {
   rating?: number;
   runtime?: number;
   credits_time?: number; // Segundos antes do fim para o Próximo Episódio
+  preferredQuality?: PreferredQuality; // Qualidade fixa escolhida no admin (sobrescreve probe)
 }
 
 export interface Movie {
@@ -46,6 +49,7 @@ export interface Movie {
   collection_logo_path?: string;
   collection_backdrop_path?: string;
   savedEpisodeUrl?: string; // URL do episódio salvo (carregado do Supabase watch_history)
+  preferredQuality?: PreferredQuality; // Qualidade fixa escolhida no admin (sobrescreve probe)
 }
 
 export interface StreamingProvider {

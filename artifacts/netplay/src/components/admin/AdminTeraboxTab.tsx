@@ -310,13 +310,16 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           ? makeDynamicRef(folderUrl, item.imported_filename)
           : folderUrl;
 
+        const chosenQuality = (item.preferredQuality && item.preferredQuality !== 'auto') ? item.preferredQuality : undefined;
+
         if (existingMovie) {
           try {
             await onUpdateMovie({
               ...existingMovie,
               videoUrl: videoUrlToSave,
               videoUrl2: videoUrlToSave,
-              file_name: item.imported_filename
+              file_name: item.imported_filename,
+              ...(chosenQuality ? { preferredQuality: chosenQuality } : {}),
             });
           } catch(e) {
             errorCount++;
@@ -334,7 +337,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
             genres: genreNames,
             videoUrl: videoUrlToSave,
             videoUrl2: videoUrlToSave,
-            file_name: item.imported_filename
+            file_name: item.imported_filename,
+            ...(chosenQuality ? { preferredQuality: chosenQuality as any } : {}),
           };
           try {
             await onAddMovie(newMovie);
@@ -721,6 +725,25 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
                    <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold text-white truncate">{res.imported_filename}</div>
                       <div className="text-xs text-gray-400 truncate mt-1">Match TMDB: {res.tmdb_match ? (res.tmdb_match.title || res.tmdb_match.name) : <span className="text-red-400">Não encontrado</span>}</div>
+                   </div>
+                   <div className="flex flex-col items-end gap-1 shrink-0">
+                      <label className="text-[8px] font-black text-gray-500 uppercase">Qualidade</label>
+                      <select
+                        value={res.preferredQuality || 'auto'}
+                        onChange={(e) => {
+                          const copy = [...folderResults];
+                          copy[i].preferredQuality = e.target.value;
+                          setFolderResults(copy);
+                        }}
+                        className="bg-black/60 border border-white/10 rounded-lg py-1 px-2 text-[10px] font-bold text-white"
+                        title="Qualidade fixa pra esse item (auto = sistema escolhe a melhor que funciona)"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                        <option value="360p">360p</option>
+                      </select>
                    </div>
                 </div>
              ))}

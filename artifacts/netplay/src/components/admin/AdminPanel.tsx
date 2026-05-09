@@ -3178,7 +3178,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     />
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-4 gap-2">
                                   <div className="col-span-2">
                                     <label className="block text-[8px] font-black text-gray-500 uppercase mb-1">Link Vídeo</label>
                                     <input 
@@ -3188,6 +3188,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                       className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-3 text-xs font-mono text-blue-400"
                                       placeholder="Ex: Teradl / M3U8"
                                     />
+                                  </div>
+                                  <div className="col-span-1">
+                                    <label className="block text-[8px] font-black text-gray-500 uppercase mb-1 text-center">Qualidade</label>
+                                    <select
+                                      value={(ep as any).preferredQuality || 'auto'}
+                                      onChange={(e) => updateEpisode(newMovie, setNewMovie, ep.id, 'preferredQuality', e.target.value)}
+                                      className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-2 text-[10px] font-bold text-center"
+                                    >
+                                      <option value="auto">Auto</option>
+                                      <option value="1080p">1080p</option>
+                                      <option value="720p">720p</option>
+                                      <option value="480p">480p</option>
+                                      <option value="360p">360p</option>
+                                    </select>
                                   </div>
                                   <div className="col-span-1">
                                     <label className="block text-[8px] font-black text-gray-500 uppercase mb-1 text-center whitespace-nowrap">Auto-Next(s)</label>
@@ -3362,6 +3376,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         onChange={(e) => setEditingMovie({ ...editingMovie, videoUrl2: e.target.value })}
                         className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm font-mono text-red-400 focus:outline-none focus:border-red-600 transition-all"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] md:text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 md:mb-2 px-1">Qualidade Forçada (Terabox/HLS)</label>
+                      <select
+                        value={(editingMovie as any).preferredQuality || 'auto'}
+                        onChange={(e) => setEditingMovie({ ...editingMovie, preferredQuality: e.target.value as any })}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm font-bold focus:outline-none focus:border-red-600 transition-all"
+                      >
+                        <option value="auto">Automática (testa e escolhe a melhor que funciona)</option>
+                        <option value="1080p">1080p — Full HD</option>
+                        <option value="720p">720p — HD</option>
+                        <option value="480p">480p — SD</option>
+                        <option value="360p">360p — Baixa</option>
+                      </select>
+                      <p className="text-[9px] text-gray-500 mt-1 px-1">Auto = sistema testa todas e usa a melhor disponível. Forçar uma qualidade pula o teste e tenta direto essa.</p>
                     </div>
                     <div className="grid grid-cols-2 gap-3 md:gap-4">
                       <div>
@@ -3641,7 +3670,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                   />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-4 gap-2">
                                 <div className="col-span-2">
                                   <label className="block text-[8px] font-black text-gray-500 uppercase mb-1">Link Vídeo</label>
                                   <input 
@@ -3651,6 +3680,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-3 text-[10px] font-mono text-blue-400"
                                     placeholder="Link do vídeo..."
                                   />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="block text-[8px] font-black text-gray-500 uppercase mb-1 text-center">Qualidade</label>
+                                  <select
+                                    value={(ep as any).preferredQuality || 'auto'}
+                                    onChange={(e) => updateEpisode(editingMovie, setEditingMovie, ep.id, 'preferredQuality', e.target.value)}
+                                    className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-2 text-[10px] font-bold text-center"
+                                  >
+                                    <option value="auto">Auto</option>
+                                    <option value="1080p">1080p</option>
+                                    <option value="720p">720p</option>
+                                    <option value="480p">480p</option>
+                                    <option value="360p">360p</option>
+                                  </select>
                                 </div>
                                 <div className="col-span-1">
                                   <label className="block text-[8px] font-black text-gray-500 uppercase mb-1 text-center whitespace-nowrap">Auto-Next(s)</label>
