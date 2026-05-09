@@ -643,50 +643,57 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
                 <div className="text-xs font-black uppercase tracking-widest text-purple-400 mb-2">Temporada {season} ({(files as any[]).length} episódios)</div>
                 <div className="space-y-1">
                   {(files as any[]).map((file, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-black/40 px-3 py-2 rounded-lg border border-white/5">
-                      <input
-                        type="checkbox"
-                        checked={file.selected}
-                        onChange={e => {
-                          const copy = { ...seasonScanResults };
-                          (copy[Number(season)] as any[])[i].selected = e.target.checked;
-                          setSeasonScanResults(copy);
-                        }}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-purple-400 font-bold text-xs min-w-[24px]">E{file.episode}</span>
-                      <input
-                        type="number"
-                        value={file.episode}
-                        onChange={e => {
-                          const copy = { ...seasonScanResults };
-                          (copy[Number(season)] as any[])[i].episode = Number(e.target.value);
-                          setSeasonScanResults(copy);
-                        }}
-                        className="w-14 bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-white"
-                        min={1}
-                        title="Número do episódio"
-                      />
-                      <span className="text-gray-300 text-xs truncate flex-1">{file.filename}</span>
-                      <select
-                        value={file.preferredQuality || 'auto'}
-                        onChange={e => {
-                          const copy = { ...seasonScanResults };
-                          (copy[Number(season)] as any[])[i].preferredQuality = e.target.value;
-                          setSeasonScanResults(copy);
-                        }}
-                        className="bg-black/60 border border-white/10 rounded-md py-0.5 px-1.5 text-[10px] font-bold text-white shrink-0"
-                        title="Qualidade fixa pra esse episódio (auto = melhor disponível)"
+                    <div key={i} className="bg-black/40 px-3 py-2 rounded-lg border border-white/5 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="checkbox"
+                          checked={file.selected}
+                          onChange={e => {
+                            const copy = { ...seasonScanResults };
+                            (copy[Number(season)] as any[])[i].selected = e.target.checked;
+                            setSeasonScanResults(copy);
+                          }}
+                          className="w-4 h-4 shrink-0"
+                        />
+                        <span className="text-purple-400 font-bold text-xs min-w-[24px] shrink-0">E{file.episode}</span>
+                        <input
+                          type="number"
+                          value={file.episode}
+                          onChange={e => {
+                            const copy = { ...seasonScanResults };
+                            (copy[Number(season)] as any[])[i].episode = Number(e.target.value);
+                            setSeasonScanResults(copy);
+                          }}
+                          className="w-14 bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-white shrink-0"
+                          min={1}
+                          title="Número do episódio"
+                        />
+                        <select
+                          value={file.preferredQuality || 'auto'}
+                          onChange={e => {
+                            const copy = { ...seasonScanResults };
+                            (copy[Number(season)] as any[])[i].preferredQuality = e.target.value;
+                            setSeasonScanResults(copy);
+                          }}
+                          className="bg-black/60 border border-white/10 rounded-md py-0.5 px-1.5 text-[10px] font-bold text-white shrink-0"
+                          title="Qualidade fixa pra esse episódio (auto = melhor disponível)"
+                        >
+                          <option value="auto">Auto</option>
+                          {(() => {
+                            const order = ['1080p','720p','480p','360p','240p'];
+                            const avail: string[] = (file as any).availableQualities || [];
+                            const list = avail.length ? order.filter(q => avail.includes(q)) : order.slice(0, 4);
+                            return list.map(q => <option key={q} value={q}>{q}</option>);
+                          })()}
+                        </select>
+                        <span className="text-[10px] text-green-500 font-bold shrink-0 flex items-center gap-1 ml-auto"><Zap size={10} /> Dinâmico</span>
+                      </div>
+                      <div
+                        className="text-gray-300 text-[11px] break-all leading-snug pl-6"
+                        title={file.filename}
                       >
-                        <option value="auto">Auto</option>
-                        {(() => {
-                          const order = ['1080p','720p','480p','360p','240p'];
-                          const avail: string[] = (file as any).availableQualities || [];
-                          const list = avail.length ? order.filter(q => avail.includes(q)) : order.slice(0, 4);
-                          return list.map(q => <option key={q} value={q}>{q}</option>);
-                        })()}
-                      </select>
-                      <span className="text-[10px] text-green-500 font-bold shrink-0 flex items-center gap-1"><Zap size={10} /> Dinâmico</span>
+                        {file.filename}
+                      </div>
                     </div>
                   ))}
                 </div>
