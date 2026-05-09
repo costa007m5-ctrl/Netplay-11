@@ -165,6 +165,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           tmdb_match: bestMatch,
           selected: true,
           availableQualities,
+          searchName,
+          searching: false,
         });
       }
 
@@ -591,6 +593,27 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     }
   };
 
+  const handleResearchTmdb = async (idx: number) => {
+    const item = folderResults[idx];
+    if (!item || !item.searchName?.trim()) return;
+    const copy = [...folderResults];
+    copy[idx].searching = true;
+    setFolderResults(copy);
+    try {
+      const r = await tmdb.get(`/search/multi?query=${encodeURIComponent(item.searchName.trim())}`);
+      const results = r.data.results || [];
+      const next = [...folderResults];
+      next[idx].tmdb_match = results.length > 0 ? results[0] : null;
+      next[idx].searching = false;
+      setFolderResults(next);
+    } catch (e: any) {
+      const next = [...folderResults];
+      next[idx].searching = false;
+      setFolderResults(next);
+      alert('Erro ao buscar: ' + e.message);
+    }
+  };
+
   const handleSaveScanned = async () => {
     const GENRE_MAP: { [key: number]: string } = {
       28: "Ação", 12: "Aventura", 16: "Animação", 35: "Comédia", 80: "Crime",
@@ -612,13 +635,50 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       for (const item of toSave) {
         const t = item.tmdb_match;
         const type = t ? (t.media_type === 'tv' ? 'series' : 'movie') : 'movie';
-        
+
+        // Busca detalhes COMPLETOS do TMDB (runtime, gêneros, watch providers, etc.)
+        let fullDetails: any = null;
+        if (t?.id) {
+          try {
+            setScanningStatus(`Buscando detalhes completos: ${t.title || t.name}...`);
+            const endpoint = type === 'series' ? `/tv/${t.id}` : `/movie/${t.id}`;
+            const detRes = await tmdb.get(endpoint, {
+              params: { language: 'pt-BR', append_to_response: 'watch/providers,content_ratings,release_dates' },
+            });
+            fullDetails = detRes.data;
+          } catch (e: any) {
+            console.warn(`[TMDB details] falhou para ${t.id}:`, e.message);
+          }
+        }
+
+        // Gêneros: prioriza fullDetails.genres (nomes prontos) sobre genre_ids
         let genreNames = 'Outros';
-        if (t && t.genre_ids) {
+        if (fullDetails?.genres?.length) {
+          genreNames = fullDetails.genres.map((g: any) => g.name).filter(Boolean).join(', ') || 'Outros';
+        } else if (t?.genre_ids) {
           genreNames = t.genre_ids.map((id: number) => GENRE_MAP[id]).filter(Boolean).join(', ') || 'Outros';
         }
 
-        const titleOrName = t ? (t.title || t.name) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, '');
+        // Provedores de streaming (BR)
+        let watchProvidersStr: string | undefined;
+        const wp = fullDetails?.['watch/providers']?.results?.BR;
+        if (wp) {
+          const list = [...(wp.flatrate || []), ...(wp.buy || []), ...(wp.rent || [])];
+          const names = Array.from(new Set(list.map((p: any) => p.provider_name).filter(Boolean)));
+          if (names.length) watchProvidersStr = names.join(', ');
+        }
+
+        // Idade / classificação indicativa (BR)
+        let ageRating: string | undefined;
+        if (type === 'series') {
+          const br = fullDetails?.content_ratings?.results?.find((r: any) => r.iso_3166_1 === 'BR');
+          ageRating = br?.rating || undefined;
+        } else {
+          const brR = fullDetails?.release_dates?.results?.find((r: any) => r.iso_3166_1 === 'BR');
+          ageRating = brR?.release_dates?.find((d: any) => d.certification)?.certification || undefined;
+        }
+
+        const titleOrName = fullDetails?.title || fullDetails?.name || (t ? (t.title || t.name) : item.imported_filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, ''));
         const existingMovie = movies.find(m => (t && m.id === t.id) || m.title === titleOrName || m.name === titleOrName);
 
         // In dynamic link mode, store a stable folder+filename reference; otherwise store folder URL directly
@@ -636,6 +696,17 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
               videoUrl2: videoUrlToSave,
               file_name: item.imported_filename,
               ...(chosenQuality ? { preferredQuality: chosenQuality } : {}),
+              // Atualiza metadata se o TMDB trouxe algo novo
+              ...(fullDetails?.overview ? { overview: fullDetails.overview } : {}),
+              ...(fullDetails?.runtime ? { runtime: fullDetails.runtime } : {}),
+              ...(fullDetails?.episode_run_time?.[0] ? { runtime: fullDetails.episode_run_time[0] } : {}),
+              ...(fullDetails?.release_date ? { release_date: fullDetails.release_date } : {}),
+              ...(fullDetails?.first_air_date ? { first_air_date: fullDetails.first_air_date } : {}),
+              ...(fullDetails?.vote_average !== undefined ? { vote_average: fullDetails.vote_average } : {}),
+              ...(genreNames !== 'Outros' ? { genres: genreNames } : {}),
+              ...(watchProvidersStr ? { watch_providers: watchProvidersStr } : {}),
+              ...(ageRating ? { age_rating: ageRating } : {}),
+              ...(fullDetails?.original_language ? { original_language: fullDetails.original_language } : {}),
             });
           } catch(e) {
             errorCount++;
@@ -645,17 +716,25 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
             id: t ? t.id : Date.now() + Math.random(),
             title: titleOrName,
             name: titleOrName,
-            original_name: t ? (t.original_name || t.original_title) : undefined,
-            overview: t ? t.overview : 'Adicionado via Terabox API (Info não encontrada)',
-            backdrop_path: t?.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : 'https://picsum.photos/seed/terabox/1920/1080',
-            poster_path: t?.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : 'https://picsum.photos/seed/terabox/500/750',
+            original_name: fullDetails?.original_name || fullDetails?.original_title || (t ? (t.original_name || t.original_title) : undefined),
+            overview: fullDetails?.overview || (t ? t.overview : 'Adicionado via Terabox API (Info não encontrada)'),
+            backdrop_path: (fullDetails?.backdrop_path || t?.backdrop_path) ? `https://image.tmdb.org/t/p/original${fullDetails?.backdrop_path || t.backdrop_path}` : 'https://picsum.photos/seed/terabox/1920/1080',
+            poster_path: (fullDetails?.poster_path || t?.poster_path) ? `https://image.tmdb.org/t/p/original${fullDetails?.poster_path || t.poster_path}` : 'https://picsum.photos/seed/terabox/500/750',
             type,
             genres: genreNames,
             videoUrl: videoUrlToSave,
             videoUrl2: videoUrlToSave,
             file_name: item.imported_filename,
             ...(chosenQuality ? { preferredQuality: chosenQuality as any } : {}),
-          };
+            ...(fullDetails?.runtime ? { runtime: fullDetails.runtime } : {}),
+            ...(fullDetails?.episode_run_time?.[0] ? { runtime: fullDetails.episode_run_time[0] } : {}),
+            ...(fullDetails?.release_date ? { release_date: fullDetails.release_date } : {}),
+            ...(fullDetails?.first_air_date ? { first_air_date: fullDetails.first_air_date } : {}),
+            ...(fullDetails?.vote_average !== undefined ? { vote_average: fullDetails.vote_average } : (t?.vote_average !== undefined ? { vote_average: t.vote_average } : {})),
+            ...(watchProvidersStr ? { watch_providers: watchProvidersStr } : {}),
+            ...(ageRating ? { age_rating: ageRating } : {}),
+            ...(fullDetails?.original_language ? { original_language: fullDetails.original_language } : {}),
+          } as any;
           try {
             await onAddMovie(newMovie);
           } catch(e) {
@@ -1127,7 +1206,28 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
                    />
                    <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold text-white truncate">{res.imported_filename}</div>
-                      <div className="text-xs text-gray-400 truncate mt-1">Match TMDB: {res.tmdb_match ? (res.tmdb_match.title || res.tmdb_match.name) : <span className="text-red-400">Não encontrado</span>}</div>
+                      <div className="text-xs text-gray-400 truncate mt-1">Match TMDB: {res.tmdb_match ? <span className="text-green-400">{res.tmdb_match.title || res.tmdb_match.name} {res.tmdb_match.release_date || res.tmdb_match.first_air_date ? `(${(res.tmdb_match.release_date || res.tmdb_match.first_air_date).slice(0,4)})` : ''}</span> : <span className="text-red-400">Não encontrado</span>}</div>
+                      <div className="flex items-center gap-1 mt-2">
+                        <input
+                          type="text"
+                          value={res.searchName || ''}
+                          onChange={(e) => {
+                            const copy = [...folderResults];
+                            copy[i].searchName = e.target.value;
+                            setFolderResults(copy);
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleResearchTmdb(i); }}
+                          placeholder="Editar nome para buscar novamente..."
+                          className="flex-1 bg-black/60 border border-white/10 rounded-lg py-1 px-2 text-[11px] text-white"
+                        />
+                        <button
+                          onClick={() => handleResearchTmdb(i)}
+                          disabled={res.searching}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-2 py-1 rounded-lg text-[10px] font-bold"
+                        >
+                          {res.searching ? '...' : 'Buscar'}
+                        </button>
+                      </div>
                    </div>
                    <div className="flex flex-col items-end gap-1 shrink-0">
                       <label className="text-[8px] font-black text-gray-500 uppercase">Qualidade</label>
