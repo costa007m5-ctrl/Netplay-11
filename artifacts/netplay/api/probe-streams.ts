@@ -105,7 +105,10 @@ async function probeOne(
       };
     }
 
-    // For m3u8: validate manifest content (timeout still active until full read)
+    // For m3u8: validate manifest content ONLY.
+    // Não validamos segmentos: tokens de segmento da workers.dev são single-use/short-lived,
+    // então buscar o segmento aqui consome o token e ainda dá falso negativo (403). O player
+    // gera tokens novos a cada fetch do m3u8, então m3u8 válido = qualidade funcional.
     if (item.url.toLowerCase().includes(".m3u8")) {
       const text = await upstream.text();
       clearTimeout(timeoutId);
@@ -120,68 +123,13 @@ async function probeOne(
           ms: Date.now() - start,
         };
       }
-      // Try probing the first segment to confirm playability
-      const lines = trimmed.split(/\r?\n/);
-      let firstSeg: string | null = null;
-      for (const line of lines) {
-        const t = line.trim();
-        if (t && !t.startsWith("#")) {
-          firstSeg = t;
-          break;
-        }
-      }
-      if (firstSeg) {
-        const lastSlash = item.url.lastIndexOf("/");
-        const baseUrl =
-          lastSlash !== -1 ? item.url.substring(0, lastSlash + 1) : item.url;
-        let absoluteSeg = firstSeg;
-        if (!firstSeg.startsWith("http")) {
-          if (firstSeg.startsWith("/")) {
-            try {
-              const u = new URL(item.url);
-              absoluteSeg = u.origin + firstSeg;
-            } catch {}
-          } else {
-            absoluteSeg = baseUrl + firstSeg;
-          }
-        }
-        if (!isUrlSafe(absoluteSeg)) {
-          return { ...item, ok: false, reason: "blocked_segment_url", ms: Date.now() - start };
-        }
-        const segController = new AbortController();
-        const segTimeout = setTimeout(() => segController.abort(), 5000);
-        try {
-          const segRes = await fetch(absoluteSeg, {
-            method: "GET",
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              Referer: refererStr,
-              Origin: originStr,
-              Range: "bytes=0-1023",
-            },
-            signal: segController.signal,
-          });
-          clearTimeout(segTimeout);
-          if (!segRes.ok && segRes.status !== 206) {
-            return {
-              ...item,
-              ok: false,
-              reason: `segment HTTP ${segRes.status}`,
-              ms: Date.now() - start,
-            };
-          }
-          // Drain just to release connection
-          await segRes.arrayBuffer().catch(() => {});
-        } catch (segErr: any) {
-          clearTimeout(segTimeout);
-          return {
-            ...item,
-            ok: false,
-            reason: `segment ${segErr?.name === "AbortError" ? "timeout" : "fetch_failed"}`,
-            ms: Date.now() - start,
-          };
-        }
+      // Sanity check: manifest must contain at least one segment line
+      const hasSegment = trimmed.split(/\r?\n/).some(l => {
+        const t = l.trim();
+        return t && !t.startsWith("#");
+      });
+      if (!hasSegment) {
+        return { ...item, ok: false, reason: "empty_manifest", ms: Date.now() - start };
       }
     }
 
