@@ -252,7 +252,7 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
           setEnrichStatus(`Buscando informações da Temporada ${s} no TMDB...`);
           const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, s);
           const map = new Map<number, any>();
-          for (const e of (seasonData?.episodes || [])) map.set(Number(e.episode_number), e);
+          for (const e of (seasonData?.data?.episodes || [])) map.set(Number(e.episode_number), e);
           tmdbBySeason[s] = map;
         } catch (e: any) {
           console.warn(`[TMDB enrich V2] Falha na Temporada ${s}:`, e.message);

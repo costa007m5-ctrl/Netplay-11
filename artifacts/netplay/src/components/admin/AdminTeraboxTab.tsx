@@ -440,7 +440,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
         setEnrichStatus(`Buscando sinopses da Temporada ${seasonNum}...`);
         try {
           const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, seasonNum);
-          const tmdbEps: any[] = Array.isArray(seasonData?.episodes) ? seasonData.episodes : [];
+          const tmdbEps: any[] = Array.isArray(seasonData?.data?.episodes) ? seasonData.data.episodes : [];
           if (!tmdbEps.length) continue;
           const byNum = new Map<number, any>();
           for (const e of tmdbEps) byNum.set(Number(e.episode_number), e);
@@ -497,7 +497,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           setEnrichStatus(`Buscando informações da Temporada ${s} no TMDB...`);
           const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, s);
           const map = new Map<number, any>();
-          for (const e of (seasonData?.episodes || [])) map.set(Number(e.episode_number), e);
+          for (const e of (seasonData?.data?.episodes || [])) map.set(Number(e.episode_number), e);
           tmdbBySeason[s] = map;
         } catch (e: any) {
           console.warn(`[TMDB enrich] Falha na Temporada ${s}:`, e.message);
