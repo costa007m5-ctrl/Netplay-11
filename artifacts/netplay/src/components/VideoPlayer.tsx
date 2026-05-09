@@ -453,13 +453,45 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                                 : (moviePreferred && moviePreferred !== 'auto') ? moviePreferred
                                 : null;
                let finalList = qualityList;
+               let forcedByAdmin = false;
                if (preferred) {
-                 const forced = qualityList.find(q => q.id === preferred);
-                 if (forced) {
-                   console.log(`[VideoPlayer] qualidade fixa do admin: ${preferred} (probe pulado)`);
-                   finalList = [forced];
+                 // 1) Match EXATO: pega exatamente fast_stream_url[preferred] da resposta da API
+                 const exact = qualityList.find(q => q.id === preferred);
+                 if (exact) {
+                   console.log(`[VideoPlayer] qualidade fixa do admin: ${preferred} → URL direto da API (probe pulado)`);
+                   finalList = [exact];
+                   forcedByAdmin = true;
                  } else {
-                   console.warn(`[VideoPlayer] qualidade fixa "${preferred}" não disponível no link, caindo pro probe`);
+                   // 2) Match por proximidade: usa a melhor qualidade disponível ABAIXO da escolhida
+                   //    (ex: admin pediu 1080p mas API só tem 720p/480p/360p → usa 720p)
+                   const ladder = ['1080p', '720p', '480p', '360p', '240p'];
+                   const prefIdx = ladder.indexOf(preferred);
+                   if (prefIdx !== -1) {
+                     for (let i = prefIdx; i < ladder.length; i++) {
+                       const candidate = qualityList.find(q => q.id === ladder[i]);
+                       if (candidate) {
+                         console.log(`[VideoPlayer] qualidade fixa "${preferred}" indisponível, usando próxima abaixo: ${ladder[i]} (probe pulado)`);
+                         finalList = [candidate];
+                         forcedByAdmin = true;
+                         break;
+                       }
+                     }
+                     // Se não tem nada abaixo, tenta acima (última tentativa antes de cair pro probe)
+                     if (!forcedByAdmin) {
+                       for (let i = prefIdx - 1; i >= 0; i--) {
+                         const candidate = qualityList.find(q => q.id === ladder[i]);
+                         if (candidate) {
+                           console.log(`[VideoPlayer] qualidade fixa "${preferred}" indisponível, usando próxima acima: ${ladder[i]} (probe pulado)`);
+                           finalList = [candidate];
+                           forcedByAdmin = true;
+                           break;
+                         }
+                       }
+                     }
+                   }
+                   if (!forcedByAdmin) {
+                     console.warn(`[VideoPlayer] qualidade fixa "${preferred}" não tem nenhum match na API, caindo pro probe`);
+                   }
                  }
                }
 
@@ -467,7 +499,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                // em paralelo ANTES de entregar uma URL pro player. Só roda se admin não fixou qualidade.
                // workers.dev às vezes retorna HTTP 200 com body VAZIO em qualidades quebradas.
                // Timeout de 5s: se probe demorar/falhar, usa a lista original como fallback.
-               if (!preferred && qualityList.length > 1) {
+               if (!forcedByAdmin && qualityList.length > 1) {
                  const probeController = new AbortController();
                  probeAbortRef.current?.abort();
                  probeAbortRef.current = probeController;
