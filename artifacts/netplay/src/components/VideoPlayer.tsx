@@ -445,60 +445,63 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                  qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
                }
 
-               // First quality = best available (será refinado pelo probe abaixo)
-               const stUrl = qualityList[0]?.url;
-               if (stUrl) {
-                  setExtractedVideoUrl(stUrl);
-                  setFinalVideoUrl(stUrl);
-                  setExtractedQualities(qualityList);
-               }
-
-               // SMART PROBE: testa todas as qualidades em paralelo no servidor.
-               // Devolve só as que realmente carregam (manifest + primeiro segmento).
-               // Cancela se o usuário trocar de vídeo antes do probe terminar.
+               // SMART PROBE BLOQUEANTE: aguarda o servidor testar todas as qualidades
+               // em paralelo ANTES de entregar uma URL pro player. Garante que o player
+               // só tenta qualidades funcionais — workers.dev às vezes retorna HTTP 200
+               // com body VAZIO em qualidades quebradas, então só checar status não basta.
+               // Timeout de 5s: se probe demorar/falhar, usa a lista original como fallback.
+               let finalList = qualityList;
                if (qualityList.length > 1) {
                  const probeController = new AbortController();
                  probeAbortRef.current?.abort();
                  probeAbortRef.current = probeController;
                  const probeMovieId = movie.id;
-                 (async () => {
-                   try {
-                     const probeRes = await fetch('/api/probe-streams', {
-                       method: 'POST',
-                       headers: { 'Content-Type': 'application/json' },
-                       signal: probeController.signal,
-                       body: JSON.stringify({
-                         urls: qualityList.slice(0, 6).map(q => ({
-                           quality: q.id,
-                           label: q.label,
-                           url: q.url,
-                         })),
-                       }),
-                     });
-                     if (probeController.signal.aborted || probeMovieId !== movie.id) return;
-                     if (!probeRes.ok) return;
+                 const probeTimeout = setTimeout(() => probeController.abort(), 5000);
+                 try {
+                   const probeRes = await fetch('/api/probe-streams', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     signal: probeController.signal,
+                     body: JSON.stringify({
+                       urls: qualityList.slice(0, 6).map(q => ({
+                         quality: q.id,
+                         label: q.label,
+                         url: q.url,
+                       })),
+                     }),
+                   });
+                   clearTimeout(probeTimeout);
+                   if (probeMovieId === movie.id && probeRes.ok) {
                      const probeData = await probeRes.json();
-                     if (probeController.signal.aborted || probeMovieId !== movie.id) return;
                      const working: any[] = Array.isArray(probeData?.working) ? probeData.working : [];
-                     if (working.length === 0) {
-                       console.warn('[VideoPlayer] probe: nenhuma qualidade respondeu, mantendo lista original');
-                       return;
+                     if (working.length > 0) {
+                       const workingIds = new Set(working.map(w => w.quality));
+                       const filtered = qualityList.filter(q => workingIds.has(q.id));
+                       if (filtered.length > 0) {
+                         finalList = filtered;
+                         console.log(`[VideoPlayer] probe: ${filtered.length}/${qualityList.length} qualidades funcionais`,
+                           working.map((w:any) => `${w.quality}(${w.ms}ms)`).join(', '));
+                       }
+                     } else {
+                       console.warn('[VideoPlayer] probe: nenhuma qualidade respondeu, usando lista original');
                      }
-                     console.log(`[VideoPlayer] probe: ${working.length}/${qualityList.length} qualidades funcionais`,
-                       working.map(w => `${w.quality}(${w.ms}ms)`).join(', '));
-                     const workingIds = new Set(working.map(w => w.quality));
-                     const filteredList = qualityList.filter(q => workingIds.has(q.id));
-                     if (filteredList.length > 0) {
-                       const newBest = filteredList[0].url;
-                       setExtractedVideoUrl(newBest);
-                       setFinalVideoUrl(newBest);
-                       setExtractedQualities(filteredList);
-                     }
-                   } catch (probeErr: any) {
-                     if (probeErr?.name === 'AbortError') return;
-                     console.warn('[VideoPlayer] probe falhou (mantém lista original):', probeErr);
                    }
-                 })();
+                 } catch (probeErr: any) {
+                   clearTimeout(probeTimeout);
+                   if (probeErr?.name !== 'AbortError') {
+                     console.warn('[VideoPlayer] probe falhou (usando lista original):', probeErr);
+                   } else {
+                     console.warn('[VideoPlayer] probe timeout, usando lista original');
+                   }
+                 }
+               }
+
+               // Agora sim — define a URL inicial (só com qualidade VERIFICADA quando possível)
+               const stUrl = finalList[0]?.url;
+               if (stUrl) {
+                  setExtractedVideoUrl(stUrl);
+                  setFinalVideoUrl(stUrl);
+                  setExtractedQualities(finalList);
                }
                
                const subUrl = vid.subtitle_url || data.subtitle || data.subtitle_url;

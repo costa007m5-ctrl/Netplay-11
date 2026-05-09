@@ -1,0 +1,29 @@
+{
+  "status": "success",
+  "total_files": 1,
+  "list": [
+    {
+      "fs_id": 529397921613120,
+      "name": "01x11 Duck Dodgers (2003) - 01x11 - K-9 Kaddy [por - 1080p].mkv",
+      "size": 218542169,
+      "size_formatted": "208.42 MB",
+      "type": "video",
+      "is_dir": "0",
+      "duration": "22:29",
+      "quality": "720p",
+      "normal_dlink": "https://billowing-term-8530.rikiqery.workers.dev/download?token=RlGQsh_0ZTcrK08fzMkBFqndmmO7ltYz-F8fp3RcI6rPIAHj_4y6qL7lLfVVbTq5PzHn3TjzgNobPielTHTcfzKcU3BPXMmeBuOgVkDsTwufi9TmVeJ3O7jmSAiiWVVF9wIo5wFkxLb10MG2sxF3hef56GsmMVgg_8r8cov1frOpUdrA7BDBAItvaGSNzynG1J-Oq4t07fwBw1-yRAYPCWx2CbS3OTv4HU3VsNIVDDTyMRnjyXBHxaeHpXIBsGI67BsjsMnv2uhkko1YqLn5fhVk08DC3gHMabseeZHglx1ekerdqvPonbPsD7lVDjGK3WBcgN34tp6UEDzjua4t5gncSh_vxmE5myzQjeKU2JWn5fFOaItSVB6QAJJ_WCzJWYZc8YH9dIUah1AUHvaSOMUN1K5mQhV7bGLcTxSoTFvUeTHQ2HcfWO68q9jRsbtDYhfTKtqQcUVb2RB3QKtD27TIyaWfFV20r8g0PB6n58Pa5h4ShHeYjfuIfAUlwUle5741N5n_39808UWfNRCR&file_name=01x11%20Duck%20Dodgers%20(2003)%20-%2001x11%20-%20K-9%20Kaddy%20%5Bpor%20-%201080p%5D.mkv",
+      "zip_dlink": "https://billowing-term-8530.rikiqery.workers.dev/download?token=CW-L7wk_rVKNsHfEH-PFTvKu41u7vkk2BAoAV-3nusYLurBaZW6vRFgzj-p1RLeM6wNzhA-8QY_KuDFTvpR-9tMtj0BqdN0Bi6FPzigr3-IsbKjMldc0PnABApA590ACMy6GkaApmUrihp_EEBw7G3X4p5ZPIV8Ulf8yJ_rYOCgwZrJXqi8YvZPuyntQ2qCyySkmCamfl6C9W6PROM90uu-dHSFBLJE9FEdKi-7MITNMUjyvNfriUd2E_7ZDZRDdU5kxoLNDOZ0ZI4YV-5ExxTadFieyoY-M4WB3QtxFV-5cPgheh5Y2FowP3c7was0p5OVGF3ijRIBHlecntf1_OEG7hNXjv3uGfMmIXxU6VGOvIPnv7hEQ5eF9V-ZW9llbguylmgInyX-NE7ejcDj73tSs3ATtA0xnBM2dKDXymcMBsUK5PcO-LvkKcnf4X46u1TGz6-Sa6Zfm-UdX5NMkZ8usitOz8rFwQ4-bBTXZt6p5kd0YSQykyCdK2wLKEebx6LX2yO_C6hNvBJfZZUYdGG1SiShQgK2XcXXCQ1MLAYMJkK6HXt4FoyLcnNM7TcDT2GEuv7HdoSxsRRvSzrjd6RZS1FAUYjq0QPf-_W1G6kfGItBZ_DwLV3D7YiiLvPuHXlvexL86olB_7LrQvk_zsCXd4r2WkxVsvIuC9rdb&file_name=01x11%20Duck%20Dodgers%20(2003)%20-%2001x11%20-%20K-9%20Kaddy%20%5Bpor%20-%201080p%5D.mkv.zip",
+      "fast_stream_url": {
+        "360p": "https://billowing-term-8530.rikiqery.workers.dev/fast_stream?token=0g8by6pc6mrvZ1l0rYDBaEMrW8IALOcuJvAccd7U_yrDlNzbHcUKKd-lgVMW60qlSqKeN13Sfrh_V5qj5KpumJtdSYyboC55Eiya95BVn1eLr88QVLfYVgsa2B7u9nwUOSFqSGZko4WbQbVDF8A2wPX0tx0ZPJ8VwPppwGXH9QUw3mGyRyJ8QXKn7PwkoPCX-36FUo3FkDgLGRQc95vcWHetAjDbZPROL_HZZc0GzsGrO8iIjbMBVP8rub1TWnkXsyaUQFyZDg8Tn8mK8lI2GXxJCj7RtC098p40WlWgiLN5XAIVG2jn2p_T6LJlV_t-BhtE9M87o_onTNR1655Iwc2ppmSnPi8NRMy6sCVdFVZ-teEeruEuqq_dGLxsUfCN1TmQWK6Mb33resXZGhpSdPS9nRQjzPyeZnc8qseoeTVJ.m3u8",
+        "480p": "https://billowing-term-8530.rikiqery.workers.dev/fast_stream?token=P7OuoFuRH3m75P8fZVq86R4sRDIzYQLtgf0v7p9ZDjPYwKokSh1n0PP3vZ84tsw5iqX0jFE8-F3N-8wC7iquHeWwJdmyUV-bhcmadwxGiF92XuCqjqDgCToz_J4jdDRklMY4Y1J6UmUynNGmqjyWmuSzKo-oZzcNg1-NmLpJaVCHSACQll2pQUF1Lrekd7lqbYwTFCOrp8NEqc6U_tNICd96KgLP18qa_dH43jorMbvdvzXnA-KuZMusVB2q0_yWrhoOKkRYcQYC1fbgVw5PzNYie6DNDDIDT0kTCJXIZPO4atqHnZSp_NmSc3FT_lssYHTxTlmnIzUpuhFqQPkfpdcBdaY8Z4gSJ9ZkYMsbQlRFA2Wpo6Gu2BYyX_dFAcS-09TFYHptmATnUkjZ7X9jH7dVC1Wzsq0KfSXv6J6h4zmh.m3u8",
+        "720p": "https://billowing-term-8530.rikiqery.workers.dev/fast_stream?token=C2HjpmAubqfa-hppfS3Njz3JQgZR_hgcPco1lDcRBZLHSrMzZ4d2kBAsLaLjf-MNRa-q7-uhQ8MjtI3KWDXIieN-BWI8pg5JgaAv5jCigKUF7WiCD3lJA0Zf6raPO5vq5ltMsoFfaZQ2SJo8u01J_Kynwtj0B_SvfH8BoypNcqk7Rp-MbliLvaGz-NqT_yYZ5DEkbLgWRyhV0OhJqvsc_lX2nMZvkvR4PuI29dhv6rEtBREng8p8aI0Nn6GF8UJ4qqvQJCk0Ta5hdMhXd03TprBTWWv7jCZW1oThzQ3pN50opWpTfIFsBoVo8W8WokDX6RppQ5R9N2qvaoI8MaR_iPATQaH6nVaIELkJKqwC7k3YX-Zne84w5HcocyDlj39yS1qxgXD-NPM5ayJrEIQLHboWghwqAQ26gqlUFhzi2dFF.m3u8"
+      },
+      "subtitle_url": "https://billowing-term-8530.rikiqery.workers.dev/subtitle?token=5r4n55K7Eohx9QQDIU1B77wPFEM_LEgxQv7gr3lIoKLY53qosk3Jdhao2YU9m8WhIgvfIiwiD0EQIWj88MOQgMHNy8lpgOSpjHofHY5hNTix0jOE15lKHEqhuqV4vbTvxAGauYbMSgUU5nF93TvBPrC2YzbOdOpeu5_lBLFPfKcsTSM-0kNkgzMoh3yQUqpxRUguOTldDpGrMO9mvWVQSqL591QEliUBwkpjOAJXBOF5tdMWxoVCNlJ3_rLeRGKfW5Ms12G3ekMPNuIgZjuENoKXrgrx1ULaRHr4iaAU2goWrQ96pAAe-ovzLp3E8xVTuHUmga1nuIH8QbkcibMksNEjQMbA-UEOHZBJXEK13u6SZkaW1iQjD-2GlQC-nZeXGFQtdIzIqWqaDqvvFR4jCSHxOMmYY36B33-E4IxKYyMoxdau24U3LeeFB-AOkKEAKl1CkVoUueO64bYq3yLI_fcIn-5dGwvScMHRyZm22RFYkX7Mg5gHvDsD8M_2u3Fbk7IBiK4ZCPIsoD-7HTivU1dbaf-HvH3h-Lk",
+      "thumbnail": "https://billowing-term-8530.rikiqery.workers.dev/thumbnail?token=4WsRVN3KtwW1ngKjcHcW_Dgy39BXHG8DaZtEfX_mIqq75KbI2JwuFoIi07OXJMx_xK2sVpP9f4CTZrPmU-tCduGvOAIWEehtbgm8cXT5rh6mq-aSCMrL2dougH5cBP6WhZ-It-uYhL7uG8Wm3UqexUjJO4-UCHfiUrqmO5IIF7_22UpcsOyRF6_DNLbgH0TSZvBubqrLU2IrnpY6vysncW75a_Gjyj9iRTnecZPx_eqLlUHJZtzKTEBeQux_awu1SRypVSmSFwsPV-FwdbeNgoXik0ROVYDzm0v5aomdSKhRkl6O0ePzGfnN_M8nM7yaYr0bqAwSLiQxc3Hbx38vo99JslCC1AZ_czdYO6KEP7A0xK2xO2GjpghXHAr2XsMlWQ0KE4iU5KuajZjr0zZSvyS9-CBkHxvMrsCBZr4p0T0GIp4-5xLiP5O-fMDnwjuHE-tg94G1C31sg-rccuLVekqpEfDGCpm393IP70lM_R1PFMKJUBQ5BzVLqOlJo8EMm171qW2jNq2NyBcFvdxGkyjX5BwMFbHXuHVj1IP8oZOMxpxesJgCSp-Ja_HFFI31XRis16xP1cUiFbS3khizBw.webp",
+      "folder": "root"
+    }
+  ],
+  "free_credits_remaining": "0/100",
+  "charged": "0.000100",
+  "current_balance": "4.985100"
+}
