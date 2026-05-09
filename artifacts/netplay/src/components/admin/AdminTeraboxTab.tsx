@@ -65,8 +65,6 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     if (!testVid) return [] as { id: string; label: string; url: string }[];
     const fs = testVid.fast_stream_url || {};
     const native = typeof testVid.quality === 'string' ? testVid.quality : undefined;
-    const rank: Record<string, number> = { '240p':1, '360p':2, '480p':3, '720p':4, '1080p':5 };
-    const nativeR = native && rank[native] ? rank[native] : 99;
     const order = [
       { k:'1080p', label:'1080p (Full HD)' },
       { k:'720p',  label:'720p (HD)' },
@@ -76,7 +74,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     ];
     const list: { id: string; label: string; url: string }[] = [];
     for (const o of order) {
-      if (fs[o.k] && typeof fs[o.k] === 'string' && (rank[o.k] || 0) <= nativeR) {
+      if (fs[o.k] && typeof fs[o.k] === 'string') {
         list.push({ id: o.k, label: o.label + (native === o.k ? ' [nativa]' : ''), url: fs[o.k] });
       }
     }

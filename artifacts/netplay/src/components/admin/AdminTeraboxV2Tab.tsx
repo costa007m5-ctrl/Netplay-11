@@ -65,8 +65,6 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
     if (!testVid) return [] as { id: string; label: string; url: string }[];
     const fs = testVid.fast_stream_url || {};
     const native = typeof testVid.quality === 'string' ? testVid.quality : undefined;
-    const rank: Record<string, number> = { '240p':1, '360p':2, '480p':3, '720p':4, '1080p':5 };
-    const nativeR = native && rank[native] ? rank[native] : 99;
     const order = [
       { k:'1080p', label:'1080p (Full HD)' },
       { k:'720p',  label:'720p (HD)' },
@@ -76,7 +74,7 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
     ];
     const list: { id: string; label: string; url: string }[] = [];
     for (const o of order) {
-      if (fs[o.k] && typeof fs[o.k] === 'string' && (rank[o.k] || 0) <= nativeR) {
+      if (fs[o.k] && typeof fs[o.k] === 'string') {
         list.push({ id: o.k, label: o.label + (native === o.k ? ' [nativa]' : ''), url: fs[o.k] });
       }
     }
@@ -878,11 +876,38 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
           </button>
         </div>
 
-        {error && (
-          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-            {error}
-          </div>
-        )}
+        {error && (() => {
+          const lower = error.toLowerCase();
+          const isUnstable = lower.includes('504') || lower.includes('502') || lower.includes('timed out') || lower.includes('timeout') || lower.includes('gateway') || lower.includes('unreachable');
+          if (isUnstable) {
+            return (
+              <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-300 text-sm space-y-2">
+                <div className="font-bold flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>API Terabox 2.0 instável no momento</span>
+                </div>
+                <div className="text-yellow-200/90 text-xs leading-relaxed">
+                  O servidor da API v2 (api-v2.teraboxdl.site) não está respondendo a tempo. Isso é um problema do provedor da API, não do seu app.
+                  <br /><br />
+                  <strong>O que fazer:</strong>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    <li>Aguarde alguns minutos e tente novamente</li>
+                    <li>Use a aba <span className="text-cyan-300 font-semibold">"Admin API Terabox"</span> (v1) enquanto isso — ela está estável</li>
+                  </ul>
+                </div>
+                <details className="text-xs text-yellow-200/60 mt-2">
+                  <summary className="cursor-pointer">Detalhes técnicos</summary>
+                  <div className="mt-2 p-2 bg-black/30 rounded font-mono break-all">{error}</div>
+                </details>
+              </div>
+            );
+          }
+          return (
+            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+              {error}
+            </div>
+          );
+        })()}
         
         {testQualities.length > 0 && (
           <div className="mt-6 bg-black/40 border border-cyan-500/20 rounded-xl p-4">
