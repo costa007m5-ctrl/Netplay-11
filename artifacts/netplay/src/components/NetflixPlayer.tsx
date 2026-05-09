@@ -76,6 +76,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const iframeLoadedRef = useRef(false);
   const startedHlsRef = useRef(false);
   const videoToPlayRef = useRef('');
+  const failedSourcesRef = useRef<Set<string>>(new Set());
   
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
@@ -232,8 +233,28 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       setSessionKey(Date.now());
       setShowStuckButton(false);
       setAutoplayBlocked(false);
+      // Reset failed sources when external src changes (new movie/episode)
+      failedSourcesRef.current = new Set();
     }
   }, [parsedUrls.video_url, parsedUrls.subtitle_url]);
+
+  // Quando o ativo trocar pelo fallback, garantir que o player reinicie a sessão
+  useEffect(() => {
+    if (activeSrc && parsedUrls.video_url && activeSrc !== parsedUrls.video_url) {
+      setSessionKey(Date.now());
+      startedHlsRef.current = false;
+    }
+  }, [activeSrc]);
+
+  // Sincroniza o label de qualidade atual com videoUrlOptions
+  useEffect(() => {
+    if (videoUrlOptions && videoUrlOptions.length > 0) {
+      const match = videoUrlOptions.find(o => o.url === activeSrc);
+      if (match && currentQuality !== match.label) {
+        setCurrentQuality(match.label);
+      }
+    }
+  }, [activeSrc, videoUrlOptions]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1024,6 +1045,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       // Evitamos conflito com erros nativos prematuros do HTMLMediaElement.
       if (activeSrc && activeSrc.toLowerCase().includes('.m3u8') && Hls.isSupported() && hlsRef.current) {
         return; 
+      }
+
+      // AUTO-FALLBACK entre qualidades: se a URL atual falhou e existem outras qualidades,
+      // tenta a próxima imediatamente (ex: 1080p falha → tenta 720p → 480p → 360p)
+      if (videoUrlOptions && videoUrlOptions.length > 1) {
+        const currentIdx = videoUrlOptions.findIndex(o => o.url === activeSrc);
+        // Marca a atual como falha
+        if (activeSrc) failedSourcesRef.current.add(activeSrc);
+        // Procura a próxima opção que ainda não falhou
+        const nextOption = videoUrlOptions.find((o, i) => i !== currentIdx && !failedSourcesRef.current.has(o.url));
+        if (nextOption) {
+          console.warn(`[Quality fallback] ${currentIdx >= 0 ? videoUrlOptions[currentIdx].label : 'atual'} falhou, tentando ${nextOption.label}`);
+          setQualityToast(`Tentando ${nextOption.label}...`);
+          setTimeout(() => setQualityToast(null), 2500);
+          retryCountRef.current = 0;
+          setActiveSrc(nextOption.url);
+          setCurrentQuality(nextOption.label);
+          setIsAutoQuality(false);
+          return;
+        }
       }
 
       if (retryCountRef.current < 5) { // reduced to 5 for faster failure detection
@@ -2407,6 +2448,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           {/* Barra de Progresso */}
           <div className={`flex items-center gap-4 group/progress ${(roomId && !isHost) ? 'pointer-events-none opacity-50' : ''}`}>
             <span className="text-white text-sm font-medium min-w-[50px]">{formatTime(currentTime)}</span>
+            {currentQuality && currentQuality !== 'Auto' && (
+              <span
+                className="hidden sm:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-white/90 bg-white/10 backdrop-blur-md border border-white/15 px-2.5 py-1 rounded-md shadow-md"
+                title="Qualidade atual"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                {currentQuality}
+              </span>
+            )}
             <div 
               className="relative flex-1 h-2 md:h-1.5 bg-gray-600/50 rounded-full cursor-pointer group/bar hover:h-3 transition-all"
               onMouseMove={(e) => {

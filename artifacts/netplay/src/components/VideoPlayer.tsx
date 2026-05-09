@@ -69,6 +69,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [extractedVideoUrl, setExtractedVideoUrl] = useState<string | null>(getInitialExtracted('video'));
   const [extractedSubtitleUrl, setExtractedSubtitleUrl] = useState<string | null>(getInitialExtracted('subtitle'));
   const [isExtractingTerabox, setIsExtractingTerabox] = useState(false);
+  const [extractedQualities, setExtractedQualities] = useState<{ id: string; label: string; url: string }[]>([]);
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
   const [showEmotePicker, setShowEmotePicker] = useState(false);
@@ -422,11 +423,33 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
             
             if (vid) {
-               const stUrl = vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
-               
+               // Build COMPLETE quality list — all available resolutions, ordered best→worst
+               const qualityList: { id: string; label: string; url: string }[] = [];
+               const fs = vid.fast_stream_url || {};
+               const qualityOrder: Array<{ k: string; label: string }> = [
+                 { k: '1080p', label: '1080p (Full HD)' },
+                 { k: '720p',  label: '720p (HD)' },
+                 { k: '480p',  label: '480p (SD)' },
+                 { k: '360p',  label: '360p' },
+                 { k: '240p',  label: '240p' },
+               ];
+               for (const q of qualityOrder) {
+                 if (fs[q.k] && typeof fs[q.k] === 'string') {
+                   qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
+                 }
+               }
+               // Fallbacks de download (sem qualidade conhecida) — vão pro final como "Download"
+               const directUrl = vid.normal_dlink || vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
+               if (directUrl && !qualityList.some(q => q.url === directUrl)) {
+                 qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
+               }
+
+               // First quality = best available
+               const stUrl = qualityList[0]?.url;
                if (stUrl) {
                   setExtractedVideoUrl(stUrl);
                   setFinalVideoUrl(stUrl);
+                  setExtractedQualities(qualityList);
                }
                
                const subUrl = vid.subtitle_url || data.subtitle || data.subtitle_url;
@@ -607,11 +630,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
        : (movie.title || movie.name || "");
     const hasNextEpisode = currentIndex !== -1 && movie.episodes && currentIndex < movie.episodes.length - 1;
 
-    const videoUrlOptions = [];
-    if (finalVideoUrl || extractedVideoUrl) {
+    const videoUrlOptions: { id: string; label: string; url: string }[] = [];
+    // Se Terabox extraiu múltiplas qualidades, expor todas (1080p, 720p, 480p, 360p, ...)
+    if (extractedQualities.length > 0) {
+      videoUrlOptions.push(...extractedQualities);
+    } else if (finalVideoUrl || extractedVideoUrl) {
       videoUrlOptions.push({ id: 'sd', label: 'Padrão (SD)', url: extractedVideoUrl || finalVideoUrl || "" });
     }
-    if (movie.videoUrl2) {
+    if (movie.videoUrl2 && !videoUrlOptions.some(o => o.url === movie.videoUrl2)) {
       videoUrlOptions.push({ id: 'hd', label: 'Alta Definição (HD)', url: movie.videoUrl2 });
     }
 
