@@ -1,21 +1,33 @@
 const DYNAMIC_REF_PREFIX = 'terabox-folder://';
+const DYNAMIC_REF_PREFIX_V2 = 'terabox-folder-v2://';
 const SEPARATOR = '###';
 
 export function isDynamicRef(url: string | undefined): boolean {
-  return !!url && url.startsWith(DYNAMIC_REF_PREFIX);
+  return !!url && (url.startsWith(DYNAMIC_REF_PREFIX) || url.startsWith(DYNAMIC_REF_PREFIX_V2));
+}
+
+export function isDynamicRefV2(url: string | undefined): boolean {
+  return !!url && url.startsWith(DYNAMIC_REF_PREFIX_V2);
 }
 
 export function makeDynamicRef(folderUrl: string, filename: string): string {
   return `${DYNAMIC_REF_PREFIX}${folderUrl}${SEPARATOR}${filename}`;
 }
 
-export function parseDynamicRef(url: string): { folderUrl: string; filename: string } {
-  const raw = url.slice(DYNAMIC_REF_PREFIX.length);
+export function makeDynamicRefV2(folderUrl: string, filename: string): string {
+  return `${DYNAMIC_REF_PREFIX_V2}${folderUrl}${SEPARATOR}${filename}`;
+}
+
+export function parseDynamicRef(url: string): { folderUrl: string; filename: string; v2: boolean } {
+  const v2 = url.startsWith(DYNAMIC_REF_PREFIX_V2);
+  const prefix = v2 ? DYNAMIC_REF_PREFIX_V2 : DYNAMIC_REF_PREFIX;
+  const raw = url.slice(prefix.length);
   const sepIdx = raw.indexOf(SEPARATOR);
-  if (sepIdx === -1) return { folderUrl: raw, filename: '' };
+  if (sepIdx === -1) return { folderUrl: raw, filename: '', v2 };
   return {
     folderUrl: raw.slice(0, sepIdx),
     filename: raw.slice(sepIdx + SEPARATOR.length),
+    v2,
   };
 }
 
@@ -39,8 +51,9 @@ function pickBestUrl(file: any): string | null {
 export async function resolveTeraboxUrl(url: string): Promise<string> {
   if (!url || !isDynamicRef(url)) return url;
 
-  const { folderUrl, filename } = parseDynamicRef(url);
-  const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(folderUrl)}`);
+  const { folderUrl, filename, v2 } = parseDynamicRef(url);
+  const endpoint = v2 ? '/api/terabox-v2' : '/api/terabox-pro';
+  const res = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}`);
   const text = await res.text();
   let data: any;
   try {
@@ -55,9 +68,6 @@ export async function resolveTeraboxUrl(url: string): Promise<string> {
 
   const list: any[] = Array.isArray(data.list) ? data.list : [];
 
-  // Detect upstream success-but-empty: Terabox API returned 200 but couldn't read any file.
-  // This happens with expired, deleted, or private links — show clear message instead of
-  // a confusing "file not found" further down.
   if (list.length === 0) {
     const totalFiles = typeof data.total_files === 'number' ? data.total_files : 0;
     throw new Error(
