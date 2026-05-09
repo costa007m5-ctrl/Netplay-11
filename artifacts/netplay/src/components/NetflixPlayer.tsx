@@ -913,8 +913,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const didSeek = Math.abs(time - lastTimeRef.current) > 2;
       lastTimeRef.current = time;
 
-      if (time > 0.1 && video.readyState >= 3 && !video.seeking) {
+      if (time > 0.5 && video.readyState >= 3 && !video.seeking && !video.paused) {
         if (isLoading) {
+          hasStartedPlayedRef.current = true;
           setIsLoading(false);
           setLoadingProgress(100);
           setShowLogoOverlay(false);
@@ -1025,6 +1026,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
 
     const handlePlaying = () => {
+      // Só esconde loading quando o vídeo realmente avançou (frame renderizado),
+      // evita o "loading some uns segundos antes do play tocar"
+      if (video.currentTime <= 0 || video.readyState < 3) {
+        setIsPlaying(true);
+        return;
+      }
       hasStartedPlayedRef.current = true;
       setIsLoading(false);
       setLoadingProgress(100);
@@ -1458,9 +1465,40 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
   const getQualityColor = (height: number) => {
     if (height >= 2160) return 'from-amber-400 to-amber-600';
+    if (height >= 1440) return 'from-orange-400 to-orange-600';
     if (height >= 1080) return 'from-red-500 to-red-700';
     if (height >= 720) return 'from-blue-500 to-blue-700';
+    if (height >= 480) return 'from-emerald-500 to-emerald-700';
+    if (height >= 360) return 'from-purple-500 to-purple-700';
+    return 'from-slate-500 to-slate-700';
+  };
+
+  // Cores por label de qualidade (string). Funciona pra "FULL HD", "HD", "1080p", "720p", "480p (SD)", "Padrão", etc.
+  const getQualityColorByLabel = (label: string | undefined | null): string => {
+    if (!label) return 'from-slate-500 to-slate-700';
+    const l = label.toUpperCase();
+    if (l.includes('4K') || l.includes('2160')) return 'from-amber-400 to-amber-600';
+    if (l.includes('2K') || l.includes('1440') || l.includes('QUAD')) return 'from-orange-400 to-orange-600';
+    if (l.includes('1080') || l.includes('FULL HD')) return 'from-red-500 to-red-700';
+    if (l.includes('720') || (l.includes('HD') && !l.includes('FULL'))) return 'from-blue-500 to-blue-700';
+    if (l.includes('480') || l.includes('PADRÃO') || l === 'SD') return 'from-emerald-500 to-emerald-700';
+    if (l.includes('360') || l.includes('ECONOMIA')) return 'from-purple-500 to-purple-700';
+    if (l.includes('240') || l.includes('BÁSICO')) return 'from-slate-500 to-slate-700';
     return 'from-gray-500 to-gray-700';
+  };
+
+  // Cor do "ponto" indicador (sem gradiente)
+  const getQualityDotColor = (label: string | undefined | null): string => {
+    if (!label) return 'bg-slate-500';
+    const l = label.toUpperCase();
+    if (l.includes('4K') || l.includes('2160')) return 'bg-amber-500';
+    if (l.includes('2K') || l.includes('1440') || l.includes('QUAD')) return 'bg-orange-500';
+    if (l.includes('1080') || l.includes('FULL HD')) return 'bg-red-500';
+    if (l.includes('720') || (l.includes('HD') && !l.includes('FULL'))) return 'bg-blue-500';
+    if (l.includes('480') || l.includes('PADRÃO') || l === 'SD') return 'bg-emerald-500';
+    if (l.includes('360') || l.includes('ECONOMIA')) return 'bg-purple-500';
+    if (l.includes('240') || l.includes('BÁSICO')) return 'bg-slate-500';
+    return 'bg-gray-500';
   };
 
   const handleQualityChange = (levelId: number | string) => {
@@ -2370,10 +2408,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                           <button
                             key={option.id}
                             onClick={() => handleQualityChange(option.id)}
-                            className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${activeSrc === option.url ? 'bg-white/10 text-white shadow-lg border border-white/10' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent'}`}
+                            className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${activeSrc === option.url ? `bg-gradient-to-r ${getQualityColorByLabel(option.label)} text-white shadow-lg border border-white/20` : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent'}`}
                           >
                              <div className="flex items-center gap-3">
-                               <div className="w-8 h-5 flex items-center justify-center rounded-[3px] text-[8px] font-black bg-gradient-to-br from-gray-500 to-gray-600 text-white shadow-sm uppercase">
+                               <div className={`w-10 h-5 flex items-center justify-center rounded-[3px] text-[8px] font-black bg-gradient-to-br ${getQualityColorByLabel(option.label || option.id)} text-white shadow-sm uppercase`}>
                                  {option.id}
                                </div>
                                <span>{option.label}</span>
@@ -2493,10 +2531,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
             <span className="text-white text-sm font-medium min-w-[50px]">{formatTime(currentTime)}</span>
             {currentQuality && currentQuality !== 'Auto' && (
               <span
-                className="hidden sm:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-white/90 bg-white/10 backdrop-blur-md border border-white/15 px-2.5 py-1 rounded-md shadow-md"
+                className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-white bg-gradient-to-br ${getQualityColorByLabel(currentQuality)} border border-white/20 px-2.5 py-1 rounded-md shadow-md`}
                 title="Qualidade atual"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                 {currentQuality}
               </span>
             )}
@@ -2599,14 +2637,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
             <div className="flex items-center gap-4 md:gap-8">
               <div className="flex items-center gap-3 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10 backdrop-blur-md shadow-xl">
-                {isAutoQuality && <div className="text-[8px] font-black text-red-600 animate-pulse italic">AUTO</div>}
-                <div className={`px-2 py-0.5 rounded-[3px] text-[10px] md:text-[12px] font-black text-white italic tracking-tighter uppercase whitespace-nowrap bg-gradient-to-br shadow-lg ${
-                  currentQuality === '4K' ? 'from-amber-400 to-amber-600' :
-                  currentQuality === '2K' ? 'from-orange-400 to-orange-600' :
-                  currentQuality === 'FULL HD' ? 'from-red-500 to-red-650' :
-                  currentQuality === 'HD' ? 'from-blue-500 to-blue-650' :
-                  'from-gray-500 to-gray-600'
-                }`}>
+                {isAutoQuality && (
+                  <div className={`px-1.5 py-0.5 rounded text-[8px] font-black text-white italic tracking-tighter uppercase bg-gradient-to-br ${getQualityColorByLabel(currentQuality)} shadow animate-pulse`}>
+                    AUTO
+                  </div>
+                )}
+                <div className={`px-2 py-0.5 rounded-[3px] text-[10px] md:text-[12px] font-black text-white italic tracking-tighter uppercase whitespace-nowrap bg-gradient-to-br shadow-lg ${getQualityColorByLabel(currentQuality)}`}>
                   {currentQuality}
                 </div>
               </div>
