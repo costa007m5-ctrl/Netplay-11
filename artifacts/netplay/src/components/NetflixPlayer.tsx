@@ -797,18 +797,50 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                  console.error("FATAL HLS ERROR DETAILS:", { type: data.type, details: data.details, response: data.response });
 
                  const respCode = data.response?.code;
-                 // 451 = our proxy detected upstream "need verify" (Terabox session required).
-                 // 403/404 = link expired or blocked. In all these cases, fallback to iframe IMMEDIATELY
-                 // since the original kingx.dev player has the user's session/cookies.
-                 const needsIframeFallback =
-                   respCode === 451 ||
-                   respCode === 403 ||
-                   respCode === 404 ||
+                 // PRIORIDADE NETFLIX PLAYER: damos ao HLS várias chances antes de desistir.
+                 // 451/403/404 muitas vezes são transitórios (rate limit, cache stale, race no upstream).
+                 // Tentamos até 4x com backoff antes de cair pro iframe.
+                 const isAuthError = respCode === 451 || respCode === 403 || respCode === 404;
+                 const isManifestParseError =
                    data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR ||
                    data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_VERSIONS_ERROR;
+                 const MAX_RETRIES = 7;
 
-                 if (needsIframeFallback && iframeFallbackUrl) {
-                   console.warn(`[NetflixPlayer] HLS failed (${data.details}/${respCode}) — switching to iframe fallback`);
+                 const shouldRetry = (isAuthError || data.type === Hls.ErrorTypes.NETWORK_ERROR) && retryCountRef.current < MAX_RETRIES;
+
+                 if (shouldRetry) {
+                   retryCountRef.current++;
+                   // Backoff: 500ms, 1s, 2s, 3.5s, 5s, 7s, 9s — total ~28s de chances no Netflix Player
+                   const retryDelay = Math.min(500 + retryCountRef.current * 1300, 9000);
+                   const reasonTag = isAuthError ? `auth ${respCode}` : 'network';
+                   console.warn(`[NetflixPlayer] HLS retry ${retryCountRef.current}/${MAX_RETRIES} (${reasonTag}) in ${retryDelay}ms`);
+
+                   if (retryCountRef.current === 1) {
+                     setQualityToast("Reconectando...");
+                     setTimeout(() => setQualityToast(null), 1500);
+                   }
+
+                   setTimeout(() => {
+                     // Bypass cache da borda forçando uma URL única se for auth error
+                     // (assim refazemos extração no servidor, evitando cache stale)
+                     const reload = isAuthError && videoToPlay.includes('/api/proxy-stream')
+                       ? videoToPlay + (videoToPlay.includes('?') ? '&' : '?') + '_t=' + Date.now()
+                       : videoToPlay;
+
+                     if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+                         data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
+                         isAuthError) {
+                       hls.loadSource(reload);
+                     } else {
+                       hls.startLoad();
+                     }
+                   }, retryDelay);
+                   return;
+                 }
+
+                 // Esgotou retries OU erro não recuperável (ex: manifest parse) → cai pro iframe
+                 if ((isAuthError || isManifestParseError || data.type === Hls.ErrorTypes.NETWORK_ERROR) && iframeFallbackUrl) {
+                   console.warn(`[NetflixPlayer] HLS exhausted (${data.details}/${respCode}) — switching to iframe fallback`);
                    setQualityToast("Carregando player original...");
                    setTimeout(() => setQualityToast(null), 3000);
                    try { hls.destroy(); } catch {}
@@ -818,43 +850,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                    return;
                  }
 
-                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                   if (retryCountRef.current < 5) { 
-                     retryCountRef.current++;
-                     // Don't regress progress during retries; smooth animation handles advancement
-                     // Exponential backoff for retries: 500ms, 1000ms, 2000ms, max 5000ms
-                     const retryDelay = Math.min(500 * Math.pow(1.5, retryCountRef.current - 1), 5000);
-                     setTimeout(() => {
-                       // Reload source completely if manifest failed to load, else try to recover chunks
-                       if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
-                           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
-                           data.response?.code === 403 || data.response?.code === 404) {
-                           hls.loadSource(videoToPlay);
-                       } else {
-                           hls.startLoad();
-                       }
-                     }, retryDelay);
-                   } else {
-                     // Last resort: try iframe fallback if available before showing error
-                     if (iframeFallbackUrl) {
-                       console.warn("[NetflixPlayer] HLS exhausted retries — switching to iframe fallback");
-                       setQualityToast("Carregando player original...");
-                       setTimeout(() => setQualityToast(null), 3000);
-                       try { hls.destroy(); } catch {}
-                       hlsRef.current = null;
-                       setForcedIframeMode(true);
-                       setIsLoading(false);
-                     } else {
-                       setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado ou o servidor está bloqueado. Tente o player nativo.", type: 'network' });
-                       setIsLoading(false);
-                     }
-                   }
-                 }
-                 else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                 if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
                    hls.recoverMediaError();
-                 }
-                 else {
-                   // We ignore other fatal errors to allow auto-recovery without blocking the user
+                 } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                   setError({ message: "O servidor de vídeo falhou. A conexão pode ter expirado ou o servidor está bloqueado. Tente o player nativo.", type: 'network' });
+                   setIsLoading(false);
+                 } else {
                    console.error("Ignored fatal error for seamless playback attempt", data);
                  }
               }

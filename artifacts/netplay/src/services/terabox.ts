@@ -55,6 +55,17 @@ export async function resolveTeraboxUrl(url: string): Promise<string> {
 
   const list: any[] = Array.isArray(data.list) ? data.list : [];
 
+  // Detect upstream success-but-empty: Terabox API returned 200 but couldn't read any file.
+  // This happens with expired, deleted, or private links — show clear message instead of
+  // a confusing "file not found" further down.
+  if (list.length === 0) {
+    const totalFiles = typeof data.total_files === 'number' ? data.total_files : 0;
+    throw new Error(
+      `Terabox não conseguiu ler nenhum arquivo deste link (total: ${totalFiles}). ` +
+      `O link pode ter expirado, sido removido pelo dono, ou ser privado. Tente outro link.`
+    );
+  }
+
   let file: any = null;
   if (filename) {
     file =
