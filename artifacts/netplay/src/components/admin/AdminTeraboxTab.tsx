@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play, Video, RefreshCw, FolderSearch, Plus, Save, Layers, Zap, Tv } from 'lucide-react';
 import Hls from 'hls.js';
 import { Movie } from '../../types';
-import tmdb from '../../services/tmdb';
+import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
 import { makeDynamicRef, isDynamicRef } from '../../services/terabox';
 
 export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
@@ -29,6 +29,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const [seasonScanResults, setSeasonScanResults] = useState<Record<number, any[]>>({});
   const [seasonScanning, setSeasonScanning] = useState(false);
   const [seasonSaveLoading, setSeasonSaveLoading] = useState(false);
+  const [enrichingTmdb, setEnrichingTmdb] = useState(false);
+  const [enrichStatus, setEnrichStatus] = useState('');
   const [seasonScanStatus, setSeasonScanStatus] = useState('');
 
   // For Mass Update
@@ -225,6 +227,48 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     setSeasonScanning(false);
   };
 
+  const handleEnrichTmdbSynopses = async () => {
+    if (!selectedSeries) return alert('Selecione uma série primeiro.');
+    if (!Object.keys(seasonScanResults).length) return;
+    setEnrichingTmdb(true);
+    try {
+      const updated = { ...seasonScanResults };
+      let totalFilled = 0;
+      for (const seasonStr of Object.keys(updated)) {
+        const seasonNum = Number(seasonStr);
+        setEnrichStatus(`Buscando sinopses da Temporada ${seasonNum}...`);
+        try {
+          const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, seasonNum);
+          const tmdbEps: any[] = Array.isArray(seasonData?.episodes) ? seasonData.episodes : [];
+          if (!tmdbEps.length) continue;
+          const byNum = new Map<number, any>();
+          for (const e of tmdbEps) byNum.set(Number(e.episode_number), e);
+          updated[seasonNum] = (updated[seasonNum] as any[]).map((file) => {
+            const match = byNum.get(Number(file.episode));
+            if (!match) return file;
+            totalFilled++;
+            return {
+              ...file,
+              tmdbTitle: match.name || '',
+              tmdbOverview: match.overview || '',
+              tmdbStillPath: match.still_path
+                ? `https://image.tmdb.org/t/p/w300${match.still_path}`
+                : undefined,
+            };
+          });
+        } catch (e: any) {
+          console.warn(`[TMDB] Falha na Temporada ${seasonNum}:`, e.message);
+        }
+      }
+      setSeasonScanResults(updated);
+      setEnrichStatus(`${totalFilled} episódios enriquecidos com info do TMDB.`);
+    } catch (e: any) {
+      setEnrichStatus(`Erro: ${e.message}`);
+    } finally {
+      setEnrichingTmdb(false);
+    }
+  };
+
   const handleSaveSeasonEpisodes = async () => {
     if (!selectedSeries) return;
     setSeasonSaveLoading(true);
@@ -248,14 +292,14 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           if (!file.selected) continue;
           allEpisodes.push({
             id: `s${file.season}e${file.episode}-${Date.now()}-${Math.random()}`,
-            title: `Episódio ${file.episode}`,
+            title: file.tmdbTitle || `Episódio ${file.episode}`,
             season: file.season,
             episode: file.episode,
             videoUrl: makeDynamicRef(file.folderUrl, file.filename),
-            overview: '',
-            still_path: selectedSeries.backdrop_path
+            overview: file.tmdbOverview || '',
+            still_path: file.tmdbStillPath || (selectedSeries.backdrop_path
               ? `https://image.tmdb.org/t/p/w300${selectedSeries.backdrop_path}`
-              : undefined,
+              : undefined),
             ...(file.preferredQuality && file.preferredQuality !== 'auto' ? { preferredQuality: file.preferredQuality } : {}),
           });
         }
@@ -624,6 +668,17 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           </button>
           {Object.keys(seasonScanResults).length > 0 && (
             <button
+              onClick={handleEnrichTmdbSynopses}
+              disabled={enrichingTmdb || !selectedSeries}
+              title="Busca título e sinopse de cada episódio no TMDB pela série selecionada"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
+            >
+              {enrichingTmdb ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
+              Buscar Sinopses TMDB
+            </button>
+          )}
+          {Object.keys(seasonScanResults).length > 0 && (
+            <button
               onClick={handleSaveSeasonEpisodes}
               disabled={seasonSaveLoading}
               className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
@@ -634,6 +689,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           )}
         </div>
         {seasonScanStatus && !seasonScanning && <div className="mt-3 text-xs text-purple-400 font-bold">{seasonScanStatus}</div>}
+        {enrichStatus && <div className="mt-1 text-xs text-blue-400 font-bold">{enrichStatus}</div>}
 
         {/* Season scan results */}
         {Object.keys(seasonScanResults).length > 0 && (
@@ -694,6 +750,20 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
                       >
                         {file.filename}
                       </div>
+                      {(file.tmdbTitle || file.tmdbOverview) && (
+                        <div className="pl-6 pt-1 border-t border-white/5 space-y-0.5">
+                          {file.tmdbTitle && (
+                            <div className="text-[11px] text-blue-300 font-bold flex items-center gap-1">
+                              <Database size={10} /> {file.tmdbTitle}
+                            </div>
+                          )}
+                          {file.tmdbOverview && (
+                            <div className="text-[10px] text-gray-400 leading-relaxed line-clamp-3" title={file.tmdbOverview}>
+                              {file.tmdbOverview}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

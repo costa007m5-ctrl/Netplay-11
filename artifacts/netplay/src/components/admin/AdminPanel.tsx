@@ -1105,11 +1105,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setForm({ ...form, episodes });
   };
 
-  const updateEpisode = (form: any, setForm: (data: any) => void, id: string, field: string, value: any) => {
-    const episodes = (form.episodes || []).map((e: any) => 
-      e.id === id ? { ...e, [field]: value } : e
-    );
-    setForm({ ...form, episodes });
+  const updateEpisode = (_form: any, setForm: (data: any) => void, id: string, field: string, value: any) => {
+    setForm((prev: any) => {
+      if (!prev) return prev;
+      const episodes = (prev.episodes || []).map((e: any) =>
+        e.id === id ? { ...e, [field]: value } : e
+      );
+      return { ...prev, episodes };
+    });
   };
 
   const handleAddMovie = async () => {
@@ -1491,8 +1494,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMovie) return;
-    await onUpdateMovie(editingMovie);
+    // Read the LATEST committed editingMovie via setter callback —
+    // avoids stale closure when user types/changes a field then immediately clicks Save.
+    let latest: any = null;
+    setEditingMovie(prev => {
+      latest = prev;
+      return prev;
+    });
+    await Promise.resolve();
+    if (!latest) return;
+    await onUpdateMovie(latest);
     setEditingMovie(null);
   };
 
