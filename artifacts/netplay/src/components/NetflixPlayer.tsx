@@ -156,6 +156,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
   const [forcedIframeMode, setForcedIframeMode] = useState(false);
 
+  // CRÍTICO: sempre que muda de vídeo, reseta forcedIframeMode pra dar prioridade ao Netflix Player.
+  // Sem isso, um vídeo que caiu pro iframe "contamina" todos os vídeos seguintes até reload manual.
+  useEffect(() => {
+    setForcedIframeMode(false);
+    retryCountRef.current = 0;
+    failedSourcesRef.current.clear();
+  }, [parsedUrls.video_url]);
+
   const isIframeMode = useMemo(() => {
     if (forcedIframeMode) return true;
     if (!parsedUrls.video_url) return false;
