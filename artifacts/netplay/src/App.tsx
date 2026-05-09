@@ -2737,19 +2737,33 @@ export default function App() {
 
             updatedEpisodes = movie.episodes.map(ep => {
               const tmdbEp = seasonDetails[ep.season]?.find(te => te.episode_number === ep.episode);
+              const stillPath = tmdbEp?.still_path
+                ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
+                : ep.still_path;
               return {
                 ...ep,
                 title: tmdbEp?.name || ep.title,
                 overview: tmdbEp?.overview || ep.overview || '',
-                still_path: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500/${tmdbEp.still_path}` : ep.still_path
+                still_path: stillPath,
+                // Blinda campos de reprodução
+                videoUrl: ep.videoUrl,
+                videoUrl2: (ep as any).videoUrl2,
+                preferredQuality: (ep as any).preferredQuality,
+                credits_time: (ep as any).credits_time,
+                file_name: (ep as any).file_name,
+                id: (ep as any).id,
+                season: ep.season,
+                episode: ep.episode,
               };
             });
           }
 
+          const _bd = details.backdrop_path as string | undefined;
+          const _ps = details.poster_path as string | undefined;
           await supabase.from('movies').update({
             title: details.title || details.name,
-            backdrop_path: details.backdrop_path ? `https://image.tmdb.org/t/p/original/${details.backdrop_path}` : movie.backdrop_path,
-            poster_path: details.poster_path ? `https://image.tmdb.org/t/p/w500/${details.poster_path}` : movie.poster_path,
+            backdrop_path: _bd ? `https://image.tmdb.org/t/p/original${_bd.startsWith('/') ? '' : '/'}${_bd}` : movie.backdrop_path,
+            poster_path: _ps ? `https://image.tmdb.org/t/p/w500${_ps.startsWith('/') ? '' : '/'}${_ps}` : movie.poster_path,
             logo_path: logoPath,
             overview: details.overview || movie.overview,
             genres: details.genres?.map((g: any) => g.name).join(', ') || movie.genres,

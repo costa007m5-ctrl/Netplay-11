@@ -1021,14 +1021,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         ...form,
         episodes: episodes.map((ep: any) => {
           const tmdbEp = seasonDetails[Number(ep.season)]?.find(te => te.episode_number === Number(ep.episode));
+          // Só atualiza campos de METADADO. NUNCA toca em campos de reprodução
+          // (videoUrl, videoUrl2, preferredQuality, credits_time, file_name, id, season, episode).
+          // Sem isso, o player perdia referência e ficava só carregando.
+          const stillPath = tmdbEp?.still_path
+            ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
+            : ep.still_path;
           return {
             ...ep,
             title: tmdbEp?.name || ep.title,
             overview: tmdbEp?.overview || ep.overview || '',
-            still_path: tmdbEp?.still_path ? `https://image.tmdb.org/t/p/w500/${tmdbEp.still_path}` : ep.still_path,
+            still_path: stillPath,
             release_date: tmdbEp?.air_date || ep.release_date,
             rating: tmdbEp?.vote_average || ep.rating,
-            runtime: tmdbEp?.runtime || ep.runtime
+            runtime: tmdbEp?.runtime || ep.runtime,
+            // Campos de reprodução: blindados (re-aplicados depois do spread)
+            videoUrl: ep.videoUrl,
+            videoUrl2: ep.videoUrl2,
+            preferredQuality: ep.preferredQuality,
+            credits_time: ep.credits_time,
+            file_name: ep.file_name,
+            id: ep.id,
+            season: ep.season,
+            episode: ep.episode,
           };
         })
       });
@@ -1275,12 +1290,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       
       const actors = creditsRes.data.cast?.slice(0, 10).map((c: any) => c.name).join(', ');
 
+      const _posterRaw = details.poster_path as string | undefined;
+      const _backdropRaw = details.backdrop_path as string | undefined;
       setForm({
         ...currentForm,
         title: details.title || details.name,
         overview: details.overview,
-        poster_path: details.poster_path ? `https://image.tmdb.org/t/p/w500/${details.poster_path}` : currentForm.poster_path,
-        backdrop_path: details.backdrop_path ? `https://image.tmdb.org/t/p/original/${details.backdrop_path}` : currentForm.backdrop_path,
+        poster_path: _posterRaw ? `https://image.tmdb.org/t/p/w500${_posterRaw.startsWith('/') ? '' : '/'}${_posterRaw}` : currentForm.poster_path,
+        backdrop_path: _backdropRaw ? `https://image.tmdb.org/t/p/original${_backdropRaw.startsWith('/') ? '' : '/'}${_backdropRaw}` : currentForm.backdrop_path,
         logo_path: logoPath || currentForm.logo_path,
         type: isTv ? 'series' : 'movie',
         genres: details.genres?.map((g: any) => g.name).join(', '),
@@ -1292,7 +1309,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         collection_id: details.belongs_to_collection?.id || null,
         collection_name: details.belongs_to_collection?.name || null,
         collection_poster_path: collectionPoster,
-        collection_logo_path: collectionLogo
+        collection_logo_path: collectionLogo,
+        // Blinda campos de reprodução (sinopse não pode tocar no player)
+        videoUrl: currentForm.videoUrl,
+        videoUrl2: currentForm.videoUrl2,
+        video_url: currentForm.video_url,
+        video_url_2: currentForm.video_url_2,
+        preferredQuality: currentForm.preferredQuality,
+        credits_time: currentForm.credits_time,
+        file_name: currentForm.file_name,
+        episodes: currentForm.episodes,
+        id: currentForm.id,
       });
 
       setTmdbSearchResults([]);
@@ -1349,12 +1376,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             
             const actors = creditsRes.data.cast?.slice(0, 10).map((c: any) => c.name).join(', ');
 
+            const _posterRaw = details.poster_path as string | undefined;
+            const _backdropRaw = details.backdrop_path as string | undefined;
             const updatedMovie = {
               ...movie,
               title: details.title || details.name,
               overview: details.overview,
-              poster_path: details.poster_path ? `https://image.tmdb.org/t/p/w500/${details.poster_path}` : movie.poster_path,
-              backdrop_path: details.backdrop_path ? `https://image.tmdb.org/t/p/original/${details.backdrop_path}` : movie.backdrop_path,
+              poster_path: _posterRaw ? `https://image.tmdb.org/t/p/w500${_posterRaw.startsWith('/') ? '' : '/'}${_posterRaw}` : movie.poster_path,
+              backdrop_path: _backdropRaw ? `https://image.tmdb.org/t/p/original${_backdropRaw.startsWith('/') ? '' : '/'}${_backdropRaw}` : movie.backdrop_path,
               type: isTv ? 'series' : 'movie',
               genres: details.genres?.map((g: any) => g.name).join(', '),
               release_date: details.release_date || details.first_air_date,
@@ -1362,6 +1391,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               rating: details.vote_average,
               actors: actors,
               watch_providers: watch_providers,
+              videoUrl: movie.videoUrl,
+              videoUrl2: (movie as any).videoUrl2,
+              episodes: movie.episodes,
+              id: movie.id,
               last_rescanned_at: new Date().toISOString(),
               collection_id: details.belongs_to_collection?.id || null,
               collection_name: details.belongs_to_collection?.name || null,
@@ -1422,12 +1455,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         
         const actors = creditsRes.data.cast?.slice(0, 10).map((c: any) => c.name).join(', ');
 
+        const _posterRaw = details.poster_path as string | undefined;
+        const _backdropRaw = details.backdrop_path as string | undefined;
         const updatedMovie = {
           ...movie,
           title: details.title || details.name,
           overview: details.overview,
-          poster_path: details.poster_path ? `https://image.tmdb.org/t/p/w500/${details.poster_path}` : movie.poster_path,
-          backdrop_path: details.backdrop_path ? `https://image.tmdb.org/t/p/original/${details.backdrop_path}` : movie.backdrop_path,
+          poster_path: _posterRaw ? `https://image.tmdb.org/t/p/w500${_posterRaw.startsWith('/') ? '' : '/'}${_posterRaw}` : movie.poster_path,
+          backdrop_path: _backdropRaw ? `https://image.tmdb.org/t/p/original${_backdropRaw.startsWith('/') ? '' : '/'}${_backdropRaw}` : movie.backdrop_path,
           type: isTv ? 'series' : 'movie',
           genres: details.genres?.map((g: any) => g.name).join(', '),
           release_date: details.release_date || details.first_air_date,
@@ -1438,7 +1473,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           last_rescanned_at: new Date().toISOString(),
           collection_id: details.belongs_to_collection?.id || null,
           collection_name: details.belongs_to_collection?.name || null,
-          collection_poster_path: collectionPoster
+          collection_poster_path: collectionPoster,
+          // Blinda reprodução
+          videoUrl: movie.videoUrl,
+          videoUrl2: (movie as any).videoUrl2,
+          episodes: movie.episodes,
+          id: movie.id,
         };
 
         await onUpdateMovie(updatedMovie as Movie);
