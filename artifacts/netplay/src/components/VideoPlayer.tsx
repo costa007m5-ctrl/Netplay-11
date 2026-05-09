@@ -78,6 +78,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const channelRef = useRef<any>(null);
+  const probeAbortRef = useRef<AbortController | null>(null);
   const lastSyncTime = useRef<number>(0);
   const currentTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(0);
@@ -444,12 +445,60 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                  qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
                }
 
-               // First quality = best available
+               // First quality = best available (será refinado pelo probe abaixo)
                const stUrl = qualityList[0]?.url;
                if (stUrl) {
                   setExtractedVideoUrl(stUrl);
                   setFinalVideoUrl(stUrl);
                   setExtractedQualities(qualityList);
+               }
+
+               // SMART PROBE: testa todas as qualidades em paralelo no servidor.
+               // Devolve só as que realmente carregam (manifest + primeiro segmento).
+               // Cancela se o usuário trocar de vídeo antes do probe terminar.
+               if (qualityList.length > 1) {
+                 const probeController = new AbortController();
+                 probeAbortRef.current?.abort();
+                 probeAbortRef.current = probeController;
+                 const probeMovieId = movie.id;
+                 (async () => {
+                   try {
+                     const probeRes = await fetch('/api/probe-streams', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       signal: probeController.signal,
+                       body: JSON.stringify({
+                         urls: qualityList.slice(0, 6).map(q => ({
+                           quality: q.id,
+                           label: q.label,
+                           url: q.url,
+                         })),
+                       }),
+                     });
+                     if (probeController.signal.aborted || probeMovieId !== movie.id) return;
+                     if (!probeRes.ok) return;
+                     const probeData = await probeRes.json();
+                     if (probeController.signal.aborted || probeMovieId !== movie.id) return;
+                     const working: any[] = Array.isArray(probeData?.working) ? probeData.working : [];
+                     if (working.length === 0) {
+                       console.warn('[VideoPlayer] probe: nenhuma qualidade respondeu, mantendo lista original');
+                       return;
+                     }
+                     console.log(`[VideoPlayer] probe: ${working.length}/${qualityList.length} qualidades funcionais`,
+                       working.map(w => `${w.quality}(${w.ms}ms)`).join(', '));
+                     const workingIds = new Set(working.map(w => w.quality));
+                     const filteredList = qualityList.filter(q => workingIds.has(q.id));
+                     if (filteredList.length > 0) {
+                       const newBest = filteredList[0].url;
+                       setExtractedVideoUrl(newBest);
+                       setFinalVideoUrl(newBest);
+                       setExtractedQualities(filteredList);
+                     }
+                   } catch (probeErr: any) {
+                     if (probeErr?.name === 'AbortError') return;
+                     console.warn('[VideoPlayer] probe falhou (mantém lista original):', probeErr);
+                   }
+                 })();
                }
                
                const subUrl = vid.subtitle_url || data.subtitle || data.subtitle_url;
