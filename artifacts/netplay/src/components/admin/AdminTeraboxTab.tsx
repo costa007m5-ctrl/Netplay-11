@@ -10,6 +10,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const [testResult, setTestResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testSelectedQuality, setTestSelectedQuality] = useState<string | null>(null);
 
   // For Mass Import / Scanner (movies)
   const [folderUrl, setFolderUrl] = useState('');
@@ -55,11 +56,46 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     }
   };
 
-  const videoUrlToPlay = React.useMemo(() => {
+  const testVid = React.useMemo(() => {
     if (!testResult) return null;
-    let vid = testResult.list && testResult.list.length > 0 ? testResult.list[0] : testResult;
-    return vid.fast_stream_url?.['1080p'] || vid.fast_stream_url?.['720p'] || vid.fast_stream_url?.['480p'] || vid.fast_stream_url?.['360p'] || vid.normal_dlink || vid.stream_url || vid.url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
+    return testResult.list && testResult.list.length > 0 ? testResult.list[0] : testResult;
   }, [testResult]);
+
+  const testQualities = React.useMemo(() => {
+    if (!testVid) return [] as { id: string; label: string; url: string }[];
+    const fs = testVid.fast_stream_url || {};
+    const native = typeof testVid.quality === 'string' ? testVid.quality : undefined;
+    const rank: Record<string, number> = { '240p':1, '360p':2, '480p':3, '720p':4, '1080p':5 };
+    const nativeR = native && rank[native] ? rank[native] : 99;
+    const order = [
+      { k:'1080p', label:'1080p (Full HD)' },
+      { k:'720p',  label:'720p (HD)' },
+      { k:'480p',  label:'480p (SD)' },
+      { k:'360p',  label:'360p' },
+      { k:'240p',  label:'240p' },
+    ];
+    const list: { id: string; label: string; url: string }[] = [];
+    for (const o of order) {
+      if (fs[o.k] && typeof fs[o.k] === 'string' && (rank[o.k] || 0) <= nativeR) {
+        list.push({ id: o.k, label: o.label + (native === o.k ? ' [nativa]' : ''), url: fs[o.k] });
+      }
+    }
+    const direct = testVid.normal_dlink || testVid.stream_url || testVid.url || testVid.video_url || testVid.src || (testVid.data && testVid.data.url) || testVid.dlink;
+    if (direct && !list.some(q => q.url === direct)) list.push({ id: 'direct', label: 'Download Direto', url: direct });
+    return list;
+  }, [testVid]);
+
+  const videoUrlToPlay = React.useMemo(() => {
+    if (!testQualities.length) return null;
+    if (testSelectedQuality) {
+      const found = testQualities.find(q => q.id === testSelectedQuality);
+      if (found) return found.url;
+    }
+    return testQualities[0].url;
+  }, [testQualities, testSelectedQuality]);
+
+  // Reset selected quality when test result changes
+  React.useEffect(() => { setTestSelectedQuality(null); }, [testResult]);
 
   useEffect(() => {
     if (!videoUrlToPlay || !videoRef.current) return;
@@ -215,6 +251,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
             still_path: selectedSeries.backdrop_path
               ? `https://image.tmdb.org/t/p/w300${selectedSeries.backdrop_path}`
               : undefined,
+            ...(file.preferredQuality && file.preferredQuality !== 'auto' ? { preferredQuality: file.preferredQuality } : {}),
           });
         }
       }
@@ -626,6 +663,22 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
                         title="Número do episódio"
                       />
                       <span className="text-gray-300 text-xs truncate flex-1">{file.filename}</span>
+                      <select
+                        value={file.preferredQuality || 'auto'}
+                        onChange={e => {
+                          const copy = { ...seasonScanResults };
+                          (copy[Number(season)] as any[])[i].preferredQuality = e.target.value;
+                          setSeasonScanResults(copy);
+                        }}
+                        className="bg-black/60 border border-white/10 rounded-md py-0.5 px-1.5 text-[10px] font-bold text-white shrink-0"
+                        title="Qualidade fixa pra esse episódio (auto = melhor disponível)"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                        <option value="360p">360p</option>
+                      </select>
                       <span className="text-[10px] text-green-500 font-bold shrink-0 flex items-center gap-1"><Zap size={10} /> Dinâmico</span>
                     </div>
                   ))}
@@ -831,11 +884,48 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           </div>
         )}
         
+        {testQualities.length > 0 && (
+          <div className="mt-6 bg-black/40 border border-cyan-500/20 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-black uppercase tracking-widest text-cyan-400">
+                Qualidades Disponíveis ({testQualities.length})
+              </div>
+              {testVid?.quality && (
+                <div className="text-[10px] text-gray-400">
+                  Resolução nativa do arquivo: <span className="text-green-400 font-bold">{testVid.quality}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {testQualities.map(q => (
+                <button
+                  key={q.id}
+                  onClick={() => setTestSelectedQuality(q.id)}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    (testSelectedQuality || testQualities[0].id) === q.id
+                      ? 'bg-cyan-500 text-black'
+                      : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                  }`}
+                  title={q.url}
+                >
+                  <Play size={12} />
+                  {q.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-500 mt-3">
+              Clique em uma qualidade pra testar o link dela direto no preview abaixo.
+            </p>
+          </div>
+        )}
+
         {videoUrlToPlay && (
-          <div className="mt-8 rounded-xl overflow-hidden border border-white/10 bg-black">
+          <div className="mt-4 rounded-xl overflow-hidden border border-white/10 bg-black">
             <div className="bg-white/5 p-3 flex items-center gap-2 border-b border-white/10">
               <Video size={16} className="text-cyan-400" />
-              <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">Preview do Vídeo</span>
+              <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">
+                Preview do Vídeo {testSelectedQuality && <span className="text-cyan-400 ml-2">— {testSelectedQuality}</span>}
+              </span>
             </div>
             <video 
               ref={videoRef}
