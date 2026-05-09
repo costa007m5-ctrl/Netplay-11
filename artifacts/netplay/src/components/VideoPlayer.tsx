@@ -427,6 +427,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                // Build COMPLETE quality list — all available resolutions, ordered best→worst
                const qualityList: { id: string; label: string; url: string }[] = [];
                const fs = vid.fast_stream_url || {};
+               // Resolução nativa do arquivo (segundo a API). Qualquer chave de fast_stream_url
+               // ACIMA disso seria upscale/fake e provavelmente retorna manifesto vazio.
+               const nativeQuality: string | undefined = typeof vid.quality === 'string' ? vid.quality : undefined;
+               const ladderRank: Record<string, number> = { '240p': 1, '360p': 2, '480p': 3, '720p': 4, '1080p': 5 };
+               const nativeRank = nativeQuality && ladderRank[nativeQuality] ? ladderRank[nativeQuality] : 99;
                const qualityOrder: Array<{ k: string; label: string }> = [
                  { k: '1080p', label: '1080p (Full HD)' },
                  { k: '720p',  label: '720p (HD)' },
@@ -436,9 +441,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                ];
                for (const q of qualityOrder) {
                  if (fs[q.k] && typeof fs[q.k] === 'string') {
+                   const rank = ladderRank[q.k] || 0;
+                   // Pula qualidades acima da nativa do arquivo (upscale fake)
+                   if (rank > nativeRank) {
+                     console.log(`[VideoPlayer] pulando ${q.k} (acima da resolução nativa ${nativeQuality})`);
+                     continue;
+                   }
                    qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
                  }
                }
+               if (nativeQuality) console.log(`[VideoPlayer] resolução nativa do arquivo: ${nativeQuality}`);
                // Fallbacks de download (sem qualidade conhecida) — vão pro final como "Download"
                const directUrl = vid.normal_dlink || vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
                if (directUrl && !qualityList.some(q => q.url === directUrl)) {
