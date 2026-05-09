@@ -309,6 +309,60 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     return null;
   };
 
+  // Retorna o set de "season-episode" já salvos no banco para a série selecionada
+  const getExistingEpisodesKey = (): Set<string> => {
+    const set = new Set<string>();
+    if (!selectedSeries) return set;
+    const existing = movies.find(m =>
+      m.id === selectedSeries.id ||
+      m.title === (selectedSeries.name || selectedSeries.original_name)
+    );
+    if (!existing || !Array.isArray((existing as any).episodes)) return set;
+    for (const ep of (existing as any).episodes) {
+      const s = Number(ep.season);
+      const e = Number(ep.episode);
+      // Considera "já salvo" só se tiver videoUrl (não é placeholder vazio)
+      if (s >= 0 && e >= 1 && (ep.videoUrl || ep.video_url)) {
+        set.add(`${s}-${e}`);
+      }
+    }
+    return set;
+  };
+
+  const handleRemoveAlreadySaved = () => {
+    if (!Object.keys(seasonScanResults).length) return;
+    if (!selectedSeries) {
+      setAutoDetectStatus('Selecione uma série primeiro pra checar o banco.');
+      setTimeout(() => setAutoDetectStatus(''), 5000);
+      return;
+    }
+    const existingKeys = getExistingEpisodesKey();
+    if (!existingKeys.size) {
+      setAutoDetectStatus('Nenhum episódio dessa série salvo no banco ainda — nada pra remover.');
+      setTimeout(() => setAutoDetectStatus(''), 5000);
+      return;
+    }
+    let removed = 0;
+    const cleaned: Record<number, any[]> = {};
+    for (const seasonStr of Object.keys(seasonScanResults)) {
+      const sNum = Number(seasonStr);
+      const kept = (seasonScanResults[sNum] as any[]).filter((f) => {
+        const key = `${f.season}-${f.episode}`;
+        if (existingKeys.has(key)) {
+          removed++;
+          return false;
+        }
+        return true;
+      });
+      if (kept.length) cleaned[sNum] = kept;
+    }
+    setSeasonScanResults(cleaned);
+    setAutoDetectStatus(
+      `${removed} episódio${removed === 1 ? '' : 's'} removido${removed === 1 ? '' : 's'} (já estava${removed === 1 ? '' : 'm'} salvo${removed === 1 ? '' : 's'} no banco).`
+    );
+    setTimeout(() => setAutoDetectStatus(''), 8000);
+  };
+
   const handleAutoDetectSE = () => {
     if (!Object.keys(seasonScanResults).length) return;
     const allFiles: any[] = [];
@@ -316,14 +370,23 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       for (const f of seasonScanResults[Number(seasonStr)]) allFiles.push(f);
     }
 
+    // Episódios já salvos no banco para a série selecionada (se houver)
+    const existingKeys = getExistingEpisodesKey();
+
     let detected = 0;
     let unmatched = 0;
+    let skippedDup = 0;
     const newGrouped: Record<number, any[]> = {};
     const fallbackBySeason: Record<number, any[]> = {};
 
     for (const file of allFiles) {
       const parsed = parseSeasonEpisode(file.filename);
       if (parsed) {
+        // Pula se já está salvo no banco
+        if (existingKeys.has(`${parsed.season}-${parsed.episode}`)) {
+          skippedDup++;
+          continue;
+        }
         if (!newGrouped[parsed.season]) newGrouped[parsed.season] = [];
         newGrouped[parsed.season].push({
           ...file,
@@ -359,9 +422,10 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     setSeasonScanResults(newGrouped);
     setAutoDetectStatus(
       `Detectado: ${detected} arquivo${detected === 1 ? '' : 's'} reorganizado${detected === 1 ? '' : 's'} em ${Object.keys(newGrouped).length} temporada${Object.keys(newGrouped).length === 1 ? '' : 's'}` +
-      (unmatched ? `. ${unmatched} sem padrão (mantidos no fim).` : '.')
+      (skippedDup ? ` • ${skippedDup} já salvo${skippedDup === 1 ? '' : 's'} no banco (removido${skippedDup === 1 ? '' : 's'})` : '') +
+      (unmatched ? ` • ${unmatched} sem padrão (mantido${unmatched === 1 ? '' : 's'} no fim)` : '') + '.'
     );
-    setTimeout(() => setAutoDetectStatus(''), 8000);
+    setTimeout(() => setAutoDetectStatus(''), 10000);
   };
 
   const handleEnrichTmdbSynopses = async () => {
@@ -823,11 +887,21 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           {Object.keys(seasonScanResults).length > 0 && (
             <button
               onClick={handleAutoDetectSE}
-              title="Lê o nome de cada arquivo (1x03, S01E03, Temp 1 Ep 3, etc) e move pra temporada/episódio certo"
+              title="Lê o nome de cada arquivo (1x03, S01E03, Temp 1 Ep 3, etc), move pra temporada/episódio certo e remove os que já estão salvos no banco"
               className="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
             >
               <Zap size={14} />
               Auto-detectar S/E
+            </button>
+          )}
+          {Object.keys(seasonScanResults).length > 0 && (
+            <button
+              onClick={handleRemoveAlreadySaved}
+              title="Verifica no banco e remove da lista os episódios que já foram salvos antes pra essa série"
+              className="flex-1 bg-rose-600 hover:bg-rose-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
+            >
+              <CheckCircle2 size={14} />
+              Remover já salvos
             </button>
           )}
           {Object.keys(seasonScanResults).length > 0 && (
