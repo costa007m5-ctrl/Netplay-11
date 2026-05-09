@@ -552,7 +552,7 @@ const MovieDetailsModal = React.memo(({
                         const defaultUrl = movie.videoUrl;
                         handlePlay(savedUrl || defaultUrl || undefined, savedProgress);
                       } else {
-                        setIsPlayingFullscreen(true);
+                        setShowVideo(true); setIsPlayingFullscreen(true);
                       }
                     }}
                     className="bg-white text-black hover:bg-gray-200 flex-1 md:flex-none px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl relative overflow-hidden group"
@@ -574,7 +574,7 @@ const MovieDetailsModal = React.memo(({
                       } else if (isYouTube || isKingX) {
                         handlePlay(movie.videoUrl, 0);
                       } else {
-                        setIsPlayingFullscreen(true);
+                        setShowVideo(true); setIsPlayingFullscreen(true);
                       }
                     }}
                     className="bg-white/10 text-white border-2 border-white/20 hover:bg-white/20 px-6 md:px-8 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl backdrop-blur-md transition-all"
@@ -601,7 +601,7 @@ const MovieDetailsModal = React.memo(({
                           } else if (isYouTube || isKingX) {
                             handlePlay(movie.videoUrl, 0, 'netflix');
                           } else {
-                            setIsPlayingFullscreen(true);
+                            setShowVideo(true); setIsPlayingFullscreen(true);
                           }
                         }}
                         className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
