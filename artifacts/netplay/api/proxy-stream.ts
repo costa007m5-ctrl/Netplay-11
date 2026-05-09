@@ -1,5 +1,3 @@
-import axios from "axios";
-
 export const config = {
   maxDuration: 60,
 };
@@ -29,44 +27,61 @@ export default async function handler(req: any, res: any) {
   const refererStr =
     typeof referer === "string" && referer ? referer : "https://player.kingx.dev/";
 
-  const headers: Record<string, string> = {
+  let originStr = "https://player.kingx.dev";
+  try {
+    originStr = new URL(refererStr).origin;
+  } catch {}
+
+  const upstreamHeaders: Record<string, string> = {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     Referer: refererStr,
-    Origin: (() => {
-      try {
-        return new URL(refererStr).origin;
-      } catch {
-        return "https://player.kingx.dev";
-      }
-    })(),
+    Origin: originStr,
     Accept: "*/*",
     "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
   };
 
-  // Detecta rapidamente se é manifest m3u8 (precisa rewrite) ou segment binário (pode streamar direto)
+  // Forward Range header from client (essential for video seeking)
+  const range = req.headers["range"];
+  if (range) upstreamHeaders["Range"] = String(range);
+
   const looksLikeM3u8 = url.includes(".m3u8");
 
-  try {
-    if (looksLikeM3u8) {
-      // Manifest: precisamos baixar inteiro, reescrever URLs e devolver
-      const response = await axios.get(url, {
-        headers,
-        responseType: "text",
-        timeout: 8000,
-        maxRedirects: 10,
-        transformResponse: [(d) => d],
-      });
+  const controller = new AbortController();
+  const timeoutMs = looksLikeM3u8 ? 10000 : 45000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const text = String(response.data ?? "");
+  try {
+    const upstream = await fetch(url, {
+      headers: upstreamHeaders,
+      redirect: "follow",
+      signal: controller.signal,
+    });
+
+    if (!upstream.ok && upstream.status !== 206) {
+      clearTimeout(timeoutId);
+      res
+        .status(upstream.status)
+        .json({ error: "upstream failed", status: upstream.status });
+      return;
+    }
+
+    const contentType = upstream.headers.get("content-type") || "";
+    const isM3u8 =
+      looksLikeM3u8 ||
+      contentType.includes("mpegurl") ||
+      contentType.includes("x-mpegurl");
+
+    if (isM3u8) {
+      const text = await upstream.text();
+      clearTimeout(timeoutId);
+
       const lastSlash = url.lastIndexOf("/");
       const baseUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : url;
       let urlOrigin = "";
       try {
         urlOrigin = new URL(url).origin;
-      } catch {
-        urlOrigin = "";
-      }
+      } catch {}
 
       const rewritten = text.replace(/^(?!#)(.+)$/gm, (segmentLine) => {
         const seg = segmentLine.trim();
@@ -101,36 +116,31 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Segment binário (.ts, .key, .mp4) — usa STREAMING pipe pra performance
-    const response = await axios.get(url, {
-      headers,
-      responseType: "stream",
-      timeout: 30000,
-      maxRedirects: 10,
-    });
+    // Binary segment / key — buffer and send (Vercel serverless doesn't support
+    // streaming response bodies reliably in Node runtime, but segments are small)
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    clearTimeout(timeoutId);
 
-    const ct = (response.headers["content-type"] as string) || "application/octet-stream";
-    res.setHeader("Content-Type", ct);
-
-    const contentLength = response.headers["content-length"];
-    if (contentLength) res.setHeader("Content-Length", contentLength as string);
-
-    // Cache agressivo dos segments (são imutáveis)
+    res.setHeader(
+      "Content-Type",
+      contentType || "application/octet-stream",
+    );
     res.setHeader("Cache-Control", "public, max-age=3600, immutable");
 
-    res.status(response.status || 200);
-    response.data.pipe(res);
+    const contentRange = upstream.headers.get("content-range");
+    if (contentRange) res.setHeader("Content-Range", contentRange);
+    const acceptRanges = upstream.headers.get("accept-ranges");
+    if (acceptRanges) res.setHeader("Accept-Ranges", acceptRanges);
 
-    response.data.on("error", (err: any) => {
-      console.error(`[proxy-stream stream error] ${url}: ${err?.message}`);
-      try { res.end(); } catch {}
-    });
+    res.status(upstream.status).send(buffer);
   } catch (error: any) {
-    const status = error?.response?.status ?? 502;
-    const details = error?.message ?? "unknown error";
+    clearTimeout(timeoutId);
+    const isTimeout = error?.name === "AbortError";
+    const status = isTimeout ? 504 : 502;
+    const details = isTimeout ? `timeout after ${timeoutMs}ms` : error?.message || "unknown error";
     console.error(`[proxy-stream] ${status} for ${url}: ${details}`);
     if (!res.headersSent) {
-      res.status(status < 500 ? status : 502).json({ error: "proxy failed", details });
+      res.status(status).json({ error: "proxy failed", details });
     }
   }
 }

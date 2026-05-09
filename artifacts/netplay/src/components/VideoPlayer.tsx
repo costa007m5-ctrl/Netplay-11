@@ -360,7 +360,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         try {
           const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(u)}`);
           if (res.ok) {
-            const data = await res.json();
+            const text = await res.text();
+            let data: any;
+            try {
+              data = JSON.parse(text);
+            } catch {
+              console.error('[Terabox] Resposta não-JSON do servidor:', text.slice(0, 200));
+              throw new Error('Servidor Terabox retornou resposta inválida (provável timeout)');
+            }
 
             const rawList: any[] = Array.isArray(data.list) ? data.list : (data.list ? [data.list] : []);
 

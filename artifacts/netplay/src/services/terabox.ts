@@ -41,7 +41,13 @@ export async function resolveTeraboxUrl(url: string): Promise<string> {
 
   const { folderUrl, filename } = parseDynamicRef(url);
   const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(folderUrl)}`);
-  const data = await res.json();
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Resposta inválida do servidor Terabox (${res.status}): ${text.slice(0, 100)}`);
+  }
 
   if (!res.ok) {
     throw new Error(data.error || `Failed to resolve Terabox link (${res.status})`);
