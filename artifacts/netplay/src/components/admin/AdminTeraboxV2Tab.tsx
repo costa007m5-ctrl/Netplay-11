@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ExternalLink, Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play, Video, RefreshCw, FolderSearch, Plus, Save, Layers, Zap, Tv } from 'lucide-react';
 import Hls from 'hls.js';
 import { Movie } from '../../types';
-import tmdb from '../../services/tmdb';
+import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
 import { makeDynamicRef, makeDynamicRefV2, isDynamicRef } from '../../services/terabox';
 
 export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
@@ -30,6 +30,7 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
   const [seasonScanning, setSeasonScanning] = useState(false);
   const [seasonSaveLoading, setSeasonSaveLoading] = useState(false);
   const [seasonScanStatus, setSeasonScanStatus] = useState('');
+  const [enrichStatus, setEnrichStatus] = useState('');
 
   // For Mass Update
   const [updatingMode, setUpdatingMode] = useState(false);
@@ -240,22 +241,48 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
     };
 
     try {
-      // Build episodes array from scan results
+      // Enriquecimento automático com TMDB (sinopse, nome, data, runtime, nota, banner)
+      const selectedSeasons = Array.from(new Set(
+        Object.entries(seasonScanResults)
+          .flatMap(([s, files]) => (files as any[]).filter(f => f.selected).map(() => Number(s)))
+      ));
+      const tmdbBySeason: Record<number, Map<number, any>> = {};
+      for (const s of selectedSeasons) {
+        try {
+          setEnrichStatus(`Buscando informações da Temporada ${s} no TMDB...`);
+          const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, s);
+          const map = new Map<number, any>();
+          for (const e of (seasonData?.episodes || [])) map.set(Number(e.episode_number), e);
+          tmdbBySeason[s] = map;
+        } catch (e: any) {
+          console.warn(`[TMDB enrich V2] Falha na Temporada ${s}:`, e.message);
+          tmdbBySeason[s] = new Map();
+        }
+      }
+      setEnrichStatus('');
+
+      // Build episodes array from scan results (já enriquecido)
       const allEpisodes: any[] = [];
       for (const [seasonStr, files] of Object.entries(seasonScanResults)) {
-        const season = Number(seasonStr);
         for (const file of (files as any[])) {
           if (!file.selected) continue;
+          const tmdbEp = tmdbBySeason[Number(seasonStr)]?.get(Number(file.episode));
+          const stillFromTmdb = tmdbEp?.still_path
+            ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
+            : undefined;
           allEpisodes.push({
             id: `s${file.season}e${file.episode}-${Date.now()}-${Math.random()}`,
-            title: `Episódio ${file.episode}`,
+            title: tmdbEp?.name || `Episódio ${file.episode}`,
             season: file.season,
             episode: file.episode,
             videoUrl: makeDynamicRefV2(file.folderUrl, file.filename),
-            overview: '',
-            still_path: selectedSeries.backdrop_path
+            overview: tmdbEp?.overview || '',
+            still_path: stillFromTmdb || (selectedSeries.backdrop_path
               ? `https://image.tmdb.org/t/p/w300${selectedSeries.backdrop_path}`
-              : undefined,
+              : undefined),
+            ...(tmdbEp?.air_date ? { release_date: tmdbEp.air_date } : {}),
+            ...(tmdbEp?.runtime ? { runtime: tmdbEp.runtime } : {}),
+            ...(tmdbEp?.vote_average !== undefined && tmdbEp?.vote_average !== null ? { rating: tmdbEp.vote_average } : {}),
             ...(file.preferredQuality && file.preferredQuality !== 'auto' ? { preferredQuality: file.preferredQuality } : {}),
           });
         }
@@ -634,6 +661,7 @@ export default function AdminTeraboxV2Tab({ movies, onUpdateMovie, onAddMovie }:
           )}
         </div>
         {seasonScanStatus && !seasonScanning && <div className="mt-3 text-xs text-purple-400 font-bold">{seasonScanStatus}</div>}
+        {enrichStatus && <div className="mt-1 text-xs text-blue-400 font-bold">{enrichStatus}</div>}
 
         {/* Season scan results */}
         {Object.keys(seasonScanResults).length > 0 && (

@@ -485,24 +485,51 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     };
 
     try {
-      // Build episodes array from scan results
+      // Enriquecimento automático: busca metadados TMDB de todas as temporadas
+      // selecionadas (sinopse, nome, data, runtime, nota, banner) antes de salvar.
+      const selectedSeasons = Array.from(new Set(
+        Object.entries(seasonScanResults)
+          .flatMap(([s, files]) => (files as any[]).filter(f => f.selected).map(() => Number(s)))
+      ));
+      const tmdbBySeason: Record<number, Map<number, any>> = {};
+      for (const s of selectedSeasons) {
+        try {
+          setEnrichStatus(`Buscando informações da Temporada ${s} no TMDB...`);
+          const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, s);
+          const map = new Map<number, any>();
+          for (const e of (seasonData?.episodes || [])) map.set(Number(e.episode_number), e);
+          tmdbBySeason[s] = map;
+        } catch (e: any) {
+          console.warn(`[TMDB enrich] Falha na Temporada ${s}:`, e.message);
+          tmdbBySeason[s] = new Map();
+        }
+      }
+      setEnrichStatus('');
+
+      // Build episodes array from scan results (já enriquecido)
       const allEpisodes: any[] = [];
       for (const [seasonStr, files] of Object.entries(seasonScanResults)) {
-        const season = Number(seasonStr);
         for (const file of (files as any[])) {
           if (!file.selected) continue;
+          const tmdbEp = tmdbBySeason[Number(seasonStr)]?.get(Number(file.episode));
+          const stillFromTmdb = tmdbEp?.still_path
+            ? `https://image.tmdb.org/t/p/w500${tmdbEp.still_path.startsWith('/') ? '' : '/'}${tmdbEp.still_path}`
+            : undefined;
           allEpisodes.push({
             id: `s${file.season}e${file.episode}-${Date.now()}-${Math.random()}`,
-            title: file.tmdbTitle || `Episódio ${file.episode}`,
+            title: tmdbEp?.name || file.tmdbTitle || `Episódio ${file.episode}`,
             season: file.season,
             episode: file.episode,
             videoUrl: file.apiVersion === 'v2'
               ? makeDynamicRefV2(file.folderUrl, file.filename)
               : makeDynamicRef(file.folderUrl, file.filename),
-            overview: file.tmdbOverview || '',
-            still_path: file.tmdbStillPath || (selectedSeries.backdrop_path
+            overview: tmdbEp?.overview || file.tmdbOverview || '',
+            still_path: stillFromTmdb || file.tmdbStillPath || (selectedSeries.backdrop_path
               ? `https://image.tmdb.org/t/p/w300${selectedSeries.backdrop_path}`
               : undefined),
+            ...(tmdbEp?.air_date ? { release_date: tmdbEp.air_date } : {}),
+            ...(tmdbEp?.runtime ? { runtime: tmdbEp.runtime } : {}),
+            ...(tmdbEp?.vote_average !== undefined && tmdbEp?.vote_average !== null ? { rating: tmdbEp.vote_average } : {}),
             ...(file.preferredQuality && file.preferredQuality !== 'auto' ? { preferredQuality: file.preferredQuality } : {}),
           });
         }
