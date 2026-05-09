@@ -30,7 +30,7 @@ function pick(o: any, keys: string[]): any {
 
 function normalizeItem(raw: any): any {
   if (!raw || typeof raw !== "object") return null;
-  const name = pick(raw, ["name", "filename", "file_name", "title"]) || "Desconhecido";
+  const name = pick(raw, ["server_filename", "name", "filename", "file_name", "title"]) || "Desconhecido";
   const isDir = pick(raw, ["is_dir", "isDir", "is_folder"]);
   const isDirStr = isDir === true || isDir === "1" || isDir === 1 ? "1" : "0";
 
@@ -50,13 +50,18 @@ function normalizeItem(raw: any): any {
       }
     }
   }
-  // Some APIs return single hls url
+  // v2 returns single stream_url per item — duplicate it across qualities so the
+  // existing probe + selector code works uniformly
   const hlsSingle = pick(raw, ["hls_url", "stream_url", "m3u8", "playable_url"]);
   if (hlsSingle && typeof hlsSingle === "string" && Object.keys(fast).length === 0) {
     fast["auto"] = hlsSingle;
+    fast["1080p"] = hlsSingle;
+    fast["720p"] = hlsSingle;
+    fast["480p"] = hlsSingle;
+    fast["360p"] = hlsSingle;
   }
 
-  const directDl = pick(raw, ["normal_dlink", "download_link", "dlink", "direct_link", "url", "download_url"]);
+  const directDl = pick(raw, ["dlink", "normal_dlink", "download_link", "direct_link", "url", "download_url"]);
   const quality = pick(raw, ["quality", "resolution"]);
   const size = pick(raw, ["size_formatted", "size_str", "human_size"]);
   const sizeBytes = pick(raw, ["size", "size_bytes"]);

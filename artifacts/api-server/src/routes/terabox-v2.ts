@@ -15,7 +15,7 @@ function pick(o: any, keys: string[]): any {
 
 function normalizeItem(raw: any): any {
   if (!raw || typeof raw !== "object") return null;
-  const name = pick(raw, ["name", "filename", "file_name", "title"]) || "Desconhecido";
+  const name = pick(raw, ["server_filename", "name", "filename", "file_name", "title"]) || "Desconhecido";
   const isDir = pick(raw, ["is_dir", "isDir", "is_folder"]);
   const isDirStr = isDir === true || isDir === "1" || isDir === 1 ? "1" : "0";
 
@@ -35,7 +35,13 @@ function normalizeItem(raw: any): any {
   }
   const hlsSingle = pick(raw, ["hls_url", "stream_url", "m3u8", "playable_url"]);
   if (hlsSingle && typeof hlsSingle === "string" && Object.keys(fast).length === 0) {
+    // v2 returns single stream_url per item — use it for all qualities so existing
+    // probe + selector code can work uniformly
     fast["auto"] = hlsSingle;
+    fast["1080p"] = hlsSingle;
+    fast["720p"] = hlsSingle;
+    fast["480p"] = hlsSingle;
+    fast["360p"] = hlsSingle;
   }
 
   return {
@@ -48,7 +54,7 @@ function normalizeItem(raw: any): any {
     size_formatted: pick(raw, ["size_formatted", "size_str", "human_size"]),
     duration: pick(raw, ["duration", "length"]),
     quality: pick(raw, ["quality", "resolution"]),
-    normal_dlink: pick(raw, ["normal_dlink", "download_link", "dlink", "direct_link", "url", "download_url"]),
+    normal_dlink: pick(raw, ["dlink", "normal_dlink", "download_link", "direct_link", "url", "download_url"]),
     fast_stream_url: Object.keys(fast).length ? fast : undefined,
     subtitle_url: pick(raw, ["subtitle_url", "subtitle", "captions"]),
     thumbnail: pick(raw, ["thumbnail", "thumb", "thumb_url", "image"]),
@@ -119,7 +125,7 @@ async function callV2Api(payload: { url: string; dir_path?: string; page?: numbe
         "Content-Type": "application/json",
         "X-API-KEY": apiKey,
       },
-      timeout: 50000,
+      timeout: 110000,
     },
   );
 
