@@ -342,7 +342,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isDynamicRef(u)) {
         setIsExtractingTerabox(true);
         try {
-          const resolved = await resolveTeraboxUrl(u);
+          // Honor preferredQuality from episode/movie to skip probe and fetch only the chosen quality
+          const epPref = movie.type === 'series' && movie.episodes
+            ? (movie.episodes.find(ep => ep.videoUrl === u || ep.videoUrl2 === u) as any)?.preferredQuality
+            : undefined;
+          const moviePref = (movie as any).preferredQuality;
+          const preferred = (epPref && epPref !== 'auto') ? epPref
+                           : (moviePref && moviePref !== 'auto') ? moviePref
+                           : null;
+          const resolved = await resolveTeraboxUrl(u, { preferredQuality: preferred });
           setExtractedVideoUrl(resolved);
           setFinalVideoUrl(resolved);
         } catch (e) {
@@ -424,6 +432,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
             
             if (vid) {
+               // FAST PATH: if admin forced a specific quality and that quality exists, skip probe and play it directly
+               const fsEarly = vid.fast_stream_url || {};
+               const epPrefEarly = (urlMatchEp as any)?.preferredQuality as string | undefined;
+               const moviePrefEarly = (movie as any).preferredQuality as string | undefined;
+               const preferredEarly = (epPrefEarly && epPrefEarly !== 'auto') ? epPrefEarly
+                                    : (moviePrefEarly && moviePrefEarly !== 'auto') ? moviePrefEarly
+                                    : null;
+               if (preferredEarly && typeof fsEarly[preferredEarly] === 'string' && fsEarly[preferredEarly]) {
+                 const directUrl = fsEarly[preferredEarly];
+                 console.log(`[VideoPlayer] qualidade forçada "${preferredEarly}" — pulando probe, tocando direto`);
+                 setExtractedVideoUrl(directUrl);
+                 setFinalVideoUrl(directUrl);
+                 setExtractedQualities([{ id: preferredEarly, label: preferredEarly, url: directUrl }]);
+                 const subUrlEarly = vid.subtitle_url || data.subtitle || data.subtitle_url;
+                 if (subUrlEarly) setExtractedSubtitleUrl(subUrlEarly);
+                 setIsExtractingTerabox(false);
+                 return;
+               }
+
                // Build COMPLETE quality list — all available resolutions, ordered best→worst
                const qualityList: { id: string; label: string; url: string }[] = [];
                const fs = vid.fast_stream_url || {};

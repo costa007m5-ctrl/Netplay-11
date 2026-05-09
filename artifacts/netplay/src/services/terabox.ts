@@ -35,12 +35,16 @@ export function getDynamicRefFilename(url: string): string {
   return parseDynamicRef(url).filename;
 }
 
-function pickBestUrl(file: any): string | null {
+function pickBestUrl(file: any, preferred?: string | null): string | null {
+  const fs = file?.fast_stream_url || {};
+  if (preferred && preferred !== 'auto' && typeof fs[preferred] === 'string' && fs[preferred]) {
+    return fs[preferred];
+  }
   return (
-    file?.fast_stream_url?.['1080p'] ||
-    file?.fast_stream_url?.['720p'] ||
-    file?.fast_stream_url?.['480p'] ||
-    file?.fast_stream_url?.['360p'] ||
+    fs['1080p'] ||
+    fs['720p'] ||
+    fs['480p'] ||
+    fs['360p'] ||
     file?.normal_dlink ||
     file?.stream_url ||
     file?.dlink ||
@@ -48,7 +52,7 @@ function pickBestUrl(file: any): string | null {
   );
 }
 
-export async function resolveTeraboxUrl(url: string): Promise<string> {
+export async function resolveTeraboxUrl(url: string, opts?: { preferredQuality?: string | null }): Promise<string> {
   if (!url || !isDynamicRef(url)) return url;
 
   const { folderUrl, filename, v2 } = parseDynamicRef(url);
@@ -91,7 +95,7 @@ export async function resolveTeraboxUrl(url: string): Promise<string> {
     throw new Error(`Arquivo "${filename}" não encontrado na pasta do Terabox.`);
   }
 
-  const resolved = pickBestUrl(file);
+  const resolved = pickBestUrl(file, opts?.preferredQuality);
   if (!resolved) {
     throw new Error(`Nenhum link de stream encontrado para o arquivo "${filename}".`);
   }
