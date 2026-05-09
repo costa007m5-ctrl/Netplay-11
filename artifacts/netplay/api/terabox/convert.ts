@@ -3,7 +3,22 @@ export const config = {
 };
 
 const teraboxCache = new Map<string, { data: any; expiresAt: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const SAFETY_MS = 5 * 60 * 1000;
+
+function deriveTtlMs(url: string): number {
+  try {
+    const u = new URL(url);
+    const exp = u.searchParams.get("expires");
+    if (exp && /^\d+$/.test(exp)) {
+      const expMs = parseInt(exp, 10) * 1000;
+      const remaining = expMs - Date.now() - SAFETY_MS;
+      if (remaining > 0) return Math.min(remaining, CACHE_TTL_MS);
+      return 0;
+    }
+  } catch {}
+  return CACHE_TTL_MS;
+}
 
 function pickBestUrl(file: any): string | null {
   return (
@@ -53,9 +68,11 @@ export default async function handler(req: any, res: any) {
     }
 
     let data: any;
+    let cacheStatus = "MISS";
     const cached = teraboxCache.get(url);
     if (cached && Date.now() < cached.expiresAt) {
       data = cached.data;
+      cacheStatus = "HIT-MEMORY";
     } else {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 50000);
@@ -97,7 +114,10 @@ export default async function handler(req: any, res: any) {
       }
 
       if (data?.status !== "error") {
-        teraboxCache.set(url, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+        const ttl = deriveTtlMs(url);
+        if (ttl > 0) {
+          teraboxCache.set(url, { data, expiresAt: Date.now() + ttl });
+        }
       }
     }
 
@@ -121,6 +141,9 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    const ttlSec = Math.max(1, Math.floor(deriveTtlMs(url) / 1000));
+    res.setHeader("Cache-Control", ttlSec > 1 ? `public, s-maxage=${ttlSec}, stale-while-revalidate=60` : "no-store");
+    res.setHeader("X-Cache", cacheStatus);
     res.status(200).json({ success: true, videoUrl, directUrl: videoUrl });
   } catch (error: any) {
     console.error(`[terabox/convert] handler crashed: ${error?.message}`, error?.stack);

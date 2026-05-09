@@ -130,8 +130,19 @@ export default async function handler(req: any, res: any) {
         },
       );
 
+      // Derive TTL from upstream URL `expires=` query param if present (Terabox/KingX signed URLs).
+      // Default to 60s for unsigned URLs to keep manifests fresh enough for live updates.
+      let manifestTtlSec = 60;
+      try {
+        const upstreamUrl = new URL(url);
+        const exp = upstreamUrl.searchParams.get("expires");
+        if (exp && /^\d+$/.test(exp)) {
+          const remaining = parseInt(exp, 10) - Math.floor(Date.now() / 1000) - 300;
+          manifestTtlSec = Math.max(10, Math.min(remaining, 3600));
+        }
+      } catch {}
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      res.setHeader("Cache-Control", "public, max-age=10");
+      res.setHeader("Cache-Control", `public, max-age=30, s-maxage=${manifestTtlSec}, stale-while-revalidate=30`);
       res.status(200).send(rewrittenKeys);
       return;
     }

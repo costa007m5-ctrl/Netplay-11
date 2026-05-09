@@ -3,7 +3,22 @@ export const config = {
 };
 
 const teraboxCache = new Map<string, { data: any; expiresAt: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const SAFETY_MS = 5 * 60 * 1000;
+
+function deriveTtlMs(url: string): number {
+  try {
+    const u = new URL(url);
+    const exp = u.searchParams.get("expires");
+    if (exp && /^\d+$/.test(exp)) {
+      const expMs = parseInt(exp, 10) * 1000;
+      const remaining = expMs - Date.now() - SAFETY_MS;
+      if (remaining > 0) return Math.min(remaining, CACHE_TTL_MS);
+      return 0;
+    }
+  } catch {}
+  return CACHE_TTL_MS;
+}
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -36,6 +51,9 @@ export default async function handler(req: any, res: any) {
 
     const cached = teraboxCache.get(url);
     if (cached && Date.now() < cached.expiresAt) {
+      const remainingSec = Math.max(1, Math.floor((cached.expiresAt - Date.now()) / 1000));
+      res.setHeader("Cache-Control", `public, s-maxage=${remainingSec}, stale-while-revalidate=60`);
+      res.setHeader("X-Cache", "HIT-MEMORY");
       res.status(200).json(cached.data);
       return;
     }
@@ -81,7 +99,16 @@ export default async function handler(req: any, res: any) {
     }
 
     if (data?.status !== "error") {
-      teraboxCache.set(url, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+      const ttl = deriveTtlMs(url);
+      if (ttl > 0) {
+        teraboxCache.set(url, { data, expiresAt: Date.now() + ttl });
+        const sMaxAge = Math.max(1, Math.floor(ttl / 1000));
+        res.setHeader("Cache-Control", `public, s-maxage=${sMaxAge}, stale-while-revalidate=60`);
+        res.setHeader("X-Cache", "MISS-STORED");
+      } else {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("X-Cache", "BYPASS-EXPIRED");
+      }
     }
 
     res.status(200).json(data);
