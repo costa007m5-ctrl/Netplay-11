@@ -76,6 +76,26 @@ export default async function handler(req: any, res: any) {
       const text = await upstream.text();
       clearTimeout(timeoutId);
 
+      // Detect upstream JSON error (e.g. Terabox "need verify") returned in place of m3u8.
+      // Return 451 so the client knows it's a verification problem and can fallback to iframe.
+      const trimmed = text.trim();
+      if (
+        !trimmed.startsWith("#EXTM3U") &&
+        (trimmed.startsWith("{") || trimmed.startsWith("["))
+      ) {
+        let upstreamErr: any = null;
+        try { upstreamErr = JSON.parse(trimmed); } catch {}
+        const msg = upstreamErr?.errmsg || upstreamErr?.error || "upstream returned non-m3u8 JSON";
+        console.warn(`[proxy-stream] upstream verification/auth failed: ${msg}`);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(451).json({
+          error: "verification_required",
+          message: msg,
+          upstream: upstreamErr,
+        });
+        return;
+      }
+
       const lastSlash = url.lastIndexOf("/");
       const baseUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : url;
       let urlOrigin = "";
