@@ -446,72 +446,55 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                }
 
                // OVERRIDE MANUAL: se o admin escolheu uma qualidade fixa pro filme/episódio,
-               // usar SÓ ela (pula probe). Episódio tem prioridade sobre filme.
+               // priorizamos ela. Episódio tem prioridade sobre filme.
+               // IMPORTANTE: ainda probamos pra confirmar que a URL realmente entrega conteúdo
+               // (workers.dev às vezes retorna 200 com body vazio em qualidades "fantasma").
                const epPreferred = (urlMatchEp as any)?.preferredQuality as string | undefined;
                const moviePreferred = (movie as any).preferredQuality as string | undefined;
                const preferred = (epPreferred && epPreferred !== 'auto') ? epPreferred
                                 : (moviePreferred && moviePreferred !== 'auto') ? moviePreferred
                                 : null;
-               let finalList = qualityList;
-               let forcedByAdmin = false;
+
+               // Monta uma ordem de tentativa: [forçada, depois desce a escada, depois sobe]
+               const ladder = ['1080p', '720p', '480p', '360p', '240p'];
+               let attemptOrder: typeof qualityList = [];
                if (preferred) {
-                 // 1) Match EXATO: pega exatamente fast_stream_url[preferred] da resposta da API
-                 const exact = qualityList.find(q => q.id === preferred);
-                 if (exact) {
-                   console.log(`[VideoPlayer] qualidade fixa do admin: ${preferred} → URL direto da API (probe pulado)`);
-                   finalList = [exact];
-                   forcedByAdmin = true;
-                 } else {
-                   // 2) Match por proximidade: usa a melhor qualidade disponível ABAIXO da escolhida
-                   //    (ex: admin pediu 1080p mas API só tem 720p/480p/360p → usa 720p)
-                   const ladder = ['1080p', '720p', '480p', '360p', '240p'];
-                   const prefIdx = ladder.indexOf(preferred);
-                   if (prefIdx !== -1) {
-                     for (let i = prefIdx; i < ladder.length; i++) {
-                       const candidate = qualityList.find(q => q.id === ladder[i]);
-                       if (candidate) {
-                         console.log(`[VideoPlayer] qualidade fixa "${preferred}" indisponível, usando próxima abaixo: ${ladder[i]} (probe pulado)`);
-                         finalList = [candidate];
-                         forcedByAdmin = true;
-                         break;
-                       }
-                     }
-                     // Se não tem nada abaixo, tenta acima (última tentativa antes de cair pro probe)
-                     if (!forcedByAdmin) {
-                       for (let i = prefIdx - 1; i >= 0; i--) {
-                         const candidate = qualityList.find(q => q.id === ladder[i]);
-                         if (candidate) {
-                           console.log(`[VideoPlayer] qualidade fixa "${preferred}" indisponível, usando próxima acima: ${ladder[i]} (probe pulado)`);
-                           finalList = [candidate];
-                           forcedByAdmin = true;
-                           break;
-                         }
-                       }
-                     }
-                   }
-                   if (!forcedByAdmin) {
-                     console.warn(`[VideoPlayer] qualidade fixa "${preferred}" não tem nenhum match na API, caindo pro probe`);
-                   }
+                 const prefIdx = ladder.indexOf(preferred);
+                 const seen = new Set<string>();
+                 const pushIfExists = (id: string) => {
+                   if (seen.has(id)) return;
+                   const q = qualityList.find(x => x.id === id);
+                   if (q) { attemptOrder.push(q); seen.add(id); }
+                 };
+                 if (prefIdx !== -1) {
+                   for (let i = prefIdx; i < ladder.length; i++) pushIfExists(ladder[i]); // forçada → mais baixas
+                   for (let i = prefIdx - 1; i >= 0; i--) pushIfExists(ladder[i]);        // depois mais altas
                  }
+                 // adiciona qualquer outra (ex: "auto" do dlink) como último recurso
+                 for (const q of qualityList) if (!seen.has(q.id)) attemptOrder.push(q);
+               } else {
+                 attemptOrder = qualityList;
                }
 
-               // SMART PROBE BLOQUEANTE: aguarda o servidor testar todas as qualidades
-               // em paralelo ANTES de entregar uma URL pro player. Só roda se admin não fixou qualidade.
-               // workers.dev às vezes retorna HTTP 200 com body VAZIO em qualidades quebradas.
-               // Timeout de 5s: se probe demorar/falhar, usa a lista original como fallback.
-               if (!forcedByAdmin && qualityList.length > 1) {
+               let finalList = qualityList;
+               let forcedByAdmin = false;
+
+               // SMART PROBE: testa as URLs pra confirmar que entregam conteúdo.
+               // - Sem admin override: testa tudo em paralelo, mantém só as que funcionam
+               // - Com admin override: testa em ORDEM (forçada primeiro), para na primeira que funciona
+               if (qualityList.length >= 1) {
                  const probeController = new AbortController();
                  probeAbortRef.current?.abort();
                  probeAbortRef.current = probeController;
                  const probeMovieId = movie.id;
-                 const probeTimeout = setTimeout(() => probeController.abort(), 5000);
+                 const probeTimeout = setTimeout(() => probeController.abort(), preferred ? 8000 : 5000);
                  try {
                    const probeRes = await fetch('/api/probe-streams', {
                      method: 'POST',
                      headers: { 'Content-Type': 'application/json' },
                      signal: probeController.signal,
                      body: JSON.stringify({
-                       urls: qualityList.slice(0, 6).map(q => ({
+                       urls: attemptOrder.slice(0, 6).map(q => ({
                          quality: q.id,
                          label: q.label,
                          url: q.url,
@@ -526,9 +509,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                        const workingIds = new Set(working.map(w => w.quality));
                        const filtered = qualityList.filter(q => workingIds.has(q.id));
                        if (filtered.length > 0) {
-                         finalList = filtered;
-                         console.log(`[VideoPlayer] probe: ${filtered.length}/${qualityList.length} qualidades funcionais`,
-                           working.map((w:any) => `${w.quality}(${w.ms}ms)`).join(', '));
+                         if (preferred) {
+                           // Modo override: pega a PRIMEIRA da ordem de tentativa que sobreviveu ao probe
+                           const chosen = attemptOrder.find(q => workingIds.has(q.id));
+                           if (chosen) {
+                             finalList = [chosen, ...filtered.filter(q => q.id !== chosen.id)];
+                             forcedByAdmin = true;
+                             console.log(`[VideoPlayer] qualidade preferida "${preferred}" → tocando ${chosen.id} (validada via probe). Outras disponíveis: ${filtered.filter(q=>q.id!==chosen.id).map(q=>q.id).join(',') || 'nenhuma'}`);
+                           }
+                         } else {
+                           finalList = filtered;
+                           console.log(`[VideoPlayer] probe: ${filtered.length}/${qualityList.length} qualidades funcionais`,
+                             working.map((w:any) => `${w.quality}(${w.ms}ms)`).join(', '));
+                         }
                        }
                      } else {
                        console.warn('[VideoPlayer] probe: nenhuma qualidade respondeu, usando lista original');
