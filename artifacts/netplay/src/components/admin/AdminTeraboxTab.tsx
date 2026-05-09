@@ -33,6 +33,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const [enrichStatus, setEnrichStatus] = useState('');
   const [seasonApiVersion, setSeasonApiVersion] = useState<'v1' | 'v2'>('v2');
   const [seasonScanStatus, setSeasonScanStatus] = useState('');
+  const [autoDetectStatus, setAutoDetectStatus] = useState('');
 
   // For Mass Update
   const [updatingMode, setUpdatingMode] = useState(false);
@@ -266,6 +267,101 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     setSeasonScanResults(results);
     setSeasonScanStatus('Varredura completa. Revise os episódios e salve.');
     setSeasonScanning(false);
+  };
+
+  // Detecta temporada e episódio a partir do nome do arquivo. Suporta:
+  //  - 1x03, 01x03, 1×03, 01×03 (× ou x, com ou sem zero)
+  //  - S01E03, s1e3, S01.E03, S01-E03
+  //  - Temporada 1 Episodio 3, T1E3, T01E03
+  //  - Season 1 Episode 3
+  //  - 1.03, 01.03 (raro, só se rodeado por separadores)
+  // Retorna {season, episode} ou null. Pega a PRIMEIRA correspondência válida.
+  const parseSeasonEpisode = (filename: string): { season: number; episode: number } | null => {
+    if (!filename) return null;
+    // Remove extensão pra evitar números do encoder no fim
+    const name = filename.replace(/\.(mkv|mp4|avi|mov|webm|m4v|wmv|flv|ts|m3u8)$/i, '');
+
+    const patterns: RegExp[] = [
+      // S01E03, s1e3, S01.E03, S01-E03, S01_E03
+      /[Ss](\d{1,2})[\s._-]*[Ee](\d{1,3})/,
+      // 01x03, 1x3, 01×03, 1×3
+      /(?:^|[^\dA-Za-z])(\d{1,2})\s*[x×X]\s*(\d{1,3})(?=[^\d]|$)/,
+      // T01E03, T1E3, t01e03
+      /[Tt](\d{1,2})[\s._-]*[Ee](\d{1,3})/,
+      // Temporada 1 Episodio 3, Temp 1 Ep 3
+      /[Tt]emp(?:orada)?[\s._-]*(\d{1,2})[\s._-]+(?:[Ee]p(?:is[oó]dio)?|EP)[\s._-]*(\d{1,3})/i,
+      // Season 1 Episode 3
+      /[Ss]eason[\s._-]*(\d{1,2})[\s._-]+[Ee]pisode[\s._-]*(\d{1,3})/i,
+      // 1.03 ou 01.03 (com separadores antes/depois — evita confundir com versão)
+      /(?:^|[\s\-_\[(])(\d{1,2})\.(\d{2,3})(?=[\s\-_\])])/,
+    ];
+
+    for (const re of patterns) {
+      const m = name.match(re);
+      if (m) {
+        const s = parseInt(m[1], 10);
+        const e = parseInt(m[2], 10);
+        if (s >= 0 && s <= 50 && e >= 1 && e <= 999) {
+          return { season: s || 1, episode: e };
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleAutoDetectSE = () => {
+    if (!Object.keys(seasonScanResults).length) return;
+    const allFiles: any[] = [];
+    for (const seasonStr of Object.keys(seasonScanResults)) {
+      for (const f of seasonScanResults[Number(seasonStr)]) allFiles.push(f);
+    }
+
+    let detected = 0;
+    let unmatched = 0;
+    const newGrouped: Record<number, any[]> = {};
+    const fallbackBySeason: Record<number, any[]> = {};
+
+    for (const file of allFiles) {
+      const parsed = parseSeasonEpisode(file.filename);
+      if (parsed) {
+        if (!newGrouped[parsed.season]) newGrouped[parsed.season] = [];
+        newGrouped[parsed.season].push({
+          ...file,
+          season: parsed.season,
+          episode: parsed.episode,
+        });
+        detected++;
+      } else {
+        const fallback = file.season || 1;
+        if (!fallbackBySeason[fallback]) fallbackBySeason[fallback] = [];
+        fallbackBySeason[fallback].push(file);
+        unmatched++;
+      }
+    }
+
+    // Append unmatched files to the end of their original season, renumbering
+    for (const seasonStr of Object.keys(fallbackBySeason)) {
+      const sNum = Number(seasonStr);
+      if (!newGrouped[sNum]) newGrouped[sNum] = [];
+      const startEp = newGrouped[sNum].length
+        ? Math.max(...newGrouped[sNum].map(x => x.episode || 0)) + 1
+        : 1;
+      fallbackBySeason[sNum].forEach((f, idx) => {
+        newGrouped[sNum].push({ ...f, season: sNum, episode: startEp + idx });
+      });
+    }
+
+    // Sort each season by episode number
+    for (const s of Object.keys(newGrouped)) {
+      newGrouped[Number(s)].sort((a, b) => (a.episode || 0) - (b.episode || 0));
+    }
+
+    setSeasonScanResults(newGrouped);
+    setAutoDetectStatus(
+      `Detectado: ${detected} arquivo${detected === 1 ? '' : 's'} reorganizado${detected === 1 ? '' : 's'} em ${Object.keys(newGrouped).length} temporada${Object.keys(newGrouped).length === 1 ? '' : 's'}` +
+      (unmatched ? `. ${unmatched} sem padrão (mantidos no fim).` : '.')
+    );
+    setTimeout(() => setAutoDetectStatus(''), 8000);
   };
 
   const handleEnrichTmdbSynopses = async () => {
@@ -726,6 +822,16 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           </button>
           {Object.keys(seasonScanResults).length > 0 && (
             <button
+              onClick={handleAutoDetectSE}
+              title="Lê o nome de cada arquivo (1x03, S01E03, Temp 1 Ep 3, etc) e move pra temporada/episódio certo"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-2"
+            >
+              <Zap size={14} />
+              Auto-detectar S/E
+            </button>
+          )}
+          {Object.keys(seasonScanResults).length > 0 && (
+            <button
               onClick={handleEnrichTmdbSynopses}
               disabled={enrichingTmdb || !selectedSeries}
               title="Busca título e sinopse de cada episódio no TMDB pela série selecionada"
@@ -748,6 +854,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
         </div>
         {seasonScanStatus && !seasonScanning && <div className="mt-3 text-xs text-purple-400 font-bold">{seasonScanStatus}</div>}
         {enrichStatus && <div className="mt-1 text-xs text-blue-400 font-bold">{enrichStatus}</div>}
+        {autoDetectStatus && <div className="mt-1 text-xs text-amber-400 font-bold">{autoDetectStatus}</div>}
 
         {/* Season scan results */}
         {Object.keys(seasonScanResults).length > 0 && (
