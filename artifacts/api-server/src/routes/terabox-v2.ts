@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import axios from "axios";
+import { trackUrl } from "../lib/terabox-keepwarm";
 
 const router: IRouter = Router();
 
@@ -224,6 +225,8 @@ async function handle(req: any, res: any) {
     res.status(503).json({ error: "TERABOX_V2_API_KEY not configured" });
     return;
   }
+
+  trackUrl(url, "v2");
 
   if (apiKey) {
     try {

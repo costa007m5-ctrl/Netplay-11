@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import axios from "axios";
+import { trackUrl, getKeepwarmStatus } from "../lib/terabox-keepwarm";
 
 const router: IRouter = Router();
 
@@ -104,6 +105,9 @@ router.get("/terabox-pro", async (req, res) => {
   const useNocache = nocache === "1" || nocache === "true";
   const allowFallback = fallback !== "0" && fallback !== "false";
 
+  // Registra a URL pra ser reaquecida periodicamente
+  trackUrl(url, "v1");
+
   // Tenta V1
   if (apiKey) {
     try {
@@ -150,6 +154,10 @@ router.get("/terabox-pro", async (req, res) => {
   }
 
   res.status(500).json({ error: "Failed to fetch from Terabox API" });
+});
+
+router.get("/terabox-keepwarm/status", (_req, res) => {
+  res.json(getKeepwarmStatus());
 });
 
 router.post("/terabox/convert", async (req, res) => {
