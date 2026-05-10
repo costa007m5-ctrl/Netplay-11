@@ -1,4 +1,4 @@
-export type PreferredQuality = 'auto' | '360p' | '480p' | '720p' | '1080p';
+export type PreferredQuality = 'auto' | '360p' | '480p' | '720p' | '1080p' | 'direct';
 
 export interface Episode {
   id: string;
