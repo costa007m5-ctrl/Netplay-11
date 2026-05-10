@@ -199,6 +199,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onClose, onUpda
             </div>
           </section>
 
+          {/* Tempo de Recomendações */}
+          <section>
+            <h3 className="text-[10px] font-black text-red-600 uppercase tracking-[0.3em] mb-6 italic">Player & Reprodução Avançada</h3>
+            <div className="flex items-center justify-between p-8 bg-white/5 rounded-[2rem] border border-white/5 group hover:bg-white/10 transition-all">
+              <div className="flex items-center gap-6">
+                <div className="p-4 bg-black/40 rounded-2xl text-gray-400 group-hover:text-red-600 transition-colors">
+                  <Play size={24} />
+                </div>
+                <div>
+                  <p className="text-white font-black uppercase tracking-widest text-xs italic">Recomendações — Antecedência (s)</p>
+                  <p className="text-[10px] text-gray-500 font-bold italic mt-1">Quantos segundos antes do fim exibir o painel de recomendações (padrão: 120)</p>
+                </div>
+              </div>
+              <input
+                type="number"
+                min={15}
+                max={600}
+                value={localSettings.recs_overlay_offset ?? 120}
+                onChange={(e) => setLocalSettings(prev => ({ ...prev, recs_overlay_offset: Math.max(15, Math.min(600, parseInt(e.target.value) || 120)) }))}
+                className="w-24 bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-sm font-mono text-white text-center focus:outline-none focus:border-red-600 transition-all"
+              />
+            </div>
+          </section>
+
           {/* Integrações */}
           <section>
             <h3 className="text-[10px] font-black text-red-600 uppercase tracking-[0.3em] mb-6 italic">Conectividade</h3>

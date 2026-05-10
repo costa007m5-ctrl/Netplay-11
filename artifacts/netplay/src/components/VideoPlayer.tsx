@@ -931,8 +931,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           autoNextOffset={
             movie.type === 'series' && currentIndex !== -1 
               ? movie.episodes?.[currentIndex]?.credits_time 
-              : undefined
+              : (movie as any).credits_time ?? undefined
           }
+          recsOverlayOffset={appSettings?.recs_overlay_offset ?? 120}
           onProgress={async (time, duration) => {
             currentTimeRef.current = time;
             if (duration !== undefined) durationRef.current = duration;

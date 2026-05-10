@@ -3520,6 +3520,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </label>
                       </div>
                     </div>
+                    {editingMovie.type !== 'series' && (
+                      <div>
+                        <label className="block text-[9px] md:text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 md:mb-2 px-1">Recomendações — Antecedência (s)</label>
+                        <input
+                          type="number"
+                          value={(editingMovie as any).credits_time !== undefined ? (editingMovie as any).credits_time : ''}
+                          onChange={(e) => setEditingMovie({ ...editingMovie, credits_time: e.target.value !== '' ? Number(e.target.value) : undefined } as any)}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm font-bold focus:outline-none focus:border-red-600 transition-all font-mono"
+                          placeholder="Ex: 120 (deixe vazio para usar configuração global)"
+                        />
+                        <p className="text-[9px] text-gray-500 mt-1 px-1">Quantos segundos antes do fim o painel de recomendações aparece para este filme.</p>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-[9px] md:text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 md:mb-2 px-1">Atores / Elenco</label>
                       <input 

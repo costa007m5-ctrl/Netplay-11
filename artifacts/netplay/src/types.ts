@@ -148,6 +148,7 @@ export interface AppSettings {
   google_drive_token?: string;
   google_drive_accounts?: GoogleDriveAccount[];
   category_backdrops?: Record<number, string>; // ID do gênero -> Backdrop URL
+  recs_overlay_offset?: number; // Segundos antes do fim para exibir recomendações (padrão: 440)
   updated_at: string;
 }
 

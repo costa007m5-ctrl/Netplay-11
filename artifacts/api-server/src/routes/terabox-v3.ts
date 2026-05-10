@@ -25,13 +25,25 @@ function normalizeItem(raw: any): any {
   const streamUrl = raw.stream_url || raw.stream_download_url || null;
   const directLink = raw.direct_link || raw.normal_dlink || raw.dlink || null;
 
+  // Build quality map from raw API response if it provides real per-quality URLs.
+  // Only fall back to mapping all keys to the same stream_url when no real ladder exists
+  // (otherwise the frontend probes N identical URLs wasting time).
+  const rawFast = raw.fast_stream_url || raw.qualities || {};
   const fast: Record<string, string> = {};
-  if (streamUrl) {
+
+  // Prefer real quality entries from the API response
+  const qualityKeys = ["1080p", "720p", "480p", "360p", "240p"];
+  let usedRealLadder = false;
+  for (const k of qualityKeys) {
+    if (rawFast[k] && typeof rawFast[k] === "string") {
+      fast[k] = rawFast[k];
+      usedRealLadder = true;
+    }
+  }
+  // If the API doesn't provide a real ladder, use stream_url once under "auto"
+  // so the frontend can play it without probing 5 identical URLs.
+  if (!usedRealLadder && streamUrl) {
     fast["auto"] = streamUrl;
-    fast["1080p"] = streamUrl;
-    fast["720p"] = streamUrl;
-    fast["480p"] = streamUrl;
-    fast["360p"] = streamUrl;
   }
 
   return {

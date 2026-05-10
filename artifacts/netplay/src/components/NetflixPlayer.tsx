@@ -37,6 +37,7 @@ interface NetflixPlayerProps {
   episodes?: any[];
   onSelectEpisode?: (episode: any) => void;
   preferredAudioLanguage?: string;
+  recsOverlayOffset?: number;
 }
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
@@ -70,6 +71,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   episodes = [],
   onSelectEpisode,
   preferredAudioLanguage,
+  recsOverlayOffset = 120,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -797,11 +799,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               }));
               if (tracks.length > 1) {
                 setHlsAudioTracks(tracks);
-                // Auto-select preferred language
+                // Auto-select preferred language — Portuguese has many ISO codes:
+                // pt-BR, pt, por, pb, pob, ptbr, portuguese, por-BR, pt-br, por-br
                 const pref = (preferredAudioLanguage || 'pt-BR').toLowerCase().replace('_', '-');
-                const prefBase = pref.split('-')[0];
-                const prefTrack = tracks.find(t => t.lang === pref || t.lang === prefBase || t.lang.startsWith(prefBase))
-                               || tracks.find(t => t.lang.startsWith('pt'));
+                const prefBase = pref.split('-')[0]; // e.g. "pt"
+                const isPortuguese = prefBase === 'pt' || pref.startsWith('por');
+                const ptCodes = new Set(['pt', 'pt-br', 'por', 'por-br', 'pb', 'pob', 'ptbr', 'portuguese', 'pt-pt', 'por-pt']);
+                const prefTrack = isPortuguese
+                  ? (tracks.find(t => ptCodes.has(t.lang))
+                     || tracks.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.lang === 'pb' || t.lang === 'pob'))
+                  : (tracks.find(t => t.lang === pref || t.lang === prefBase || t.lang.startsWith(prefBase)));
                 if (prefTrack && prefTrack.id !== hls.audioTrack) {
                   hls.audioTrack = prefTrack.id;
                   setCurrentAudioTrackId(prefTrack.id);
@@ -973,7 +980,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         }
 
         if (!hasNextEpisode) {
-          if (timeFromEnd <= 440 && timeFromEnd > 0) {
+          const recsThreshold = recsOverlayOffset > 0 ? recsOverlayOffset : 440;
+          if (timeFromEnd <= recsThreshold && timeFromEnd > 0) {
             if (recsDismissedRef.current && recsDismissedTimeRef.current !== null && time > recsDismissedTimeRef.current + 40) {
                recsDismissedRef.current = false;
                recsTargetTimeRef.current = null;
@@ -991,7 +999,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               }
             }
           } else {
-            if (timeFromEnd > 440) {
+            if (timeFromEnd > recsThreshold) {
               setShowRecsOverlay(false);
               recsDismissedRef.current = false;
               recsTargetTimeRef.current = null;
