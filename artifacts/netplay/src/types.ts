@@ -1,4 +1,5 @@
 export type PreferredQuality = 'auto' | '360p' | '480p' | '720p' | '1080p' | 'direct';
+export type PreferredAudioLanguage = 'auto' | 'pt-BR' | 'pt-PT' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ja' | 'ko' | 'zh';
 
 export interface Episode {
   id: string;
@@ -14,6 +15,7 @@ export interface Episode {
   runtime?: number;
   credits_time?: number; // Segundos antes do fim para o Próximo Episódio
   preferredQuality?: PreferredQuality; // Qualidade fixa escolhida no admin (sobrescreve probe)
+  preferredAudioLanguage?: PreferredAudioLanguage; // Idioma de áudio preferido
 }
 
 export interface Movie {
@@ -50,6 +52,7 @@ export interface Movie {
   collection_backdrop_path?: string;
   savedEpisodeUrl?: string; // URL do episódio salvo (carregado do Supabase watch_history)
   preferredQuality?: PreferredQuality; // Qualidade fixa escolhida no admin (sobrescreve probe)
+  preferredAudioLanguage?: PreferredAudioLanguage; // Idioma de áudio preferido
 }
 
 export interface StreamingProvider {

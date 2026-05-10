@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock, Languages } from 'lucide-react';
 import screenfull from 'screenfull';
 import Hls from 'hls.js';
 import { motion, AnimatePresence } from 'motion/react';
@@ -36,6 +36,7 @@ interface NetflixPlayerProps {
   autoNextOffset?: number;
   episodes?: any[];
   onSelectEpisode?: (episode: any) => void;
+  preferredAudioLanguage?: string;
 }
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
@@ -67,7 +68,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   onClickBackground,
   autoNextOffset,
   episodes = [],
-  onSelectEpisode
+  onSelectEpisode,
+  preferredAudioLanguage,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -316,6 +318,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   });
   const [isAutoQuality, setIsAutoQuality] = useState(true);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [hlsAudioTracks, setHlsAudioTracks] = useState<{ id: number; name: string; lang: string; default?: boolean }[]>([]);
+  const [currentAudioTrackId, setCurrentAudioTrackId] = useState<number | null>(null);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
   const [canCast, setCanCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
   const [qualityToast, setQualityToast] = useState<string | null>(null);
@@ -782,6 +787,29 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               let parsedLevels = data.levels.map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate })).sort((a, b) => b.height - a.height);
               setQualityLevels(parsedLevels);
               setLoadingProgress(prev => Math.max(prev, 55));
+
+              // Detect and auto-select audio tracks
+              const tracks: { id: number; name: string; lang: string; default?: boolean }[] = (hls.audioTracks || []).map((t: any, i: number) => ({
+                id: i,
+                name: t.name || t.lang || `Track ${i + 1}`,
+                lang: (t.lang || '').toLowerCase(),
+                default: t.default,
+              }));
+              if (tracks.length > 1) {
+                setHlsAudioTracks(tracks);
+                // Auto-select preferred language
+                const pref = (preferredAudioLanguage || 'pt-BR').toLowerCase().replace('_', '-');
+                const prefBase = pref.split('-')[0];
+                const prefTrack = tracks.find(t => t.lang === pref || t.lang === prefBase || t.lang.startsWith(prefBase))
+                               || tracks.find(t => t.lang.startsWith('pt'));
+                if (prefTrack && prefTrack.id !== hls.audioTrack) {
+                  hls.audioTrack = prefTrack.id;
+                  setCurrentAudioTrackId(prefTrack.id);
+                  console.log(`[NetflixPlayer] áudio auto-selecionado: ${prefTrack.name} (${prefTrack.lang})`);
+                } else {
+                  setCurrentAudioTrackId(hls.audioTrack);
+                }
+              }
               
               if (video) {
                  video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
@@ -1499,6 +1527,19 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (l.includes('360') || l.includes('ECONOMIA')) return 'bg-purple-500';
     if (l.includes('240') || l.includes('BÁSICO')) return 'bg-slate-500';
     return 'bg-gray-500';
+  };
+
+  const handleAudioTrackChange = (trackId: number) => {
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = trackId;
+      setCurrentAudioTrackId(trackId);
+      const track = hlsAudioTracks.find(t => t.id === trackId);
+      if (track) {
+        setQualityToast(`Áudio: ${track.name}`);
+        setTimeout(() => setQualityToast(null), 3000);
+      }
+    }
+    setShowAudioMenu(false);
   };
 
   const handleQualityChange = (levelId: number | string) => {
@@ -2436,6 +2477,49 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                     )}
                   </AnimatePresence>
                 </div>
+
+                {/* Áudio */}
+                {hlsAudioTracks.length > 1 && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black mb-3">Faixa de Áudio</p>
+                    <button
+                      onClick={() => setShowAudioMenu(!showAudioMenu)}
+                      className="w-full py-4 px-5 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-xs font-bold transition-all border border-white/5 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Languages size={14} className="text-blue-400" />
+                        <span>
+                          {currentAudioTrackId !== null
+                            ? (hlsAudioTracks.find(t => t.id === currentAudioTrackId)?.name || 'Áudio')
+                            : 'Áudio'}
+                        </span>
+                      </div>
+                      <Settings size={16} className={`transition-transform duration-300 ${showAudioMenu ? 'rotate-90 text-blue-500' : 'text-gray-400'}`} />
+                    </button>
+                    <AnimatePresence>
+                      {showAudioMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-2 space-y-2 overflow-hidden px-1"
+                        >
+                          {hlsAudioTracks.map(track => (
+                            <button
+                              key={track.id}
+                              onClick={() => handleAudioTrackChange(track.id)}
+                              className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-3 ${currentAudioTrackId === track.id ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+                            >
+                              <div className={`w-2 h-2 rounded-full shrink-0 ${currentAudioTrackId === track.id ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
+                              <span className="flex-1 text-left">{track.name}</span>
+                              {track.lang && <span className="text-[10px] uppercase tracking-widest opacity-60">{track.lang}</span>}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
 
                 {/* Velocidade */}
                 <div className="pb-8">

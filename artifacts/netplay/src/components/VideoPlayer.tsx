@@ -918,6 +918,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
           }}
           videoUrlOptions={videoUrlOptions}
+          preferredAudioLanguage={(() => {
+            const urlMatchEp = movie.type === 'series' && movie.episodes
+              ? movie.episodes.find(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl)
+              : null;
+            return (urlMatchEp as any)?.preferredAudioLanguage || (movie as any).preferredAudioLanguage || 'pt-BR';
+          })()}
           isHost={isHost}
           roomId={roomId}
           profile={profile}

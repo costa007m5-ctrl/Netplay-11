@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Database, Link as LinkIcon, CheckCircle2, ShieldCheck, Play, Video, RefreshCw, FolderSearch, Save, Zap, Tv, Settings2 } from 'lucide-react';
 import Hls from 'hls.js';
-import { Movie, PreferredQuality } from '../../types';
+import { Movie, PreferredQuality, PreferredAudioLanguage } from '../../types';
 import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
 import { makeDynamicRefV3, isDynamicRef } from '../../services/terabox';
 
@@ -12,6 +12,20 @@ const QUALITY_OPTIONS: { value: PreferredQuality; label: string }[] = [
   { value: '480p',   label: '480p — SD' },
   { value: '360p',   label: '360p — Baixa' },
   { value: 'direct', label: 'Link Direto' },
+];
+
+const AUDIO_LANGUAGE_OPTIONS: { value: PreferredAudioLanguage; label: string }[] = [
+  { value: 'auto',  label: 'Auto (idioma padrão do arquivo)' },
+  { value: 'pt-BR', label: '🇧🇷 Português (Brasil)' },
+  { value: 'pt-PT', label: '🇵🇹 Português (Portugal)' },
+  { value: 'en',    label: '🇺🇸 Inglês' },
+  { value: 'es',    label: '🇪🇸 Espanhol' },
+  { value: 'fr',    label: '🇫🇷 Francês' },
+  { value: 'de',    label: '🇩🇪 Alemão' },
+  { value: 'it',    label: '🇮🇹 Italiano' },
+  { value: 'ja',    label: '🇯🇵 Japonês' },
+  { value: 'ko',    label: '🇰🇷 Coreano' },
+  { value: 'zh',    label: '🇨🇳 Chinês' },
 ];
 
 export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
@@ -46,6 +60,8 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
   const [updating, setUpdating] = useState(false);
   const [globalMovieQuality, setGlobalMovieQuality] = useState<PreferredQuality>('auto');
   const [globalSeriesQuality, setGlobalSeriesQuality] = useState<PreferredQuality>('auto');
+  const [globalMovieAudio, setGlobalMovieAudio] = useState<PreferredAudioLanguage>('pt-BR');
+  const [globalSeriesAudio, setGlobalSeriesAudio] = useState<PreferredAudioLanguage>('pt-BR');
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -154,6 +170,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
           searchName,
           searching: false,
           preferredQuality: globalMovieQuality,
+          preferredAudioLanguage: globalMovieAudio,
         });
       }
       setFolderResults(mapped);
@@ -214,9 +231,10 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
           ? makeDynamicRefV3(folderUrl, item.imported_filename)
           : folderUrl;
         const qualityToSave: PreferredQuality = item.preferredQuality || 'auto';
+        const audioToSave: PreferredAudioLanguage = item.preferredAudioLanguage || 'pt-BR';
         if (existingMovie) {
           try {
-            await onUpdateMovie({ ...existingMovie, videoUrl: videoUrlToSave, videoUrl2: videoUrlToSave, file_name: item.imported_filename, preferredQuality: qualityToSave });
+            await onUpdateMovie({ ...existingMovie, videoUrl: videoUrlToSave, videoUrl2: videoUrlToSave, file_name: item.imported_filename, preferredQuality: qualityToSave, preferredAudioLanguage: audioToSave });
           } catch { errorCount++; }
         } else {
           try {
@@ -227,7 +245,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
               overview: t ? t.overview : 'Adicionado via Terabox 3.0',
               backdrop_path: t?.backdrop_path ? `https://image.tmdb.org/t/p/original${t.backdrop_path}` : 'https://picsum.photos/seed/terabox/1920/1080',
               poster_path: t?.poster_path ? `https://image.tmdb.org/t/p/original${t.poster_path}` : 'https://picsum.photos/seed/terabox/500/750',
-              type, genres: genreNames, videoUrl: videoUrlToSave, videoUrl2: videoUrlToSave, file_name: item.imported_filename, preferredQuality: qualityToSave,
+              type, genres: genreNames, videoUrl: videoUrlToSave, videoUrl2: videoUrlToSave, file_name: item.imported_filename, preferredQuality: qualityToSave, preferredAudioLanguage: audioToSave,
             });
           } catch { errorCount++; }
         }
@@ -340,6 +358,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
           selected: true,
           availableQualities: [],
           preferredQuality: globalSeriesQuality,
+          preferredAudioLanguage: globalSeriesAudio,
         }));
       } catch (e: any) {
         setSeasonScanStatus(`Erro na Temporada ${sf.season}: ${e.message}`);
@@ -496,6 +515,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
             ...(tmdbEp?.runtime ? { runtime: tmdbEp.runtime } : {}),
             ...(tmdbEp?.vote_average !== undefined && tmdbEp?.vote_average !== null ? { rating: tmdbEp.vote_average } : {}),
             ...(file.preferredQuality && file.preferredQuality !== 'auto' ? { preferredQuality: file.preferredQuality } : {}),
+            ...(file.preferredAudioLanguage && file.preferredAudioLanguage !== 'auto' ? { preferredAudioLanguage: file.preferredAudioLanguage } : {}),
           });
         }
       }
@@ -726,16 +746,27 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
           </button>
         </div>
 
-        {/* Global quality selector for series */}
-        <div className="flex items-center gap-3 mb-4 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+        {/* Global quality + audio selectors for series */}
+        <div className="flex items-center gap-3 mb-2 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
           <Settings2 size={14} className="text-violet-400 shrink-0" />
-          <span className="text-xs text-violet-300 font-bold">Qualidade padrão dos episódios:</span>
+          <span className="text-xs text-violet-300 font-bold whitespace-nowrap">Qualidade:</span>
           <select
             value={globalSeriesQuality}
             onChange={e => setGlobalSeriesQuality(e.target.value as PreferredQuality)}
             className="flex-1 bg-black/60 border border-violet-500/30 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-400"
           >
             {QUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+          <Settings2 size={14} className="text-blue-400 shrink-0" />
+          <span className="text-xs text-blue-300 font-bold whitespace-nowrap">Áudio padrão:</span>
+          <select
+            value={globalSeriesAudio}
+            onChange={e => setGlobalSeriesAudio(e.target.value as PreferredAudioLanguage)}
+            className="flex-1 bg-black/60 border border-blue-500/30 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-400"
+          >
+            {AUDIO_LANGUAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
 
@@ -806,6 +837,14 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
                         >
                           {QUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
+                        <select
+                          value={file.preferredAudioLanguage || 'pt-BR'}
+                          onChange={e => { const copy = { ...seasonScanResults }; (copy[Number(season)] as any[])[i].preferredAudioLanguage = e.target.value; setSeasonScanResults(copy); }}
+                          className="bg-black/60 border border-blue-500/30 rounded px-1.5 py-0.5 text-[10px] text-blue-300 font-bold focus:outline-none focus:border-blue-400 shrink-0"
+                          title="Idioma de áudio preferido para este episódio"
+                        >
+                          {AUDIO_LANGUAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
                         <span className="text-[10px] text-violet-500 font-bold shrink-0 flex items-center gap-1 ml-auto"><Zap size={10} /> V3</span>
                       </div>
                       <div className="text-gray-300 text-[11px] break-all leading-snug pl-6" title={file.filename}>{file.filename}</div>
@@ -841,16 +880,27 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
             {dynamicLinkMode ? <span className="text-green-400 flex items-center gap-1"><Zap size={10} /> Link Dinâmico V3 (recomendado)</span> : 'Link Direto (pode expirar)'}
           </span>
         </div>
-        {/* Global quality selector for movies */}
-        <div className="flex items-center gap-3 mb-3 p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
+        {/* Global quality + audio selectors for movies */}
+        <div className="flex items-center gap-3 mb-2 p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
           <Settings2 size={14} className="text-green-400 shrink-0" />
-          <span className="text-xs text-green-300 font-bold whitespace-nowrap">Qualidade padrão dos filmes:</span>
+          <span className="text-xs text-green-300 font-bold whitespace-nowrap">Qualidade:</span>
           <select
             value={globalMovieQuality}
             onChange={e => setGlobalMovieQuality(e.target.value as PreferredQuality)}
             className="flex-1 bg-black/60 border border-green-500/30 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-green-400"
           >
             {QUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-3 mb-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+          <Settings2 size={14} className="text-blue-400 shrink-0" />
+          <span className="text-xs text-blue-300 font-bold whitespace-nowrap">Áudio padrão:</span>
+          <select
+            value={globalMovieAudio}
+            onChange={e => setGlobalMovieAudio(e.target.value as PreferredAudioLanguage)}
+            className="flex-1 bg-black/60 border border-blue-500/30 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-400"
+          >
+            {AUDIO_LANGUAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div className="flex gap-2">
@@ -904,15 +954,23 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
                       {res.searching ? '...' : 'Buscar'}
                     </button>
                   </div>
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <Settings2 size={11} className="text-green-400 shrink-0" />
                     <span className="text-[10px] text-green-300 font-bold whitespace-nowrap">Qualidade:</span>
                     <select
                       value={res.preferredQuality || 'auto'}
                       onChange={e => { const copy = [...folderResults]; copy[i].preferredQuality = e.target.value as PreferredQuality; setFolderResults(copy); }}
-                      className="flex-1 bg-black/60 border border-green-500/30 rounded px-1.5 py-0.5 text-[10px] text-green-300 font-bold focus:outline-none focus:border-green-400"
+                      className="flex-1 bg-black/60 border border-green-500/30 rounded px-1.5 py-0.5 text-[10px] text-green-300 font-bold focus:outline-none focus:border-green-400 min-w-[100px]"
                     >
                       {QUALITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <span className="text-[10px] text-blue-300 font-bold whitespace-nowrap">Áudio:</span>
+                    <select
+                      value={res.preferredAudioLanguage || 'pt-BR'}
+                      onChange={e => { const copy = [...folderResults]; copy[i].preferredAudioLanguage = e.target.value as PreferredAudioLanguage; setFolderResults(copy); }}
+                      className="flex-1 bg-black/60 border border-blue-500/30 rounded px-1.5 py-0.5 text-[10px] text-blue-300 font-bold focus:outline-none focus:border-blue-400 min-w-[100px]"
+                    >
+                      {AUDIO_LANGUAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>
