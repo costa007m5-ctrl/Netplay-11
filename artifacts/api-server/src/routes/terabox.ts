@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import axios from "axios";
-import { trackUrl, getKeepwarmStatus } from "../lib/terabox-keepwarm";
+import { trackUrl } from "../lib/terabox-keepwarm";
 
 const router: IRouter = Router();
 
@@ -154,10 +154,6 @@ router.get("/terabox-pro", async (req, res) => {
   }
 
   res.status(500).json({ error: "Failed to fetch from Terabox API" });
-});
-
-router.get("/terabox-keepwarm/status", (_req, res) => {
-  res.json(getKeepwarmStatus());
 });
 
 router.post("/terabox/convert", async (req, res) => {

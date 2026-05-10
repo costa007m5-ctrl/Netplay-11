@@ -20,6 +20,7 @@ import { AdminAPIsTab } from './AdminAPIsTab';
 import { AdminOneSignalTab } from './AdminOneSignalTab';
 import AdminTeraboxTab from './AdminTeraboxTab';
 import AdminTeraboxV2Tab from './AdminTeraboxV2Tab';
+import AdminQuenteTab from './AdminQuenteTab';
 import QualitySelect from './QualitySelect';
 
 interface AdminPanelProps {
@@ -47,7 +48,7 @@ interface AdminPanelProps {
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'quente';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1600,6 +1601,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             <p className="hidden md:block text-[10px] text-gray-500 font-black uppercase tracking-widest mb-4 px-4">Categorias</p>
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Activity },
+              { id: 'quente', label: 'Quente', icon: Activity },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
               { id: 'terabox', label: 'Terabox API', icon: Database },
@@ -2045,6 +2047,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminTeraboxTab movies={movies} onUpdateMovie={onUpdateMovie} onAddMovie={onAddMovie} />
             ) : activeTab === 'terabox2' ? (
               <AdminTeraboxV2Tab movies={movies} onUpdateMovie={onUpdateMovie} onAddMovie={onAddMovie} />
+            ) : activeTab === 'quente' ? (
+              <AdminQuenteTab movies={movies} />
             ) : activeTab === 'onesignal' ? (
               <AdminOneSignalTab />
             ) : activeTab === 'supabase' ? (
