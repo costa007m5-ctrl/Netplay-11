@@ -34,9 +34,37 @@ function pickBestUrl(file: any): string | null {
   );
 }
 
-async function callTeraboxApi(url: string, apiKey: string) {
-  const cached = getCached(url);
-  if (cached) return cached;
+// Pre-warm: faz um HEAD nos links principais para "esquentar" o cache do CDN do Terabox.
+// Best-effort — falhas são silenciosas e não bloqueiam a resposta ao cliente.
+async function prewarmLinks(data: any) {
+  try {
+    const list: any[] = Array.isArray(data?.list) ? data.list : data?.list ? [data.list] : data?.fast_stream_url ? [data] : [];
+    const urls = new Set<string>();
+    for (const file of list.slice(0, 3)) {
+      const fs = file?.fast_stream_url || {};
+      for (const k of ["720p", "480p", "360p", "1080p"]) {
+        if (typeof fs[k] === "string" && fs[k]) urls.add(fs[k]);
+      }
+      const direct = file?.normal_dlink || file?.dlink || file?.url;
+      if (typeof direct === "string" && direct) urls.add(direct);
+    }
+    await Promise.allSettled(
+      Array.from(urls).slice(0, 6).map((u) =>
+        axios.head(u, { timeout: 4000, validateStatus: () => true }).catch(() => undefined),
+      ),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+async function callTeraboxApi(url: string, apiKey: string, opts?: { nocache?: boolean }) {
+  if (!opts?.nocache) {
+    const cached = getCached(url);
+    if (cached) return cached;
+  } else {
+    teraboxCache.delete(url);
+  }
 
   const response = await axios.post(
     "https://xapiverse.com/api/terabox-pro",
@@ -52,37 +80,76 @@ async function callTeraboxApi(url: string, apiKey: string) {
 
   if (response.data?.status !== "error") {
     setCached(url, response.data);
+    // pre-aquece em background, sem await
+    prewarmLinks(response.data);
   }
 
   return response.data;
 }
 
 router.get("/terabox-pro", async (req, res) => {
-  const { url } = req.query;
+  const { url, nocache, fallback } = req.query;
   if (!url || typeof url !== "string") {
     res.status(400).json({ error: "url query param required" });
     return;
   }
 
   const apiKey = process.env.TERABOX_PRO_API_KEY;
-  if (!apiKey) {
+  const v2Key = process.env.TERABOX_V2_API_KEY;
+  if (!apiKey && !v2Key) {
     res.status(503).json({ error: "TERABOX_PRO_API_KEY not configured" });
     return;
   }
 
-  try {
-    const data = await callTeraboxApi(url, apiKey);
-    res.json(data);
-  } catch (error: unknown) {
-    const err = error as { response?: { data?: unknown }; message?: string };
-    const details =
-      err?.response?.data != null
-        ? typeof err.response.data === "string"
-          ? err.response.data
-          : JSON.stringify(err.response.data)
-        : err?.message ?? "unknown error";
-    res.status(500).json({ error: "Failed to fetch from Terabox API", details });
+  const useNocache = nocache === "1" || nocache === "true";
+  const allowFallback = fallback !== "0" && fallback !== "false";
+
+  // Tenta V1
+  if (apiKey) {
+    try {
+      const data = await callTeraboxApi(url, apiKey, { nocache: useNocache });
+      const list: any[] = Array.isArray(data?.list) ? data.list : [];
+      const hasPlayable = list.some((f) => pickBestUrl(f));
+      if (hasPlayable || !allowFallback || !v2Key) {
+        res.json(data);
+        return;
+      }
+      console.warn("[terabox-pro] V1 retornou sem link tocável — tentando fallback V2");
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.warn("[terabox-pro] V1 falhou, tentando fallback V2:", err?.message);
+      if (!allowFallback || !v2Key) {
+        const details = err?.message ?? "unknown error";
+        res.status(500).json({ error: "Failed to fetch from Terabox API", details });
+        return;
+      }
+    }
   }
+
+  // Fallback V2
+  if (v2Key && allowFallback) {
+    try {
+      const v2Resp = await axios.post(
+        "https://api-v2.teraboxdl.site/api/terabox/extract",
+        { url },
+        {
+          headers: { "Content-Type": "application/json", "X-API-KEY": v2Key },
+          timeout: 30000,
+        },
+      );
+      // Marca a resposta para client saber que veio de fallback
+      const data = v2Resp.data;
+      if (data && typeof data === "object") (data as any)._source = "v2-fallback";
+      res.json(data);
+      return;
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      res.status(502).json({ error: "Both V1 and V2 Terabox APIs failed", details: err?.message });
+      return;
+    }
+  }
+
+  res.status(500).json({ error: "Failed to fetch from Terabox API" });
 });
 
 router.post("/terabox/convert", async (req, res) => {

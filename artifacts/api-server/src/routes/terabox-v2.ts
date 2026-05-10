@@ -112,10 +112,36 @@ function normalizeResponse(raw: any): any {
   return { status: "error", error: "Unable to parse v2 response", _v2_raw: raw };
 }
 
-async function callV2Api(payload: { url: string; dir_path?: string; page?: number }, apiKey: string) {
+async function prewarmV2(data: any) {
+  try {
+    const list: any[] = Array.isArray(data?.list) ? data.list : [];
+    const urls = new Set<string>();
+    for (const file of list.slice(0, 3)) {
+      const fs = file?.fast_stream_url || {};
+      for (const k of ["720p", "480p", "360p", "1080p", "auto"]) {
+        if (typeof fs[k] === "string" && fs[k]) urls.add(fs[k]);
+      }
+      const direct = file?.normal_dlink;
+      if (typeof direct === "string" && direct) urls.add(direct);
+    }
+    await Promise.allSettled(
+      Array.from(urls).slice(0, 6).map((u) =>
+        axios.head(u, { timeout: 4000, validateStatus: () => true }).catch(() => undefined),
+      ),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+async function callV2Api(payload: { url: string; dir_path?: string; page?: number }, apiKey: string, opts?: { nocache?: boolean }) {
   const cacheKey = `${payload.url}|${payload.dir_path || ""}|${payload.page || ""}`;
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.data;
+  if (!opts?.nocache) {
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) return cached.data;
+  } else {
+    cache.delete(cacheKey);
+  }
 
   const response = await axios.post(
     "https://api-v2.teraboxdl.site/api/terabox/extract",
@@ -133,24 +159,58 @@ async function callV2Api(payload: { url: string; dir_path?: string; page?: numbe
 
   if (data?.status !== "error") {
     cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    prewarmV2(data);
   }
 
   return data;
+}
+
+function v2HasPlayable(data: any): boolean {
+  if (!data || !Array.isArray(data.list)) return false;
+  return data.list.some((f: any) => {
+    const fs = f?.fast_stream_url || {};
+    return !!(fs["1080p"] || fs["720p"] || fs["480p"] || fs["360p"] || fs["auto"] || f?.normal_dlink);
+  });
+}
+
+async function callV1AsV2Fallback(url: string, apiKey: string): Promise<any | null> {
+  try {
+    const response = await axios.post(
+      "https://xapiverse.com/api/terabox-pro",
+      { url },
+      {
+        headers: { "Content-Type": "application/json", "xAPIverse-Key": apiKey },
+        timeout: 25000,
+      },
+    );
+    if (response.data && typeof response.data === "object") {
+      (response.data as any)._source = "v1-fallback";
+    }
+    return response.data;
+  } catch {
+    return null;
+  }
 }
 
 async function handle(req: any, res: any) {
   let url: string | undefined;
   let dirPath: string | undefined;
   let page: number | undefined;
+  let nocache: boolean = false;
+  let allowFallback: boolean = true;
 
   if (req.method === "GET") {
     url = req.query?.url as string | undefined;
     dirPath = req.query?.dir_path as string | undefined;
     page = req.query?.page ? Number(req.query.page) : undefined;
+    nocache = req.query?.nocache === "1" || req.query?.nocache === "true";
+    allowFallback = req.query?.fallback !== "0" && req.query?.fallback !== "false";
   } else {
     url = req.body?.url;
     dirPath = req.body?.dir_path;
     page = req.body?.page;
+    nocache = req.body?.nocache === true || req.body?.nocache === "1";
+    allowFallback = req.body?.fallback !== false && req.body?.fallback !== "0";
   }
 
   if (!url || typeof url !== "string") {
@@ -159,29 +219,50 @@ async function handle(req: any, res: any) {
   }
 
   const apiKey = process.env.TERABOX_V2_API_KEY;
-  if (!apiKey) {
+  const v1Key = process.env.TERABOX_PRO_API_KEY;
+  if (!apiKey && !v1Key) {
     res.status(503).json({ error: "TERABOX_V2_API_KEY not configured" });
     return;
   }
 
-  try {
-    const data = await callV2Api({ url, dir_path: dirPath, page }, apiKey);
-    res.json(data);
-  } catch (error: unknown) {
-    const err = error as { response?: { status?: number; data?: unknown }; message?: string; code?: string };
-    const isTimeout = err?.code === "ECONNABORTED";
-    const upstreamStatus = err?.response?.status;
-    const details =
-      err?.response?.data != null
-        ? typeof err.response.data === "string"
-          ? err.response.data.slice(0, 300)
-          : JSON.stringify(err.response.data).slice(0, 500)
-        : err?.message ?? "unknown error";
-    res.status(isTimeout ? 504 : upstreamStatus && upstreamStatus >= 400 ? 502 : 500).json({
-      error: isTimeout ? "Terabox V2 API timed out" : "Failed to fetch from Terabox V2 API",
-      details,
-    });
+  if (apiKey) {
+    try {
+      const data = await callV2Api({ url, dir_path: dirPath, page }, apiKey, { nocache });
+      if (v2HasPlayable(data) || !allowFallback || !v1Key) {
+        res.json(data);
+        return;
+      }
+      console.warn("[terabox-v2] V2 retornou sem link tocável — tentando fallback V1");
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number; data?: unknown }; message?: string; code?: string };
+      console.warn("[terabox-v2] V2 falhou, tentando fallback V1:", err?.message);
+      if (!allowFallback || !v1Key) {
+        const isTimeout = err?.code === "ECONNABORTED";
+        const upstreamStatus = err?.response?.status;
+        const details =
+          err?.response?.data != null
+            ? typeof err.response.data === "string"
+              ? err.response.data.slice(0, 300)
+              : JSON.stringify(err.response.data).slice(0, 500)
+            : err?.message ?? "unknown error";
+        res.status(isTimeout ? 504 : upstreamStatus && upstreamStatus >= 400 ? 502 : 500).json({
+          error: isTimeout ? "Terabox V2 API timed out" : "Failed to fetch from Terabox V2 API",
+          details,
+        });
+        return;
+      }
+    }
   }
+
+  if (v1Key && allowFallback) {
+    const v1Data = await callV1AsV2Fallback(url, v1Key);
+    if (v1Data) {
+      res.json(v1Data);
+      return;
+    }
+  }
+
+  res.status(502).json({ error: "Both V2 and V1 Terabox APIs failed" });
 }
 
 router.get("/terabox-v2", handle);

@@ -355,12 +355,31 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                            : (moviePref && moviePref !== 'auto') ? moviePref
                            : null;
 
-          const res = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}`);
-          const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || `Falha ao resolver Terabox (${res.status})`);
+          // Tenta resolver — se falhar ou voltar vazio, retenta com nocache=1 para pular cache
+          // local do servidor (links Terabox às vezes ficam "presos" no cache enquanto o CDN
+          // ainda não liberou o arquivo). Backoff curto entre tentativas.
+          const fetchWithRetry = async () => {
+            const tryOnce = async (nocache: boolean) => {
+              const qs = nocache ? `&nocache=1&_t=${Date.now()}` : '';
+              const r = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}${qs}`);
+              const d = await r.json().catch(() => ({}));
+              return { r, d };
+            };
+            let { r, d } = await tryOnce(false);
+            const isEmpty = r.ok && (!Array.isArray(d.list) || d.list.length === 0);
+            if (!r.ok || isEmpty) {
+              console.warn(`[VideoPlayer] dyn-ref tentativa 1 falhou (status=${r.status}, vazio=${isEmpty}) — retry com nocache em 2s`);
+              await new Promise(res => setTimeout(res, 2000));
+              ({ r, d } = await tryOnce(true));
+            }
+            if (!r.ok) throw new Error(d?.error || `Falha ao resolver Terabox (${r.status})`);
+            return d;
+          };
+          const data = await fetchWithRetry();
 
           const list: any[] = Array.isArray(data.list) ? data.list : [];
           if (list.length === 0) throw new Error('Pasta vazia ou expirada');
+          if ((data as any)._source) console.log(`[VideoPlayer] dyn-ref resolvido via ${(data as any)._source}`);
 
           // Find file by filename (fallback to first)
           let file: any = null;
