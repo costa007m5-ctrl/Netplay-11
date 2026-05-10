@@ -352,8 +352,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             : null;
           const epPref = (urlMatchEp as any)?.preferredQuality;
           const moviePref = (movie as any).preferredQuality;
-          const preferred: string | null = (epPref && epPref !== 'auto') ? epPref
-                           : (moviePref && moviePref !== 'auto') ? moviePref
+          const preferred: string | null = (epPref && epPref !== 'auto' && epPref !== 'stream') ? epPref
+                           : (moviePref && moviePref !== 'auto' && moviePref !== 'stream') ? moviePref
                            : null;
 
           // Tenta resolver — se falhar ou voltar vazio, retenta com nocache=1 para pular cache
@@ -410,15 +410,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
             }
           }
+          // Add "Auto (Stream)" — stream HLS com áudio completo
+          // Prioridade: fast_stream_url['auto'] > stream_url > url
+          const autoStreamUrl = fs['auto'] || file.stream_url || file.url;
+          if (autoStreamUrl && !qualityList.some(q => q.url === autoStreamUrl)) {
+            qualityList.push({ id: 'stream', label: 'Auto (Stream)', url: autoStreamUrl });
+          }
           // Add "Link Direto" (normal_dlink) as an explicit selectable option
           const directUrl = file.normal_dlink || file.dlink;
           if (directUrl && !qualityList.some(q => q.url === directUrl)) {
             qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
-          }
-          // Fallback stream url if nothing else
-          const fallbackUrl = file.url || file.stream_url;
-          if (fallbackUrl && !qualityList.some(q => q.url === fallbackUrl)) {
-            qualityList.push({ id: 'auto', label: 'Padrão', url: fallbackUrl });
           }
 
           if (qualityList.length === 0) throw new Error('Nenhum link de stream para este arquivo');
@@ -569,15 +570,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                  }
                }
                if (nativeQuality) console.log(`[VideoPlayer] resolução nativa do arquivo: ${nativeQuality}`);
+               // Add "Auto (Stream)" — stream HLS com áudio completo
+               // Prioridade: fast_stream_url['auto'] > stream_url > url
+               const autoStreamUrl = fs['auto'] || vid.stream_url || vid.url || vid.video_url || vid.src || (vid.data && vid.data.url);
+               if (autoStreamUrl && !qualityList.some(q => q.url === autoStreamUrl)) {
+                 qualityList.push({ id: 'stream', label: 'Auto (Stream)', url: autoStreamUrl });
+               }
                // Add "Link Direto" (normal_dlink) as an explicit selectable option
                const directUrl = vid.normal_dlink || vid.dlink;
                if (directUrl && !qualityList.some(q => q.url === directUrl)) {
                  qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
-               }
-               // Fallback stream url if nothing else
-               const fallbackUrl = vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url);
-               if (fallbackUrl && !qualityList.some(q => q.url === fallbackUrl)) {
-                 qualityList.push({ id: 'auto', label: 'Padrão', url: fallbackUrl });
                }
 
                // OVERRIDE MANUAL: se o admin escolheu uma qualidade fixa pro filme/episódio,
@@ -591,7 +593,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                                 : null;
 
                // Monta uma ordem de tentativa: [forçada, depois desce a escada, depois sobe]
-               const ladder = ['1080p', '720p', '480p', '360p', '240p', 'direct', 'auto'];
+               const ladder = ['1080p', '720p', '480p', '360p', '240p', 'stream', 'direct'];
                let attemptOrder: typeof qualityList = [];
                if (preferred) {
                  const prefIdx = ladder.indexOf(preferred);

@@ -1509,7 +1509,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     return 'from-slate-500 to-slate-700';
   };
 
-  // Cores por label de qualidade (string). Funciona pra "FULL HD", "HD", "1080p", "720p", "480p (SD)", "Padrão", etc.
+  // Cores por label de qualidade (string). Funciona pra "FULL HD", "HD", "1080p", "720p", "480p (SD)", "Auto (Stream)", "Link Direto", etc.
   const getQualityColorByLabel = (label: string | undefined | null): string => {
     if (!label) return 'from-slate-500 to-slate-700';
     const l = label.toUpperCase();
@@ -1520,6 +1520,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (l.includes('480') || l.includes('PADRÃO') || l === 'SD') return 'from-emerald-500 to-emerald-700';
     if (l.includes('360') || l.includes('ECONOMIA')) return 'from-purple-500 to-purple-700';
     if (l.includes('240') || l.includes('BÁSICO')) return 'from-slate-500 to-slate-700';
+    if (l.includes('STREAM') || l.includes('AUTO')) return 'from-teal-500 to-teal-700';
+    if (l.includes('DIRETO') || l.includes('DIRECT')) return 'from-orange-500 to-orange-700';
     return 'from-gray-500 to-gray-700';
   };
 
@@ -1534,6 +1536,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     if (l.includes('480') || l.includes('PADRÃO') || l === 'SD') return 'bg-emerald-500';
     if (l.includes('360') || l.includes('ECONOMIA')) return 'bg-purple-500';
     if (l.includes('240') || l.includes('BÁSICO')) return 'bg-slate-500';
+    if (l.includes('STREAM') || l.includes('AUTO')) return 'bg-teal-500';
+    if (l.includes('DIRETO') || l.includes('DIRECT')) return 'bg-orange-500';
     return 'bg-gray-500';
   };
 
@@ -1564,7 +1568,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const fixedOption = videoUrlOptions.find(o => o.id === levelId);
       if (fixedOption) {
         setActiveSrc(fixedOption.url);
-        label = fixedOption.id.toUpperCase();
+        label = fixedOption.label;
         setCurrentQuality(label);
         setQualityToast(`Qualidade: ${fixedOption.label}`);
       } else {
@@ -2400,15 +2404,20 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black mb-4">Preferências</p>
                   <button 
                     onClick={toggleSubtitles}
-                    className="w-full py-4 px-5 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-xs font-bold transition-all border border-white/5 flex items-center justify-between"
+                    disabled={!subtitleUrl && !activeSubtitleUrl}
+                    className={`w-full py-4 px-5 rounded-2xl text-xs font-bold transition-all border flex items-center justify-between ${!subtitleUrl && !activeSubtitleUrl ? 'bg-white/3 border-white/5 text-gray-600 cursor-not-allowed opacity-60' : 'bg-white/5 hover:bg-white/10 text-white border-white/5'}`}
                   >
                     <div className="flex items-center gap-3">
                       <Subtitles size={18} className={showSubtitles ? 'text-red-500' : 'text-gray-400'} />
                       <span>Legendas</span>
                     </div>
-                    <div className={`w-10 h-5 rounded-full transition-colors relative ${showSubtitles ? 'bg-red-600' : 'bg-gray-700'}`}>
-                      <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${showSubtitles ? 'right-1' : 'left-1'}`} />
-                    </div>
+                    {subtitleUrl || activeSubtitleUrl ? (
+                      <div className={`w-10 h-5 rounded-full transition-colors relative ${showSubtitles ? 'bg-red-600' : 'bg-gray-700'}`}>
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${showSubtitles ? 'right-1' : 'left-1'}`} />
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-gray-600 font-normal">Indisponível</span>
+                    )}
                   </button>
                   <button 
                     onClick={toggleRotation}
@@ -2487,7 +2496,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                 </div>
 
                 {/* Áudio */}
-                {hlsAudioTracks.length > 1 && (
+                {hlsAudioTracks.length >= 1 && (
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black mb-3">Faixa de Áudio</p>
                     <button

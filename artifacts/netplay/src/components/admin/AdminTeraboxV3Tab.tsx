@@ -6,12 +6,13 @@ import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
 import { makeDynamicRefV3, isDynamicRef } from '../../services/terabox';
 
 const QUALITY_OPTIONS: { value: PreferredQuality; label: string }[] = [
-  { value: 'auto',   label: 'Auto (Stream principal)' },
+  { value: 'auto',   label: 'Auto (qualidade automática HLS)' },
+  { value: 'stream', label: 'Auto (Stream) — HLS com áudio' },
   { value: '1080p',  label: '1080p — Full HD' },
   { value: '720p',   label: '720p — HD' },
   { value: '480p',   label: '480p — SD' },
   { value: '360p',   label: '360p — Baixa' },
-  { value: 'direct', label: 'Link Direto' },
+  { value: 'direct', label: 'Link Direto (sem áudio garantido)' },
 ];
 
 const AUDIO_LANGUAGE_OPTIONS: { value: PreferredAudioLanguage; label: string }[] = [
@@ -105,7 +106,13 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         list.push({ id: o.k, label: o.label, url: fs[o.k] });
       }
     }
-    const direct = testVid.normal_dlink || testVid.stream_url || testVid.direct_link;
+    // Add "Auto (Stream)" fallback from stream_url when fast_stream_url['auto'] not set
+    const streamFallback = testVid.stream_url || testVid.url;
+    if (streamFallback && !seen.has(streamFallback)) {
+      seen.add(streamFallback);
+      list.push({ id: 'stream', label: 'Auto (Stream)', url: streamFallback });
+    }
+    const direct = testVid.normal_dlink || testVid.direct_link;
     if (direct && !seen.has(direct)) list.push({ id: 'direct', label: 'Link Direto', url: direct });
     return list;
   }, [testVid]);

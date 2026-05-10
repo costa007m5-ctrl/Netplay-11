@@ -3,7 +3,7 @@ import { X, Database, Copy, Check, Info, ShieldAlert, Trash2, Edit, Film, Loader
 import { supabase } from '../lib/supabase';
 import tmdb, { requests } from '../services/tmdb';
 import { Movie, Episode, ScannerState } from '../types';
-import { makeDynamicRef } from '../services/terabox';
+import { makeDynamicRef, makeDynamicRefV3 } from '../services/terabox';
 
 const cleanTitleWithAI = async (title: string, type?: string) => title;
 
@@ -435,7 +435,7 @@ const AdminModal: React.FC<AdminModalProps> = ({
     if (!teraboxFolderUrl) return;
     setIsScanningTerabox(true);
     try {
-      const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(teraboxFolderUrl)}`);
+      const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(teraboxFolderUrl)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao rastrear pasta Terabox');
       const files: any[] = data.list || [];
@@ -453,7 +453,7 @@ const AdminModal: React.FC<AdminModalProps> = ({
           title: name.replace(/\.[^/.]+$/, ''),
           season,
           episode,
-          videoUrl: makeDynamicRef(teraboxFolderUrl, name),
+          videoUrl: makeDynamicRefV3(teraboxFolderUrl, name),
           overview: ''
         };
       });
