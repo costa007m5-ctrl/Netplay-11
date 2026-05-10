@@ -20,6 +20,7 @@ import { AdminAPIsTab } from './AdminAPIsTab';
 import { AdminOneSignalTab } from './AdminOneSignalTab';
 import AdminTeraboxTab from './AdminTeraboxTab';
 import AdminTeraboxV2Tab from './AdminTeraboxV2Tab';
+import AdminTeraboxV3Tab from './AdminTeraboxV3Tab';
 import AdminQuenteTab from './AdminQuenteTab';
 import QualitySelect from './QualitySelect';
 
@@ -48,7 +49,7 @@ interface AdminPanelProps {
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'quente';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1606,6 +1607,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
               { id: 'terabox', label: 'Terabox API', icon: Database },
               { id: 'terabox2', label: 'Admin API Terabox 2.0', icon: Database },
+              { id: 'terabox3', label: 'Terabox 3.0 (HMAC)', icon: Database },
               { id: 'users', label: 'Usuários/Assin.', icon: Users },
               { id: 'mercadopago', label: 'Mercado Pago', icon: DollarSign },
               { id: 'referrals', label: 'Resgates', icon: Database }, // Using Database temporarily or we can use another icon if imported
@@ -2047,6 +2049,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminTeraboxTab movies={movies} onUpdateMovie={onUpdateMovie} onAddMovie={onAddMovie} />
             ) : activeTab === 'terabox2' ? (
               <AdminTeraboxV2Tab movies={movies} onUpdateMovie={onUpdateMovie} onAddMovie={onAddMovie} />
+            ) : activeTab === 'terabox3' ? (
+              <AdminTeraboxV3Tab movies={movies} onUpdateMovie={onUpdateMovie} onAddMovie={onAddMovie} />
             ) : activeTab === 'quente' ? (
               <AdminQuenteTab movies={movies} />
             ) : activeTab === 'onesignal' ? (

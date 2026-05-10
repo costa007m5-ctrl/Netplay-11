@@ -1,13 +1,18 @@
 const DYNAMIC_REF_PREFIX = 'terabox-folder://';
 const DYNAMIC_REF_PREFIX_V2 = 'terabox-folder-v2://';
+const DYNAMIC_REF_PREFIX_V3 = 'terabox-folder-v3://';
 const SEPARATOR = '###';
 
 export function isDynamicRef(url: string | undefined): boolean {
-  return !!url && (url.startsWith(DYNAMIC_REF_PREFIX) || url.startsWith(DYNAMIC_REF_PREFIX_V2));
+  return !!url && (url.startsWith(DYNAMIC_REF_PREFIX) || url.startsWith(DYNAMIC_REF_PREFIX_V2) || url.startsWith(DYNAMIC_REF_PREFIX_V3));
 }
 
 export function isDynamicRefV2(url: string | undefined): boolean {
   return !!url && url.startsWith(DYNAMIC_REF_PREFIX_V2);
+}
+
+export function isDynamicRefV3(url: string | undefined): boolean {
+  return !!url && url.startsWith(DYNAMIC_REF_PREFIX_V3);
 }
 
 export function makeDynamicRef(folderUrl: string, filename: string): string {
@@ -18,16 +23,22 @@ export function makeDynamicRefV2(folderUrl: string, filename: string): string {
   return `${DYNAMIC_REF_PREFIX_V2}${folderUrl}${SEPARATOR}${filename}`;
 }
 
-export function parseDynamicRef(url: string): { folderUrl: string; filename: string; v2: boolean } {
-  const v2 = url.startsWith(DYNAMIC_REF_PREFIX_V2);
-  const prefix = v2 ? DYNAMIC_REF_PREFIX_V2 : DYNAMIC_REF_PREFIX;
+export function makeDynamicRefV3(folderUrl: string, filename: string): string {
+  return `${DYNAMIC_REF_PREFIX_V3}${folderUrl}${SEPARATOR}${filename}`;
+}
+
+export function parseDynamicRef(url: string): { folderUrl: string; filename: string; v2: boolean; v3: boolean } {
+  const v3 = url.startsWith(DYNAMIC_REF_PREFIX_V3);
+  const v2 = !v3 && url.startsWith(DYNAMIC_REF_PREFIX_V2);
+  const prefix = v3 ? DYNAMIC_REF_PREFIX_V3 : v2 ? DYNAMIC_REF_PREFIX_V2 : DYNAMIC_REF_PREFIX;
   const raw = url.slice(prefix.length);
   const sepIdx = raw.indexOf(SEPARATOR);
-  if (sepIdx === -1) return { folderUrl: raw, filename: '', v2 };
+  if (sepIdx === -1) return { folderUrl: raw, filename: '', v2, v3 };
   return {
     folderUrl: raw.slice(0, sepIdx),
     filename: raw.slice(sepIdx + SEPARATOR.length),
     v2,
+    v3,
   };
 }
 
@@ -55,8 +66,8 @@ function pickBestUrl(file: any, preferred?: string | null): string | null {
 export async function resolveTeraboxUrl(url: string, opts?: { preferredQuality?: string | null }): Promise<string> {
   if (!url || !isDynamicRef(url)) return url;
 
-  const { folderUrl, filename, v2 } = parseDynamicRef(url);
-  const endpoint = v2 ? '/api/terabox-v2' : '/api/terabox-pro';
+  const { folderUrl, filename, v2, v3 } = parseDynamicRef(url);
+  const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-pro';
   const res = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}`);
   const text = await res.text();
   let data: any;
