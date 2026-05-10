@@ -48,6 +48,10 @@ export function getDynamicRefFilename(url: string): string {
 
 function pickBestUrl(file: any, preferred?: string | null): string | null {
   const fs = file?.fast_stream_url || {};
+  // 'direct' means use normal_dlink explicitly
+  if (preferred === 'direct') {
+    return file?.normal_dlink || file?.dlink || null;
+  }
   if (preferred && preferred !== 'auto' && typeof fs[preferred] === 'string' && fs[preferred]) {
     return fs[preferred];
   }
@@ -67,7 +71,8 @@ export async function resolveTeraboxUrl(url: string, opts?: { preferredQuality?:
   if (!url || !isDynamicRef(url)) return url;
 
   const { folderUrl, filename, v2, v3 } = parseDynamicRef(url);
-  const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-pro';
+  // Always default to Terabox 3.0 — only fall back to v2/pro if explicitly tagged
+  const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-v3';
   const res = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}`);
   const text = await res.text();
   let data: any;

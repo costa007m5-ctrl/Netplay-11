@@ -342,8 +342,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isDynamicRef(u)) {
         setIsExtractingTerabox(true);
         try {
-          const { folderUrl, filename, v2 } = parseDynamicRef(u);
-          const endpoint = v2 ? '/api/terabox-v2' : '/api/terabox-pro';
+          const { folderUrl, filename, v2, v3 } = parseDynamicRef(u);
+          // Always default to Terabox 3.0 — only fall back to v2/pro if explicitly tagged
+          const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-v3';
 
           // Honor preferredQuality from episode/movie
           const urlMatchEp = movie.type === 'series' && movie.episodes
@@ -409,9 +410,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
             }
           }
-          const directUrl = file.normal_dlink || file.url || file.stream_url || file.dlink;
+          // Add "Link Direto" (normal_dlink) as an explicit selectable option
+          const directUrl = file.normal_dlink || file.dlink;
           if (directUrl && !qualityList.some(q => q.url === directUrl)) {
-            qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
+            qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
+          }
+          // Fallback stream url if nothing else
+          const fallbackUrl = file.url || file.stream_url;
+          if (fallbackUrl && !qualityList.some(q => q.url === fallbackUrl)) {
+            qualityList.push({ id: 'auto', label: 'Padrão', url: fallbackUrl });
           }
 
           if (qualityList.length === 0) throw new Error('Nenhum link de stream para este arquivo');
@@ -451,7 +458,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isTera) {
         setIsExtractingTerabox(true);
         try {
-          const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(u)}`);
+          // Use Terabox 3.0 as default resolver for all plain terabox URLs
+          const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(u)}`);
           if (res.ok) {
             const text = await res.text();
             let data: any;
@@ -561,10 +569,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                  }
                }
                if (nativeQuality) console.log(`[VideoPlayer] resolução nativa do arquivo: ${nativeQuality}`);
-               // Fallbacks de download (sem qualidade conhecida) — vão pro final como "Download"
-               const directUrl = vid.normal_dlink || vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url) || vid.dlink;
+               // Add "Link Direto" (normal_dlink) as an explicit selectable option
+               const directUrl = vid.normal_dlink || vid.dlink;
                if (directUrl && !qualityList.some(q => q.url === directUrl)) {
-                 qualityList.push({ id: 'auto', label: 'Padrão', url: directUrl });
+                 qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
+               }
+               // Fallback stream url if nothing else
+               const fallbackUrl = vid.url || vid.stream_url || vid.video_url || vid.src || (vid.data && vid.data.url);
+               if (fallbackUrl && !qualityList.some(q => q.url === fallbackUrl)) {
+                 qualityList.push({ id: 'auto', label: 'Padrão', url: fallbackUrl });
                }
 
                // OVERRIDE MANUAL: se o admin escolheu uma qualidade fixa pro filme/episódio,
@@ -578,7 +591,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                                 : null;
 
                // Monta uma ordem de tentativa: [forçada, depois desce a escada, depois sobe]
-               const ladder = ['1080p', '720p', '480p', '360p', '240p'];
+               const ladder = ['1080p', '720p', '480p', '360p', '240p', 'direct', 'auto'];
                let attemptOrder: typeof qualityList = [];
                if (preferred) {
                  const prefIdx = ladder.indexOf(preferred);
