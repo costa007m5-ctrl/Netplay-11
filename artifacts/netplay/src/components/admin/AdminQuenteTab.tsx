@@ -1,57 +1,50 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Flame, Play, RefreshCw, Power, Clock, Activity, Database, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import type { Movie } from '../../types';
 
-interface KeepwarmStatus {
-  config: {
-    enabled: boolean;
-    intervalMs: number;
-    expiresAt: number | null;
-    remainingMs: number | null;
-  };
-  stats: {
-    total: number;
-    bySource: Record<string, number>;
-    ok: number;
-    pending: number;
-    failed: number;
-  };
-  lastCycle: { startedAt: number; durationMs: number; success: number; failed: number; total: number } | null;
-  etaMs: number;
-  cycleInProgress: boolean;
-  items: Array<{
-    url: string;
-    source: string;
-    origin: string;
-    lastSeenSec: number;
-    lastWarmedSec: number | null;
-    lastStatus: 'ok' | 'fail' | 'pending';
-    failures: number;
-    warmCount: number;
-  }>;
+interface UrlState {
+  url: string;
+  source: string;
+  lastWarmed: number | null;
+  lastStatus: 'ok' | 'fail' | 'pending';
+  failures: number;
+  warmCount: number;
+  lastDurationMs: number | null;
 }
 
-interface Props {
-  movies: Movie[];
+interface PersistedState {
+  enabled: boolean;
+  intervalMs: number;
+  expiresAt: number | null; // null = ilimitado, 0 = desativado
+  urls: Record<string, UrlState>;
 }
 
-const DURATION_OPTIONS: Array<{ label: string; value: number | 'unlimited' }> = [
-  { label: 'Ilimitado', value: 'unlimited' },
-  { label: '30 minutos', value: 30 * 60 * 1000 },
-  { label: '1 hora', value: 60 * 60 * 1000 },
-  { label: '3 horas', value: 3 * 60 * 60 * 1000 },
-  { label: '6 horas', value: 6 * 60 * 60 * 1000 },
-  { label: '12 horas', value: 12 * 60 * 60 * 1000 },
-  { label: '24 horas', value: 24 * 60 * 60 * 1000 },
-];
+const STORAGE_KEY = 'netplay_keepwarm_state_v1';
+const BATCH_SIZE = 30;
+const BATCH_CONCURRENCY = 4;
 
-const INTERVAL_OPTIONS = [
-  { label: '1 min', value: 60_000 },
-  { label: '3 min', value: 3 * 60_000 },
-  { label: '5 min', value: 5 * 60_000 },
-  { label: '10 min', value: 10 * 60_000 },
-  { label: '15 min', value: 15 * 60_000 },
-];
+function detectSource(url: string): string {
+  if (!url) return 'unknown';
+  if (url.startsWith('teraboxv2-folder://')) return 'v2';
+  if (url.startsWith('terabox-folder://')) return 'v1';
+  if (/terabox|1024tera|teraboxapp|dubox|momerybox|4funbox|mirrobox|nephobox|freeterabox|teraboxlink|terafileshare/i.test(url)) return 'v1';
+  if (url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev')) return 'kingx';
+  if (url.includes('drive.google.com')) return 'drive';
+  if (/^https?:\/\//i.test(url) && /\.(m3u8|mp4|webm|mkv|mov)(\?|$)/i.test(url)) return 'direct';
+  return 'unknown';
+}
+
+function loadState(): PersistedState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { enabled: false, intervalMs: 3 * 60_000, expiresAt: null, urls: {} };
+}
+
+function saveState(s: PersistedState) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
 
 function formatMs(ms: number): string {
   if (ms < 0) return '-';
@@ -77,114 +70,252 @@ function collectAllUrls(movies: Movie[]): string[] {
       }
     }
   }
-  return Array.from(set);
+  // Filtra apenas URLs aquecíveis
+  return Array.from(set).filter((u) => detectSource(u) !== 'unknown');
+}
+
+const DURATION_OPTIONS: Array<{ label: string; value: number | 'unlimited' }> = [
+  { label: 'Ilimitado', value: 'unlimited' },
+  { label: '30 minutos', value: 30 * 60 * 1000 },
+  { label: '1 hora', value: 60 * 60 * 1000 },
+  { label: '3 horas', value: 3 * 60 * 60 * 1000 },
+  { label: '6 horas', value: 6 * 60 * 60 * 1000 },
+  { label: '12 horas', value: 12 * 60 * 60 * 1000 },
+  { label: '24 horas', value: 24 * 60 * 60 * 1000 },
+];
+
+const INTERVAL_OPTIONS = [
+  { label: '1 min', value: 60_000 },
+  { label: '3 min', value: 3 * 60_000 },
+  { label: '5 min', value: 5 * 60_000 },
+  { label: '10 min', value: 10 * 60_000 },
+  { label: '15 min', value: 15 * 60_000 },
+];
+
+interface Props {
+  movies: Movie[];
 }
 
 export default function AdminQuenteTab({ movies }: Props) {
-  const [status, setStatus] = useState<KeepwarmStatus | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [running, setRunning] = useState(false);
+  const [state, setState] = useState<PersistedState>(() => loadState());
   const [duration, setDuration] = useState<number | 'unlimited'>('unlimited');
-  const [intervalMs, setIntervalMs] = useState(3 * 60_000);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number; ok: number; fail: number; etaMs: number } | null>(null);
   const [filter, setFilter] = useState<'all' | 'ok' | 'fail' | 'pending'>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [msg, setMsg] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const runningRef = useRef(false);
+  runningRef.current = running;
 
   const allUrls = useMemo(() => collectAllUrls(movies), [movies]);
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const r = await fetch('/api/keepwarm/status');
-      if (!r.ok) return;
-      const data: KeepwarmStatus = await r.json();
-      setStatus(data);
-      setIntervalMs(data.config.intervalMs);
-    } catch {
-      // ignore
-    }
+  // Persiste estado quando mudar
+  useEffect(() => { saveState(state); }, [state]);
+
+  // Tick para atualizar tempos relativos
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    fetchStatus();
-    const t = setInterval(fetchStatus, 10_000);
-    return () => clearInterval(t);
-  }, [fetchStatus]);
+  const tracked = useMemo(() => Object.values(state.urls), [state.urls]);
 
-  const handleSync = async () => {
-    setSyncing(true);
-    setMsg(null);
-    try {
-      const r = await fetch('/api/keepwarm/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: allUrls }),
-      });
-      const data = await r.json();
-      setMsg(`Sincronizado: ${data.added || 0} novos, ${data.updated || 0} já existiam (total: ${data.totalTracked})`);
-      await fetchStatus();
-    } catch (e: any) {
-      setMsg(`Erro ao sincronizar: ${e?.message || e}`);
-    } finally {
-      setSyncing(false);
+  const stats = useMemo(() => {
+    const bySource: Record<string, number> = {};
+    let ok = 0, pending = 0, failed = 0;
+    for (const u of tracked) {
+      bySource[u.source] = (bySource[u.source] || 0) + 1;
+      if (u.lastStatus === 'ok') ok++;
+      else if (u.lastStatus === 'fail') failed++;
+      else pending++;
     }
+    // ETA: estimativa baseada em tempo médio
+    const withDuration = tracked.filter((u) => u.lastDurationMs !== null);
+    const avgMs = withDuration.length > 0
+      ? withDuration.reduce((s, u) => s + (u.lastDurationMs || 0), 0) / withDuration.length
+      : 1500;
+    const etaMs = Math.ceil(tracked.length / BATCH_CONCURRENCY) * avgMs;
+    return { total: tracked.length, bySource, ok, pending, failed, etaMs };
+  }, [tracked]);
+
+  const remainingMs = state.expiresAt && state.expiresAt > 0 ? state.expiresAt - now : null;
+
+  // Sincroniza biblioteca (adiciona URLs novas, remove as que sumiram)
+  const handleSync = () => {
+    setState((prev) => {
+      const next = { ...prev, urls: { ...prev.urls } };
+      const set = new Set(allUrls);
+      // Adiciona novas
+      let added = 0;
+      for (const url of allUrls) {
+        if (!next.urls[url]) {
+          next.urls[url] = {
+            url,
+            source: detectSource(url),
+            lastWarmed: null,
+            lastStatus: 'pending',
+            failures: 0,
+            warmCount: 0,
+            lastDurationMs: null,
+          };
+          added++;
+        }
+      }
+      // Remove URLs que não existem mais na biblioteca
+      let removed = 0;
+      for (const k of Object.keys(next.urls)) {
+        if (!set.has(k)) {
+          delete next.urls[k];
+          removed++;
+        }
+      }
+      setMsg(`Sincronizado: ${added} novos, ${removed} removidos. Total: ${Object.keys(next.urls).length}`);
+      return next;
+    });
   };
 
-  const handleSetConfig = async (opts: { enabled?: boolean; intervalMs?: number; durationMs?: number | 'unlimited' }) => {
-    setLoading(true);
-    try {
-      const body: any = {};
-      if (typeof opts.enabled === 'boolean') body.enabled = opts.enabled;
-      if (typeof opts.intervalMs === 'number') body.intervalMs = opts.intervalMs;
-      if (opts.durationMs !== undefined) body.durationMs = opts.durationMs === 'unlimited' ? 'unlimited' : opts.durationMs;
-      const r = await fetch('/api/keepwarm/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data: KeepwarmStatus = await r.json();
-      setStatus(data);
-    } finally {
-      setLoading(false);
+  // Aquecer um conjunto específico de URLs (em lotes serverless)
+  const warmUrls = useCallback(async (urls: string[]): Promise<{ ok: number; fail: number; total: number; durationMs: number }> => {
+    const start = Date.now();
+    let totalOk = 0, totalFail = 0;
+    setProgress({ done: 0, total: urls.length, ok: 0, fail: 0, etaMs: 0 });
+
+    for (let i = 0; i < urls.length; i += BATCH_SIZE) {
+      if (!runningRef.current) break;
+      const batch = urls.slice(i, i + BATCH_SIZE);
+      try {
+        const r = await fetch('/api/keepwarm-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: batch, concurrency: BATCH_CONCURRENCY }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        totalOk += data.ok || 0;
+        totalFail += data.fail || 0;
+
+        // Atualiza estado com resultados
+        setState((prev) => {
+          const next = { ...prev, urls: { ...prev.urls } };
+          const ts = Date.now();
+          for (const res of data.results || []) {
+            const cur = next.urls[res.url];
+            if (!cur) continue;
+            next.urls[res.url] = {
+              ...cur,
+              source: res.source || cur.source,
+              lastWarmed: ts,
+              lastStatus: res.ok ? 'ok' : 'fail',
+              failures: res.ok ? 0 : cur.failures + 1,
+              warmCount: cur.warmCount + (res.ok ? 1 : 0),
+              lastDurationMs: res.durationMs ?? cur.lastDurationMs,
+            };
+          }
+          return next;
+        });
+      } catch (e: any) {
+        // Marca todas as URLs do lote como falha
+        totalFail += batch.length;
+        setState((prev) => {
+          const next = { ...prev, urls: { ...prev.urls } };
+          const ts = Date.now();
+          for (const u of batch) {
+            const cur = next.urls[u];
+            if (!cur) continue;
+            next.urls[u] = { ...cur, lastWarmed: ts, lastStatus: 'fail', failures: cur.failures + 1 };
+          }
+          return next;
+        });
+        setMsg(`Erro no lote: ${e?.message || e}`);
+      }
+
+      const done = Math.min(i + BATCH_SIZE, urls.length);
+      const elapsed = Date.now() - start;
+      const avgPerUrl = done > 0 ? elapsed / done : 0;
+      const etaMs = Math.max(0, (urls.length - done) * avgPerUrl);
+      setProgress({ done, total: urls.length, ok: totalOk, fail: totalFail, etaMs });
     }
-  };
+
+    return { ok: totalOk, fail: totalFail, total: urls.length, durationMs: Date.now() - start };
+  }, []);
 
   const handleRunNow = async () => {
-    setRunning(true);
-    setMsg('Aquecendo todos os links agora...');
-    try {
-      await fetch('/api/keepwarm/run-now', { method: 'POST' });
-      setMsg('Ciclo disparado. Atualizando...');
-      // Atualiza repetidamente enquanto o ciclo roda
-      const startedAt = Date.now();
-      const poll = async () => {
-        await fetchStatus();
-        const cur = await fetch('/api/keepwarm/status').then(r => r.json()).catch(() => null);
-        if (cur && !cur.cycleInProgress) {
-          setMsg(`Concluído em ${formatMs(Date.now() - startedAt)} — ${cur.lastCycle?.success || 0} ok / ${cur.lastCycle?.failed || 0} falha de ${cur.lastCycle?.total || 0}`);
-          setRunning(false);
-          return;
-        }
-        setTimeout(poll, 3000);
-      };
-      setTimeout(poll, 2000);
-    } catch (e: any) {
-      setMsg(`Erro: ${e?.message || e}`);
-      setRunning(false);
+    if (running) return;
+    const urls = Object.keys(stateRef.current.urls);
+    if (urls.length === 0) {
+      setMsg('Nenhum link rastreado. Sincronize a biblioteca primeiro.');
+      return;
     }
+    setRunning(true);
+    runningRef.current = true;
+    setMsg(`Aquecendo ${urls.length} links...`);
+    try {
+      const result = await warmUrls(urls);
+      setMsg(`Concluído em ${formatMs(result.durationMs)} — ${result.ok} ok / ${result.fail} falha`);
+    } finally {
+      setRunning(false);
+      runningRef.current = false;
+      setProgress(null);
+    }
+  };
+
+  // Loop automático quando ativado
+  useEffect(() => {
+    if (!state.enabled) return;
+    if (state.expiresAt && state.expiresAt > 0 && Date.now() > state.expiresAt) {
+      setState((p) => ({ ...p, enabled: false }));
+      return;
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled || !stateRef.current.enabled) return;
+      if (stateRef.current.expiresAt && stateRef.current.expiresAt > 0 && Date.now() > stateRef.current.expiresAt) {
+        setState((p) => ({ ...p, enabled: false }));
+        return;
+      }
+      const urls = Object.keys(stateRef.current.urls);
+      if (urls.length === 0 || runningRef.current) return;
+      setRunning(true);
+      runningRef.current = true;
+      try { await warmUrls(urls); } finally {
+        setRunning(false);
+        runningRef.current = false;
+        setProgress(null);
+      }
+    };
+
+    // Primeiro tick rápido (5s) e depois no intervalo configurado
+    const initial = setTimeout(tick, 5000);
+    const id = setInterval(tick, state.intervalMs);
+    return () => { cancelled = true; clearTimeout(initial); clearInterval(id); };
+  }, [state.enabled, state.intervalMs, state.expiresAt, warmUrls]);
+
+  const handleToggleEnabled = () => {
+    setState((p) => ({ ...p, enabled: !p.enabled }));
+  };
+
+  const handleApplyDuration = () => {
+    const expiresAt = duration === 'unlimited' ? null : Date.now() + (duration as number);
+    setState((p) => ({ ...p, expiresAt, enabled: true }));
+    setMsg(duration === 'unlimited' ? 'Modo ilimitado ativado.' : `Vai aquecer pelos próximos ${formatMs(duration as number)}.`);
+  };
+
+  const handleSetInterval = (ms: number) => {
+    setState((p) => ({ ...p, intervalMs: ms }));
   };
 
   const filteredItems = useMemo(() => {
-    if (!status) return [];
-    return status.items.filter(it => {
+    return tracked.filter((it) => {
       if (filter !== 'all' && it.lastStatus !== filter) return false;
       if (sourceFilter !== 'all' && it.source !== sourceFilter) return false;
       return true;
     });
-  }, [status, filter, sourceFilter]);
-
-  const enabled = status?.config.enabled ?? true;
-  const remaining = status?.config.remainingMs;
+  }, [tracked, filter, sourceFilter]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -201,11 +332,11 @@ export default function AdminQuenteTab({ movies }: Props) {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <StatCard icon={Database} label="Total rastreado" value={String(status?.stats.total ?? '—')} color="text-white" />
-          <StatCard icon={CheckCircle2} label="Quentes" value={String(status?.stats.ok ?? '—')} color="text-emerald-400" />
-          <StatCard icon={AlertCircle} label="Aguardando" value={String(status?.stats.pending ?? '—')} color="text-yellow-400" />
-          <StatCard icon={XCircle} label="Com falha" value={String(status?.stats.failed ?? '—')} color="text-red-400" />
-          <StatCard icon={Clock} label="ETA por ciclo" value={status ? formatMs(status.etaMs) : '—'} color="text-orange-400" />
+          <StatCard icon={Database} label="Total rastreado" value={String(stats.total)} color="text-white" />
+          <StatCard icon={CheckCircle2} label="Quentes" value={String(stats.ok)} color="text-emerald-400" />
+          <StatCard icon={AlertCircle} label="Aguardando" value={String(stats.pending)} color="text-yellow-400" />
+          <StatCard icon={XCircle} label="Com falha" value={String(stats.failed)} color="text-red-400" />
+          <StatCard icon={Clock} label="ETA por ciclo" value={formatMs(stats.etaMs)} color="text-orange-400" />
         </div>
       </section>
 
@@ -216,107 +347,94 @@ export default function AdminQuenteTab({ movies }: Props) {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Liga/Desliga */}
           <div className="space-y-2">
             <label className="text-xs uppercase font-black text-gray-400 tracking-widest">Status</label>
             <button
-              onClick={() => handleSetConfig({ enabled: !enabled })}
-              disabled={loading}
-              className={`w-full px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${enabled ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30' : 'bg-gray-700/40 text-gray-400 border border-gray-600/30 hover:bg-gray-700/60'}`}
+              onClick={handleToggleEnabled}
+              className={`w-full px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${state.enabled ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30' : 'bg-gray-700/40 text-gray-400 border border-gray-600/30 hover:bg-gray-700/60'}`}
             >
-              <Power size={16} /> {enabled ? 'ATIVADO' : 'DESATIVADO'} {remaining !== null && remaining !== undefined && remaining > 0 && enabled ? ` · ${formatMs(remaining)} restantes` : ''}
+              <Power size={16} /> {state.enabled ? 'ATIVADO' : 'DESATIVADO'}
+              {state.enabled && remainingMs !== null && remainingMs > 0 && <span className="opacity-75 text-xs">· {formatMs(remainingMs)} restantes</span>}
+              {state.enabled && state.expiresAt === null && <span className="opacity-75 text-xs">· ilimitado</span>}
             </button>
           </div>
 
-          {/* Duração */}
           <div className="space-y-2">
             <label className="text-xs uppercase font-black text-gray-400 tracking-widest">Duração total</label>
             <div className="flex gap-2">
               <select
                 value={String(duration)}
-                onChange={(e) => {
-                  const v = e.target.value === 'unlimited' ? 'unlimited' : Number(e.target.value);
-                  setDuration(v as any);
-                }}
+                onChange={(e) => setDuration(e.target.value === 'unlimited' ? 'unlimited' : Number(e.target.value) as any)}
                 className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-white text-sm font-bold focus:outline-none focus:border-orange-500"
               >
-                {DURATION_OPTIONS.map(opt => (
+                {DURATION_OPTIONS.map((opt) => (
                   <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
                 ))}
               </select>
-              <button
-                onClick={() => handleSetConfig({ durationMs: duration, enabled: true })}
-                disabled={loading}
-                className="px-4 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm transition-all"
-              >
-                Aplicar
-              </button>
+              <button onClick={handleApplyDuration} className="px-4 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm transition-all">Aplicar</button>
             </div>
           </div>
 
-          {/* Intervalo entre ciclos */}
           <div className="space-y-2">
             <label className="text-xs uppercase font-black text-gray-400 tracking-widest">Intervalo entre ciclos</label>
-            <div className="flex gap-2">
-              <select
-                value={intervalMs}
-                onChange={(e) => setIntervalMs(Number(e.target.value))}
-                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-white text-sm font-bold focus:outline-none focus:border-orange-500"
-              >
-                {INTERVAL_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => handleSetConfig({ intervalMs })}
-                disabled={loading}
-                className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition-all"
-              >
-                Salvar
-              </button>
-            </div>
+            <select
+              value={state.intervalMs}
+              onChange={(e) => handleSetInterval(Number(e.target.value))}
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-white text-sm font-bold focus:outline-none focus:border-orange-500"
+            >
+              {INTERVAL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
-          {/* Aquecer agora */}
           <div className="space-y-2">
             <label className="text-xs uppercase font-black text-gray-400 tracking-widest">Aquecer todos agora</label>
             <button
               onClick={handleRunNow}
-              disabled={running || (status?.cycleInProgress ?? false)}
+              disabled={running || tracked.length === 0}
               className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-orange-600/20"
             >
-              <Play size={16} /> {running || status?.cycleInProgress ? 'Aquecendo...' : 'Aquecer agora'}
-              {status && <span className="opacity-75 text-xs">(~{formatMs(status.etaMs)})</span>}
+              <Play size={16} /> {running ? 'Aquecendo...' : 'Aquecer agora'}
+              {!running && tracked.length > 0 && <span className="opacity-75 text-xs">(~{formatMs(stats.etaMs)})</span>}
             </button>
           </div>
         </div>
+
+        {/* Progresso */}
+        {progress && (
+          <div className="mt-4 p-4 bg-black/40 rounded-2xl border border-orange-500/20">
+            <div className="flex justify-between text-xs text-gray-300 mb-2">
+              <span className="font-bold">Progresso: {progress.done}/{progress.total}</span>
+              <span>ETA restante: {formatMs(progress.etaMs)}</span>
+            </div>
+            <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-orange-500 to-red-600 transition-all" style={{ width: `${(progress.done / Math.max(1, progress.total)) * 100}%` }} />
+            </div>
+            <div className="flex gap-4 mt-2 text-xs">
+              <span className="text-emerald-400">{progress.ok} ok</span>
+              <span className="text-red-400">{progress.fail} falha</span>
+            </div>
+          </div>
+        )}
 
         {/* Sync biblioteca */}
         <div className="mt-6 p-4 bg-black/30 rounded-2xl border border-white/5">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <p className="text-sm font-bold text-white">Sincronizar biblioteca</p>
-              <p className="text-xs text-gray-400">Adiciona TODOS os {allUrls.length} links da biblioteca à fila de aquecimento (mesmo os que nunca foram clicados).</p>
+              <p className="text-xs text-gray-400">Atualiza a fila de aquecimento com TODOS os {allUrls.length} links da biblioteca (mesmo os que nunca foram clicados).</p>
             </div>
-            <button
-              onClick={handleSync}
-              disabled={syncing || allUrls.length === 0}
-              className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm flex items-center gap-2 disabled:opacity-50 transition-all"
-            >
-              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> Sincronizar {allUrls.length} links
+            <button onClick={handleSync} className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm flex items-center gap-2 transition-all">
+              <RefreshCw size={14} /> Sincronizar {allUrls.length} links
             </button>
           </div>
           {msg && <p className="mt-3 text-xs text-orange-300">{msg}</p>}
         </div>
 
-        {status?.lastCycle && (
-          <div className="mt-4 text-xs text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
-            <span>Último ciclo: {formatMs(Date.now() - status.lastCycle.startedAt)} atrás</span>
-            <span>Duração: {formatMs(status.lastCycle.durationMs)}</span>
-            <span className="text-emerald-400">{status.lastCycle.success} ok</span>
-            <span className="text-red-400">{status.lastCycle.failed} falha</span>
-          </div>
-        )}
+        <div className="mt-4 text-[11px] text-gray-500 italic">
+          ⚠️ O aquecimento automático roda enquanto esta aba estiver aberta no navegador. Pra rodar 24/7 sem o painel aberto, mantenha o admin aberto numa aba dedicada.
+        </div>
       </section>
 
       {/* Lista */}
@@ -324,23 +442,15 @@ export default function AdminQuenteTab({ movies }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 className="text-lg font-black italic text-white">Links rastreados ({filteredItems.length})</h3>
           <div className="flex flex-wrap gap-2">
-            {(['all', 'ok', 'pending', 'fail'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${filter === f ? 'bg-orange-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
-              >
+            {(['all', 'ok', 'pending', 'fail'] as const).map((f) => (
+              <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${filter === f ? 'bg-orange-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
                 {f === 'all' ? 'Todos' : f === 'ok' ? 'Quentes' : f === 'pending' ? 'Aguardando' : 'Falha'}
               </button>
             ))}
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-              className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold focus:outline-none"
-            >
+            <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs font-bold focus:outline-none">
               <option value="all">Todos os tipos</option>
-              {status && Object.keys(status.stats.bySource).map(s => (
-                <option key={s} value={s}>{s} ({status.stats.bySource[s]})</option>
+              {Object.keys(stats.bySource).map((s) => (
+                <option key={s} value={s}>{s} ({stats.bySource[s]})</option>
               ))}
             </select>
           </div>
@@ -361,16 +471,16 @@ export default function AdminQuenteTab({ movies }: Props) {
               {filteredItems.length === 0 && (
                 <tr><td colSpan={5} className="py-8 text-center text-gray-500">Nenhum link rastreado. Sincronize a biblioteca acima.</td></tr>
               )}
-              {filteredItems.slice(0, 200).map((it, i) => (
-                <tr key={i} className="border-t border-white/5 hover:bg-white/5">
+              {filteredItems.slice(0, 200).map((it) => (
+                <tr key={it.url} className="border-t border-white/5 hover:bg-white/5">
                   <td className="py-2 px-2">
                     {it.lastStatus === 'ok' ? <span className="text-emerald-400 text-xs font-black">● QUENTE</span>
                       : it.lastStatus === 'fail' ? <span className="text-red-400 text-xs font-black">● FALHA ({it.failures})</span>
                       : <span className="text-yellow-400 text-xs font-black">● AGUARDANDO</span>}
                   </td>
-                  <td className="py-2 px-2 text-xs text-gray-400 uppercase">{it.source}{it.origin === 'sync' ? ' · sync' : ''}</td>
-                  <td className="py-2 px-2 text-xs text-gray-300 font-mono truncate max-w-md">{it.url}</td>
-                  <td className="py-2 px-2 text-xs text-gray-400">{it.lastWarmedSec !== null ? `${formatMs(it.lastWarmedSec * 1000)}` : '—'}</td>
+                  <td className="py-2 px-2 text-xs text-gray-400 uppercase">{it.source}</td>
+                  <td className="py-2 px-2 text-xs text-gray-300 font-mono truncate max-w-md">{it.url.length > 100 ? it.url.slice(0, 100) + '…' : it.url}</td>
+                  <td className="py-2 px-2 text-xs text-gray-400">{it.lastWarmed ? formatMs(now - it.lastWarmed) : '—'}</td>
                   <td className="py-2 px-2 text-xs text-gray-400">{it.warmCount}</td>
                 </tr>
               ))}
