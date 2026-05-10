@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Flame, Play, RefreshCw, Power, Clock, Activity, Database, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Flame, Play, RefreshCw, Power, Clock, Activity, Database, CheckCircle2, XCircle, AlertCircle, Zap } from 'lucide-react';
 import type { Movie } from '../../types';
+import { registerKeepwarmSW, pushUrls, pushConfig, triggerRunNow, getSWStatus, registerPeriodicSync, unregisterPeriodicSync, type SWStatus } from '../../lib/keepwarmSW';
 
 interface UrlState {
   url: string;
@@ -105,6 +106,7 @@ export default function AdminQuenteTab({ movies }: Props) {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [msg, setMsg] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [swStatus, setSwStatus] = useState<SWStatus | null>(null);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -115,6 +117,45 @@ export default function AdminQuenteTab({ movies }: Props) {
 
   // Persiste estado quando mudar
   useEffect(() => { saveState(state); }, [state]);
+
+  // Registra Service Worker (segundo plano)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await registerKeepwarmSW();
+      if (cancelled) return;
+      const s = await getSWStatus();
+      if (!cancelled) setSwStatus(s);
+    })();
+    const refresh = setInterval(async () => {
+      const s = await getSWStatus();
+      if (!cancelled) setSwStatus(s);
+    }, 15_000);
+
+    // Escuta ciclos completados pelo SW
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'keepwarm-cycle-complete' && e.data?.summary) {
+        const s = e.data.summary;
+        setMsg(`SW concluiu ciclo em ${formatMs(s.durationMs)} — ${s.ok} ok / ${s.fail} falha de ${s.total}`);
+        getSWStatus().then((st) => !cancelled && setSwStatus(st));
+      }
+    };
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => {
+      cancelled = true;
+      clearInterval(refresh);
+      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onMsg);
+    };
+  }, []);
+
+  // Sincroniza URLs e config com o Service Worker
+  const trackedKeys = useMemo(() => Object.keys(state.urls), [state.urls]);
+  useEffect(() => {
+    pushUrls(trackedKeys).catch(() => {});
+  }, [trackedKeys]);
+  useEffect(() => {
+    pushConfig({ intervalMs: state.intervalMs, expiresAt: state.expiresAt, enabled: state.enabled }).catch(() => {});
+  }, [state.intervalMs, state.expiresAt, state.enabled]);
 
   // Tick para atualizar tempos relativos
   useEffect(() => {
@@ -432,8 +473,85 @@ export default function AdminQuenteTab({ movies }: Props) {
           {msg && <p className="mt-3 text-xs text-orange-300">{msg}</p>}
         </div>
 
-        <div className="mt-4 text-[11px] text-gray-500 italic">
-          ⚠️ O aquecimento automático roda enquanto esta aba estiver aberta no navegador. Pra rodar 24/7 sem o painel aberto, mantenha o admin aberto numa aba dedicada.
+        {/* Segundo plano (Service Worker) */}
+        <div className="mt-4 p-4 bg-purple-600/10 rounded-2xl border border-purple-500/20">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white flex items-center gap-2">
+                <Zap size={14} className="text-purple-400" /> Segundo plano (Service Worker)
+              </p>
+              {swStatus ? (
+                <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                  <p>
+                    Status:{' '}
+                    {swStatus.active ? (
+                      <span className="text-emerald-400 font-bold">ATIVO</span>
+                    ) : swStatus.registered ? (
+                      <span className="text-yellow-400 font-bold">REGISTRADO (instalando…)</span>
+                    ) : (
+                      <span className="text-red-400 font-bold">NÃO REGISTRADO</span>
+                    )}
+                    {swStatus.urlCount > 0 && <span className="opacity-70"> · {swStatus.urlCount} URLs sincronizadas</span>}
+                  </p>
+                  <p>
+                    Sync periódico:{' '}
+                    {swStatus.periodicSyncSupported ? (
+                      swStatus.periodicSyncRegistered ? (
+                        <span className="text-emerald-400 font-bold">REGISTRADO</span>
+                      ) : (
+                        <span className="text-gray-400">disponível, não registrado</span>
+                      )
+                    ) : (
+                      <span className="text-gray-500">não suportado neste navegador</span>
+                    )}
+                    <span className="opacity-60"> · permissão: {swStatus.permission}</span>
+                  </p>
+                  {swStatus.lastCycle && (
+                    <p>
+                      Último ciclo do SW:{' '}
+                      <span className="text-gray-300">
+                        {formatMs(now - swStatus.lastCycle.at)} atrás · {swStatus.lastCycle.ok} ok / {swStatus.lastCycle.fail} falha
+                      </span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">Carregando status…</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => {
+                  if (swStatus?.periodicSyncRegistered) {
+                    await unregisterPeriodicSync();
+                    setMsg('Sync periódico desregistrado.');
+                  } else {
+                    const r = await registerPeriodicSync(state.intervalMs);
+                    setMsg(r.ok ? 'Sync periódico registrado!' : `Não registrado: ${r.reason}`);
+                  }
+                  setSwStatus(await getSWStatus());
+                }}
+                disabled={!swStatus?.periodicSyncSupported}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700/40 disabled:text-gray-500 text-white font-bold text-xs transition-all whitespace-nowrap"
+              >
+                {swStatus?.periodicSyncRegistered ? 'Desativar sync periódico' : 'Ativar sync periódico'}
+              </button>
+              <button
+                onClick={async () => {
+                  await triggerRunNow();
+                  setMsg('Disparado no Service Worker.');
+                  setTimeout(async () => setSwStatus(await getSWStatus()), 1500);
+                }}
+                disabled={!swStatus?.active}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all whitespace-nowrap"
+              >
+                Aquecer via SW
+              </button>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-500 italic mt-3">
+            O Service Worker continua aquecendo mesmo com a aba minimizada ou em outra guia. Pra <b>sync periódico</b> (rodar com o navegador fechado), use Chrome/Edge e instale o site como PWA.
+          </p>
         </div>
       </section>
 
