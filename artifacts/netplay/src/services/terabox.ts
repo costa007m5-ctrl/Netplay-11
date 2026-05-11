@@ -71,8 +71,8 @@ export async function resolveTeraboxUrl(url: string, opts?: { preferredQuality?:
   if (!url || !isDynamicRef(url)) return url;
 
   const { folderUrl, filename, v2, v3 } = parseDynamicRef(url);
-  // Always default to Terabox 3.0 — only fall back to v2/pro if explicitly tagged
-  const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-v3';
+  // Use the API that matches the URL prefix — v1=Pro, v2=v2, v3=v3, no mixing
+  const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-pro';
   const res = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}`);
   const text = await res.text();
   let data: any;

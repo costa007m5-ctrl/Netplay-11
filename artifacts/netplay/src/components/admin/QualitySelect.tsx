@@ -101,9 +101,10 @@ const QualitySelect: React.FC<Props> = ({ url, value, onChange, className, longL
   }, [url]);
 
   const labels = longLabels ? LONG_LABELS : SHORT_LABELS;
+  // Só mostra qualidades reais da API — nunca mostra opções estáticas falsas
   const list = available && available.length
     ? ORDER.filter(q => available.includes(q))
-    : ORDER.slice(0, 4);
+    : [];
 
   const autoLabel = longLabels
     ? 'Automática (usa stream principal)'

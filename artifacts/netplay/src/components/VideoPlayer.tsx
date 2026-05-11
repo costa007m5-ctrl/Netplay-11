@@ -343,8 +343,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         setIsExtractingTerabox(true);
         try {
           const { folderUrl, filename, v2, v3 } = parseDynamicRef(u);
-          // Always default to Terabox 3.0 — only fall back to v2/pro if explicitly tagged
-          const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-v3';
+          // Respeitar a API da URL: v1=Pro, v2=v2, v3=v3 — sem mistura entre APIs
+          const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-pro';
 
           // Honor preferredQuality from episode/movie
           const urlMatchEp = movie.type === 'series' && movie.episodes
@@ -459,29 +459,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isTera) {
         setIsExtractingTerabox(true);
         try {
-          // Tenta v3 → v2 → Pro em cascata até um funcionar
-          const tryApiJson = async (endpoint: string): Promise<any | null> => {
-            try {
-              const r = await fetch(`${endpoint}?url=${encodeURIComponent(u)}`);
-              if (!r.ok) return null;
-              const t = await r.text();
-              try { return JSON.parse(t); } catch { return null; }
-            } catch { return null; }
-          };
-
-          let data: any = await tryApiJson('/api/terabox-v3');
+          // URLs simples de terabox.com (sem prefixo de API) — usa v3 por padrão, sem mistura
+          const r = await fetch(`/api/terabox-v3?url=${encodeURIComponent(u)}`);
+          const text = await r.text();
+          let data: any;
+          try { data = JSON.parse(text); } catch {
+            console.error('[VideoPlayer] Resposta inválida do servidor Terabox:', text.slice(0, 200));
+            throw new Error('Servidor Terabox retornou resposta inválida');
+          }
+          if (!r.ok) throw new Error(data?.error || `Falha ao resolver Terabox (${r.status})`);
           let rawList: any[] = Array.isArray(data?.list) ? data.list : (data?.list ? [data.list] : []);
-
-          if (rawList.length === 0) {
-            console.warn('[VideoPlayer] v3 vazio — fallback v2');
-            const d2 = await tryApiJson('/api/terabox-v2');
-            if (d2) { data = d2; rawList = Array.isArray(d2?.list) ? d2.list : (d2?.list ? [d2.list] : []); }
-          }
-          if (rawList.length === 0) {
-            console.warn('[VideoPlayer] v2 vazio — fallback Pro');
-            const dp = await tryApiJson('/api/terabox-pro');
-            if (dp) { data = dp; rawList = Array.isArray(dp?.list) ? dp.list : (dp?.list ? [dp.list] : []); }
-          }
 
           // Sort files by filename for consistent ordering (natural sort)
           const sortedList = [...rawList].sort((a: any, b: any) => {
