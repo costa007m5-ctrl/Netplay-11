@@ -38,6 +38,7 @@ interface NetflixPlayerProps {
   onSelectEpisode?: (episode: any) => void;
   preferredAudioLanguage?: string;
   recsOverlayOffset?: number;
+  autoQualityCascade?: boolean;
 }
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
@@ -72,6 +73,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   onSelectEpisode,
   preferredAudioLanguage,
   recsOverlayOffset = 120,
+  autoQualityCascade = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,6 +83,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const startedHlsRef = useRef(false);
   const videoToPlayRef = useRef('');
   const failedSourcesRef = useRef<Set<string>>(new Set());
+  const cascadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cascadeSucceededRef = useRef(false);
   
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
@@ -267,6 +271,45 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       }
     }
   }, [activeSrc, videoUrlOptions]);
+
+  // ── Vídeo Automático: cascata de qualidade com timeout de 5s (apenas API 1 Pro) ──────────
+  // Cada qualidade tem 5 segundos para iniciar o vídeo; se não iniciar, passa para a próxima
+  useEffect(() => {
+    if (!autoQualityCascade || !activeSrc || !videoUrlOptions || videoUrlOptions.length <= 1) return;
+
+    const currentIdx = videoUrlOptions.findIndex(o => o.url === activeSrc);
+    const hasNext = videoUrlOptions.some((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
+    if (!hasNext) return;
+
+    cascadeSucceededRef.current = false;
+    const currentLabel = currentIdx >= 0 ? videoUrlOptions[currentIdx].label : 'qualidade';
+    setQualityToast(`🔍 Conectando ${currentLabel}...`);
+
+    const timer = setTimeout(() => {
+      if (cascadeSucceededRef.current) return;
+      const video = videoRef.current;
+      const hasStarted = video && (video.currentTime > 0.5 || video.readyState >= 4);
+      if (hasStarted) {
+        cascadeSucceededRef.current = true;
+        setQualityToast(null);
+        return;
+      }
+      const nextOpt = videoUrlOptions.find((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
+      if (nextOpt) {
+        if (activeSrc) failedSourcesRef.current.add(activeSrc);
+        console.log(`[AutoCascade] "${currentLabel}" sem resposta em 5s → ${nextOpt.label}`);
+        setQualityToast(`⏩ Tentando ${nextOpt.label}...`);
+        setTimeout(() => setQualityToast(null), 3000);
+        setActiveSrc(nextOpt.url);
+        setCurrentQuality(nextOpt.label);
+      } else {
+        setQualityToast(null);
+      }
+    }, 5000);
+
+    cascadeTimerRef.current = timer;
+    return () => { clearTimeout(timer); };
+  }, [activeSrc, autoQualityCascade]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -960,6 +1003,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           setLoadingProgress(100);
           setShowLogoOverlay(false);
         }
+        // Vídeo Automático: cancela o cascade — esta qualidade funcionou
+        if (cascadeTimerRef.current) {
+          clearTimeout(cascadeTimerRef.current);
+          cascadeTimerRef.current = null;
+          cascadeSucceededRef.current = true;
+          setQualityToast(q => (q?.startsWith('🔍') || q?.startsWith('⏩')) ? null : q);
+        }
       }
 
       if (video.duration > 0) {
@@ -1024,7 +1074,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const handleCanPlay = () => {
       // Don't set isLoading(false) here, let handlePlaying or handleTimeUpdate do it
       // when the video truly starts playing to prevent the loading screen from dropping early
-      
+
+      // Vídeo Automático: cancela o cascade quando vídeo está pronto para tocar
+      if (cascadeTimerRef.current) {
+        clearTimeout(cascadeTimerRef.current);
+        cascadeTimerRef.current = null;
+        cascadeSucceededRef.current = true;
+        setQualityToast(q => (q?.startsWith('🔍') || q?.startsWith('⏩')) ? null : q);
+      }
+
       if (video.paused) {
         // Only autoplay if we are host, OR if we are not in a room, OR if we are supposed to be playing.
         // Actually, if we are a guest, wait for playback-update to tell us to play. If we try to play automatically, we break the host's pause state.

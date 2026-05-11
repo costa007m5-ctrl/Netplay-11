@@ -27,6 +27,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [orientationKey, setOrientationKey] = useState(0);
   const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
+  const [isAutoProCascade, setIsAutoProCascade] = useState(false);
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');
@@ -437,6 +438,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               console.log(`[VideoPlayer] dyn-ref: qualidade preferida "${preferred}" aplicada`);
             }
           }
+
+          // Vídeo Automático: ativa cascata apenas para API 1 Pro sem qualidade fixada
+          setIsAutoProCascade(!v2 && !v3 && !preferred && qualityList.length > 1);
 
           setExtractedVideoUrl(initial.url);
           setFinalVideoUrl(initial.url);
@@ -871,6 +875,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
           }}
           videoUrlOptions={videoUrlOptions}
+          autoQualityCascade={isAutoProCascade}
           preferredAudioLanguage={(() => {
             const urlMatchEp = movie.type === 'series' && movie.episodes
               ? movie.episodes.find(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl)

@@ -106,9 +106,10 @@ const QualitySelect: React.FC<Props> = ({ url, value, onChange, className, longL
     ? ORDER.filter(q => available.includes(q))
     : [];
 
-  const autoLabel = longLabels
-    ? 'Automática (usa stream principal)'
-    : 'Auto (Stream)';
+  const isProApi = !!(url && url.startsWith('terabox-folder://') && !url.startsWith('terabox-folder-v2://') && !url.startsWith('terabox-folder-v3://'));
+  const autoLabel = isProApi
+    ? (longLabels ? '🎯 Vídeo Automático (API 1 Pro)' : '🎯 Automático')
+    : (longLabels ? 'Automática (usa stream principal)' : 'Auto (Stream)');
 
   const directLabel = longLabels ? 'Link Direto (download direto)' : 'Link Direto';
 

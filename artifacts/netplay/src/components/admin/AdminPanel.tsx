@@ -3475,7 +3475,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm font-bold focus:outline-none focus:border-red-600 transition-all"
                         longLabels
                       />
-                      <p className="text-[9px] text-gray-500 mt-1 px-1">Auto = sistema testa todas e usa a melhor disponível. Forçar uma qualidade pula o teste e tenta direto essa.</p>
+                      <p className="text-[9px] text-gray-500 mt-1 px-1">
+                        {((editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder://') && !(editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder-v2://') && !(editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder-v3://'))
+                          ? '🎯 Vídeo Automático (API 1 Pro): testa cada qualidade por até 5s — 1080p → 720p → 480p → ... até conectar. Para fixar uma qualidade, selecione-a abaixo.'
+                          : 'Auto = sistema testa todas e usa a melhor disponível. Forçar uma qualidade pula o teste e tenta direto essa.'
+                        }
+                      </p>
                     </div>
                     {editingMovie.type !== 'series' && (
                       <MigrateBatchPanel editingMovie={editingMovie} setEditingMovie={setEditingMovie} />

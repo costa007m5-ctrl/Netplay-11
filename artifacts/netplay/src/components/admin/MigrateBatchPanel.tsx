@@ -34,7 +34,6 @@ const QUALITY_OPTIONS: { value: PreferredQuality; label: string }[] = [
   { value: '720p',   label: '720p — HD' },
   { value: '480p',   label: '480p — SD' },
   { value: '360p',   label: '360p' },
-  { value: '240p',   label: '240p' },
   { value: 'direct', label: 'Link Direto' },
 ];
 
