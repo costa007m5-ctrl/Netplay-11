@@ -29,6 +29,64 @@ const AUDIO_LANGUAGE_OPTIONS: { value: PreferredAudioLanguage; label: string }[]
   { value: 'zh',    label: '🇨🇳 Chinês' },
 ];
 
+const VIDEO_EXTENSIONS = /\.(mp4|mkv|avi|mov|webm|m4v|wmv|flv|ts|m2ts|vob|mpg|mpeg|3gp|rmvb|rm)$/i;
+
+async function scanFolderRecursive(
+  url: string,
+  dirPath: string = '',
+  depth: number = 0,
+  onStatus: (msg: string) => void,
+): Promise<any[]> {
+  if (depth > 4) return [];
+  const allFiles: any[] = [];
+  const seenNamesHere = new Set<string>();
+  let page = 1;
+  const MAX_PAGES = 50;
+
+  while (page <= MAX_PAGES) {
+    const label = dirPath ? `"${dirPath.split('/').pop()}"` : 'pasta raiz';
+    onStatus(`Escaneando ${label} — pág ${page} (${allFiles.length} arqs até agora)...`);
+    const params = new URLSearchParams({ url, page: String(page) });
+    if (dirPath) params.set('dir_path', dirPath);
+    let res: Response;
+    let data: any;
+    try {
+      res = await fetch(`/api/terabox-v3?${params}`);
+      data = await res.json();
+    } catch {
+      break;
+    }
+    if (!res.ok) break;
+    const list: any[] = data.list || [];
+    let newCount = 0;
+    for (const item of list) {
+      const name = item.filename || item.server_filename || item.name;
+      if (!name || seenNamesHere.has(name)) continue;
+      seenNamesHere.add(name);
+      newCount++;
+      const isDir = item.is_dir === '1' || item.is_dir === 1 || item.is_dir === true;
+      if (isDir) {
+        // Recurse into subfolder
+        const subPath = item.dir_path || item.path || (dirPath ? `${dirPath}/${name}` : name);
+        const subFiles = await scanFolderRecursive(url, subPath, depth + 1, onStatus);
+        allFiles.push(...subFiles);
+      } else {
+        // Only include actual video files (skip images, subtitles, etc.)
+        if (!VIDEO_EXTENSIONS.test(name) && allFiles.length === 0 && depth === 0) {
+          // At root level with no videos yet: include everything (let user filter)
+          allFiles.push(item);
+        } else if (VIDEO_EXTENSIONS.test(name)) {
+          allFiles.push(item);
+        }
+      }
+    }
+    if (newCount === 0) break;
+    if (list.length < 5) break;
+    page++;
+  }
+  return allFiles;
+}
+
 export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
   const [testUrl, setTestUrl] = useState('');
   const [testResult, setTestResult] = useState<any>(null);
@@ -148,41 +206,21 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
   const handleScanFolder = async () => {
     if (!folderUrl) return;
     setFolderScanning(true);
-    setScanningStatus('Buscando arquivos na pasta...');
+    setScanningStatus('Iniciando varredura recursiva da pasta...');
     setFolderResults([]);
     try {
-      const allItems: any[] = [];
-      const seenNames = new Set<string>();
-      let page = 1;
-      let totalExpected: number | null = null;
-      const MAX_PAGES = 50;
+      const allItems = await scanFolderRecursive(folderUrl, '', 0, setScanningStatus);
 
-      while (page <= MAX_PAGES) {
-        setScanningStatus(`Buscando arquivos (V3)... página ${page} — ${allItems.length} encontrados`);
-        const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(folderUrl)}&page=${page}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
-        const list: any[] = data.list || [];
-        if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
-        let newCount = 0;
-        for (const item of list) {
-          const name = item.filename || item.server_filename || item.name;
-          if (!name || seenNames.has(name)) continue;
-          seenNames.add(name);
-          allItems.push(item);
-          newCount++;
-        }
-        if (newCount === 0) break;
-        if (totalExpected != null && allItems.length >= totalExpected) break;
-        if (list.length < 5) break;
-        page++;
+      if (!allItems.length) {
+        setScanningStatus('Nenhum arquivo de vídeo encontrado na pasta.');
+        return;
       }
 
-      setScanningStatus(`Rastreando ${allItems.length} arquivos no TMDB...`);
+      setScanningStatus(`Rastreando ${allItems.length} arquivo(s) no TMDB...`);
       const mapped = [];
       for (const item of allItems) {
         const filename = item.filename || item.server_filename || item.name || 'Desconhecido';
-        let searchName = filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, '');
+        let searchName = filename.replace(/\.(mp4|mkv|avi|webm|ts|m2ts|vob|mpg|mpeg)$/i, '');
         searchName = searchName.replace(/[\(\[]\d{4}[\)\]]/g, '');
         searchName = searchName.replace(/720p|1080p|4k|2160p/gi, '');
         searchName = searchName.replace(/WEB-DL|WEBRip|BluRay|HDRip|x264|x265|HEVC/gi, '');
@@ -203,7 +241,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         });
       }
       setFolderResults(mapped);
-      setScanningStatus(`Concluído: ${allItems.length} arquivo(s) encontrado(s). Revise e adicione.`);
+      setScanningStatus(`Concluído: ${allItems.length} arquivo(s) encontrado(s) (com subpastas). Revise e adicione.`);
     } catch (err: any) {
       alert('Erro na varredura: ' + err.message);
       setScanningStatus('Erro na varredura.');
@@ -346,34 +384,13 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
     setSeasonScanning(true);
     setSeasonScanResults({});
     const results: Record<number, any[]> = {};
-    const MAX_PAGES = 20;
     for (const sf of validFolders) {
       try {
-        const allItems: any[] = [];
-        const seenNames = new Set<string>();
-        let page = 1;
-        let totalExpected: number | null = null;
-        while (page <= MAX_PAGES) {
-          setSeasonScanStatus(`Escaneando T${sf.season} (V3) — página ${page}, ${allItems.length} arquivos...`);
-          const pageUrl = `/api/terabox-v3?url=${encodeURIComponent(sf.folderUrl)}&page=${page}`;
-          const res = await fetch(pageUrl);
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || `Falha página ${page}`);
-          const list: any[] = data.list || [];
-          if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
-          let newCount = 0;
-          for (const item of list) {
-            const name = item.filename || item.server_filename || item.name;
-            if (!name || seenNames.has(name)) continue;
-            seenNames.add(name);
-            allItems.push(item);
-            newCount++;
-          }
-          if (newCount === 0) break;
-          if (totalExpected != null && allItems.length >= totalExpected) break;
-          if (list.length < 5) break;
-          page++;
-        }
+        setSeasonScanStatus(`Iniciando varredura recursiva da T${sf.season}...`);
+        const allItems = await scanFolderRecursive(
+          sf.folderUrl, '', 0,
+          (msg) => setSeasonScanStatus(`T${sf.season}: ${msg}`)
+        );
         allItems.sort((a, b) => {
           const an = (a.filename || a.server_filename || a.name || '').toLowerCase();
           const bn = (b.filename || b.server_filename || b.name || '').toLowerCase();
@@ -389,6 +406,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
           preferredQuality: globalSeriesQuality,
           preferredAudioLanguage: globalSeriesAudio,
         }));
+        setSeasonScanStatus(`T${sf.season}: ${allItems.length} episódio(s) encontrado(s).`);
       } catch (e: any) {
         setSeasonScanStatus(`Erro na Temporada ${sf.season}: ${e.message}`);
         results[sf.season] = [];

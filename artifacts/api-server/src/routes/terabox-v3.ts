@@ -59,6 +59,9 @@ function normalizeItem(raw: any): any {
     fast_stream_url: Object.keys(fast).length ? fast : undefined,
     thumbnail: raw.thumbs?.url1 || raw.thumbs?.url2 || raw.thumbs?.icon || null,
     thumbs: raw.thumbs,
+    // Path info needed for recursive subfolder scanning
+    path: raw.path || raw.dir_path || raw.server_path || null,
+    dir_path: raw.dir_path || raw.path || raw.server_path || null,
   };
 }
 
