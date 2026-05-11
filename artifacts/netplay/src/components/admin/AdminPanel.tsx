@@ -3477,10 +3477,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                       <p className="text-[9px] text-gray-500 mt-1 px-1">
                         {((editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder://') && !(editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder-v2://') && !(editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder-v3://'))
-                          ? '🎯 Vídeo Automático (API 1 Pro): testa cada qualidade por até 5s — 1080p → 720p → 480p → ... até conectar. Para fixar uma qualidade, selecione-a abaixo.'
+                          ? `🎯 Vídeo Automático (API 1 Pro): testa cada qualidade por até ${(editingMovie as any).qualityCascadeDelay ?? 10}s — 1080p → 720p → 480p → ... até conectar. Para fixar uma qualidade, selecione-a abaixo.`
                           : 'Auto = sistema testa todas e usa a melhor disponível. Forçar uma qualidade pula o teste e tenta direto essa.'
                         }
                       </p>
+                      {((editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder://') && !(editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder-v2://') && !(editingMovie.videoUrl || editingMovie.videoUrl2 || '').startsWith('terabox-folder-v3://')) && (
+                        <div className="mt-3 bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] font-black text-white uppercase tracking-widest">Tempo de espera por qualidade</p>
+                              <p className="text-[9px] text-gray-500 mt-0.5">Segundos antes de tentar a próxima qualidade automaticamente</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5">
+                              <input
+                                type="number"
+                                min={3}
+                                max={60}
+                                value={(editingMovie as any).qualityCascadeDelay ?? 10}
+                                onChange={e => {
+                                  const v = Math.max(3, Math.min(60, Number(e.target.value)));
+                                  setEditingMovie({ ...editingMovie, qualityCascadeDelay: isNaN(v) ? 10 : v } as any);
+                                }}
+                                className="w-10 bg-transparent text-white text-sm font-black text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              <span className="text-gray-500 text-[9px] font-bold uppercase">seg</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5">
+                            {[3, 5, 10, 15, 20, 30].map(s => {
+                              const current = (editingMovie as any).qualityCascadeDelay ?? 10;
+                              return (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() => setEditingMovie({ ...editingMovie, qualityCascadeDelay: s } as any)}
+                                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all border ${current === s ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10'}`}
+                                >
+                                  {s}s
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {editingMovie.type !== 'series' && (
                       <MigrateBatchPanel editingMovie={editingMovie} setEditingMovie={setEditingMovie} />

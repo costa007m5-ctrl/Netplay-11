@@ -876,6 +876,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           }}
           videoUrlOptions={videoUrlOptions}
           autoQualityCascade={isAutoProCascade}
+          cascadeDelaySecs={(movie as any).qualityCascadeDelay ?? 10}
           preferredAudioLanguage={(() => {
             const urlMatchEp = movie.type === 'series' && movie.episodes
               ? movie.episodes.find(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl)
