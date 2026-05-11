@@ -5,6 +5,7 @@ import Hls from 'hls.js';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
+import { parseDynamicRef } from '../services/terabox';
 
 interface NetflixPlayerProps {
   src: string;
@@ -40,6 +41,7 @@ interface NetflixPlayerProps {
   recsOverlayOffset?: number;
   autoQualityCascade?: boolean;
   cascadeDelaySecs?: number;
+  teraboxV1Ref?: string;
 }
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
@@ -76,6 +78,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   recsOverlayOffset = 120,
   autoQualityCascade = false,
   cascadeDelaySecs: cascadeDelaySecsProp = 10,
+  teraboxV1Ref,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -305,6 +308,38 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         setTimeout(() => setQualityToast(null), 3000);
         setActiveSrc(nextOpt.url);
         setCurrentQuality(nextOpt.label);
+      } else if (teraboxV1Ref) {
+        // Todas as qualidades da API 1 falharam — fallback automático para API 3.0
+        console.log('[AutoCascade] Todas as qualidades da API 1 esgotadas → tentando API 3.0 (HMAC)');
+        setQualityToast('⚡ Todas as qualidades falharam. Mudando para API 3.0...');
+        (async () => {
+          try {
+            const { folderUrl, filename } = parseDynamicRef(teraboxV1Ref);
+            const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(folderUrl)}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || `API 3.0 retornou ${res.status}`);
+            const list: any[] = Array.isArray(data.list) ? data.list : [];
+            if (list.length === 0) throw new Error('API 3.0 não encontrou arquivos na pasta');
+            let file: any = list[0];
+            if (filename) {
+              file = list.find((f: any) =>
+                (f.filename || f.name) === filename ||
+                (f.filename || f.name || '').toLowerCase() === filename.toLowerCase()
+              ) || list[0];
+            }
+            const directUrl = file?.normal_dlink || file?.dlink || file?.stream_url;
+            if (!directUrl) throw new Error('API 3.0 não retornou link direto');
+            console.log('[AutoCascade] API 3.0 → link direto obtido com sucesso');
+            setQualityToast('✅ API 3.0 conectada! Iniciando...');
+            setTimeout(() => setQualityToast(null), 3000);
+            setActiveSrc(directUrl);
+            setCurrentQuality('API 3.0 (Link Direto)');
+          } catch (err: any) {
+            console.error('[AutoCascade] Fallback API 3.0 falhou:', err.message);
+            setQualityToast('❌ Todas as opções falharam. Tente outro player.');
+            setTimeout(() => setQualityToast(null), 5000);
+          }
+        })();
       } else {
         setQualityToast(null);
       }
