@@ -23,6 +23,7 @@ import AdminTeraboxV2Tab from './AdminTeraboxV2Tab';
 import AdminTeraboxV3Tab from './AdminTeraboxV3Tab';
 import AdminQuenteTab from './AdminQuenteTab';
 import QualitySelect from './QualitySelect';
+import MigrateBatchPanel from './MigrateBatchPanel';
 
 interface AdminPanelProps {
   movies: Movie[];
@@ -3476,6 +3477,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                       <p className="text-[9px] text-gray-500 mt-1 px-1">Auto = sistema testa todas e usa a melhor disponível. Forçar uma qualidade pula o teste e tenta direto essa.</p>
                     </div>
+                    {editingMovie.type !== 'series' && (
+                      <MigrateBatchPanel editingMovie={editingMovie} setEditingMovie={setEditingMovie} />
+                    )}
                     <div className="grid grid-cols-2 gap-3 md:gap-4">
                       <div>
                         <label className="block text-[9px] md:text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 md:mb-2 px-1">Lançamento</label>
@@ -3629,6 +3633,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           </button>
                         </div>
                       </div>
+                      <MigrateBatchPanel editingMovie={editingMovie} setEditingMovie={setEditingMovie} />
                       
                       <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-4 space-y-3">
                         <label className="block text-[9px] font-black text-yellow-400 uppercase tracking-widest px-1 flex items-center gap-1"><Zap size={10} /> Importar Pasta Terabox (Link Dinâmico)</label>
