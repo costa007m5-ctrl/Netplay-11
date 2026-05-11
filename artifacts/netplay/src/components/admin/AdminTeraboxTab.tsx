@@ -33,6 +33,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const [enrichStatus, setEnrichStatus] = useState('');
   const [seasonApiVersion, setSeasonApiVersion] = useState<'v1' | 'v2'>('v2');
   const [seasonScanStatus, setSeasonScanStatus] = useState('');
+  const [movieApiVersion, setMovieApiVersion] = useState<'v1' | 'v2'>('v2');
   const [autoDetectStatus, setAutoDetectStatus] = useState('');
 
   // For Mass Update
@@ -127,17 +128,48 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const handleScanFolder = async () => {
     if (!folderUrl) return;
     setFolderScanning(true);
-    setScanningStatus('Extraindo lista da pasta...');
+    setScanningStatus('Buscando arquivos na pasta...');
     setFolderResults([]);
-    
+
     try {
-      const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(folderUrl)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
-      
-      let list = data.list || [];
-      if (!list.length && data.url) {
-        list = [data]; // single file fallback
+      let list: any[] = [];
+
+      if (movieApiVersion === 'v2') {
+        // V2 suporta paginação — busca TODOS os arquivos sem limite
+        const allItems: any[] = [];
+        const seenNames = new Set<string>();
+        let page = 1;
+        let totalExpected: number | null = null;
+        const MAX_PAGES = 50;
+
+        while (page <= MAX_PAGES) {
+          setScanningStatus(`Buscando arquivos (V2)... página ${page} — ${allItems.length} encontrados`);
+          const res = await fetch(`/api/terabox-v2?url=${encodeURIComponent(folderUrl)}&page=${page}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
+          const pageList: any[] = data.list || [];
+          if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
+          let newCount = 0;
+          for (const item of pageList) {
+            const name = item.filename || item.name;
+            if (!name || seenNames.has(name)) continue;
+            seenNames.add(name);
+            allItems.push(item);
+            newCount++;
+          }
+          if (newCount === 0) break;
+          if (totalExpected != null && allItems.length >= totalExpected) break;
+          if (pageList.length < 5) break;
+          page++;
+        }
+        list = allItems;
+      } else {
+        // V1 não suporta paginação — retorna até ~20 arquivos por chamada
+        const res = await fetch(`/api/terabox-pro?url=${encodeURIComponent(folderUrl)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
+        list = data.list || [];
+        if (!list.length && data.url) list = [data];
       }
 
       setScanningStatus(`Rastreando ${list.length} arquivos no TMDB...`);
@@ -151,7 +183,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
         searchName = searchName.replace(/720p|1080p|4k|2160p/gi, '');
         searchName = searchName.replace(/WEB-DL|WEBRip|BluRay|HDRip|x264|x265|HEVC/gi, '');
         searchName = searchName.replace(/[\.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
-        
+
         const resSearch = await tmdb.get(`/search/multi?query=${encodeURIComponent(searchName)}`);
         const searchRes = resSearch.data.results || [];
         let bestMatch = searchRes && searchRes.length > 0 ? searchRes[0] : null;
@@ -171,7 +203,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       }
 
       setFolderResults(mapped);
-      setScanningStatus('Concluído. Revise os itens e adicione ou atualize.');
+      setScanningStatus(`Concluído: ${list.length} arquivo(s) encontrado(s). Revise e adicione.`);
     } catch (err: any) {
       alert("Erro na varredura: " + err.message);
       setScanningStatus('Erro na varredura.');
@@ -1136,8 +1168,26 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
               {dynamicLinkMode ? <span className="text-green-400 flex items-center gap-1"><Zap size={10} /> Link Dinâmico (recomendado)</span> : 'Link Direto (expira)'}
             </span>
           </div>
+          {/* API version selector for movie folder scan */}
+          <div className="flex items-center gap-1 mb-3 bg-black/30 rounded-xl p-1 w-fit">
+            <button
+              onClick={() => setMovieApiVersion('v2')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${movieApiVersion === 'v2' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              V2 — Sem limite
+            </button>
+            <button
+              onClick={() => setMovieApiVersion('v1')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${movieApiVersion === 'v1' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              V1 — ~20 arquivos
+            </button>
+          </div>
           <p className="text-xs text-gray-400 mb-4">
-            Cole um link de pasta do Terabox. {dynamicLinkMode ? 'Links serão salvos como referências estáveis e resolvidos na hora do play.' : 'Links serão salvos como pasta compartilhada (pode expirar).'}
+            {movieApiVersion === 'v2'
+              ? 'V2 pagina automaticamente e busca TODOS os arquivos da pasta, sem limite.'
+              : 'V1 retorna até ~20 arquivos por chamada (sem paginação).'}
+            {' '}{dynamicLinkMode ? 'Links salvos como referências estáveis.' : 'Links salvos como pasta compartilhada (pode expirar).'}
           </p>
           <div className="flex gap-2">
             <input

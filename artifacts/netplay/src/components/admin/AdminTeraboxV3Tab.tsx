@@ -148,17 +148,39 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
   const handleScanFolder = async () => {
     if (!folderUrl) return;
     setFolderScanning(true);
-    setScanningStatus('Extraindo lista da pasta...');
+    setScanningStatus('Buscando arquivos na pasta...');
     setFolderResults([]);
     try {
-      const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(folderUrl)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
-      let list = data.list || [];
-      if (!list.length && data.stream_url) list = [data];
-      setScanningStatus(`Rastreando ${list.length} arquivos no TMDB...`);
+      const allItems: any[] = [];
+      const seenNames = new Set<string>();
+      let page = 1;
+      let totalExpected: number | null = null;
+      const MAX_PAGES = 50;
+
+      while (page <= MAX_PAGES) {
+        setScanningStatus(`Buscando arquivos (V3)... página ${page} — ${allItems.length} encontrados`);
+        const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(folderUrl)}&page=${page}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(`${data.error}: ${data.details || ''}`);
+        const list: any[] = data.list || [];
+        if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
+        let newCount = 0;
+        for (const item of list) {
+          const name = item.filename || item.server_filename || item.name;
+          if (!name || seenNames.has(name)) continue;
+          seenNames.add(name);
+          allItems.push(item);
+          newCount++;
+        }
+        if (newCount === 0) break;
+        if (totalExpected != null && allItems.length >= totalExpected) break;
+        if (list.length < 5) break;
+        page++;
+      }
+
+      setScanningStatus(`Rastreando ${allItems.length} arquivos no TMDB...`);
       const mapped = [];
-      for (const item of list) {
+      for (const item of allItems) {
         const filename = item.filename || item.server_filename || item.name || 'Desconhecido';
         let searchName = filename.replace(/\.(mp4|mkv|avi|webm|ts)$/i, '');
         searchName = searchName.replace(/[\(\[]\d{4}[\)\]]/g, '');
@@ -181,7 +203,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         });
       }
       setFolderResults(mapped);
-      setScanningStatus('Concluído. Revise os itens e adicione ou atualize.');
+      setScanningStatus(`Concluído: ${allItems.length} arquivo(s) encontrado(s). Revise e adicione.`);
     } catch (err: any) {
       alert('Erro na varredura: ' + err.message);
       setScanningStatus('Erro na varredura.');
@@ -606,66 +628,6 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         </div>
       </div>
 
-      {/* Testador Rápido */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
-        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <LinkIcon className="text-gray-400" size={20} />
-          Testador Rápido de Link
-        </h3>
-        <p className="text-sm text-gray-400 mb-4">Teste extrair e reproduzir um vídeo usando a API Terabox 3.0.</p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={testUrl}
-            onChange={e => setTestUrl(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleTest(); }}
-            placeholder="Ex: https://terabox.com/s/..."
-            className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500"
-          />
-          <button
-            onClick={handleTest}
-            disabled={loading || !testUrl}
-            className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
-          >
-            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Play size={18} />}
-            Testar
-          </button>
-        </div>
-        {error && <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">{error}</div>}
-        {testQualities.length > 0 && (
-          <div className="mt-6 bg-black/40 border border-violet-500/20 rounded-xl p-4">
-            <div className="text-xs font-black uppercase tracking-widest text-violet-400 mb-3">Qualidades Disponíveis ({testQualities.length})</div>
-            <div className="flex flex-wrap gap-2">
-              {testQualities.map(q => (
-                <button
-                  key={q.id}
-                  onClick={() => setTestSelectedQuality(q.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${(testSelectedQuality || testQualities[0].id) === q.id ? 'bg-violet-500 text-black' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'}`}
-                  title={q.url}
-                >
-                  <Play size={12} /> {q.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {videoUrlToPlay && (
-          <div className="mt-4 rounded-xl overflow-hidden border border-white/10 bg-black">
-            <div className="bg-white/5 p-3 flex items-center gap-2 border-b border-white/10">
-              <Video size={16} className="text-violet-400" />
-              <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">Preview do Vídeo {testSelectedQuality && <span className="text-violet-400 ml-2">— {testSelectedQuality}</span>}</span>
-            </div>
-            <video ref={videoRef} controls className="w-full aspect-video outline-none" autoPlay />
-          </div>
-        )}
-        {testResult && (
-          <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-xl overflow-x-auto">
-            <h4 className="font-bold text-gray-300 mb-2 text-sm uppercase">Resultado Bruto da API</h4>
-            <pre className="text-xs text-violet-400 whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
-          </div>
-        )}
-      </div>
-
       {/* Importador de Séries por Temporada */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
         <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-violet-400">
@@ -1008,6 +970,66 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
       <button onClick={() => setUpdatingMode(v => !v)} className="text-xs text-violet-400 hover:text-violet-300 font-bold mb-8">
         {updatingMode ? '▲ Ocultar' : '▼ Ver conteúdos com Link V3'} ({teraboxMovies.length})
       </button>
+
+      {/* Testador Rápido de Link */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
+        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <LinkIcon className="text-gray-400" size={20} />
+          Testador Rápido de Link
+        </h3>
+        <p className="text-sm text-gray-400 mb-4">Teste extrair e reproduzir um vídeo usando a API Terabox 3.0.</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={testUrl}
+            onChange={e => setTestUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleTest(); }}
+            placeholder="Ex: https://terabox.com/s/..."
+            className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500"
+          />
+          <button
+            onClick={handleTest}
+            disabled={loading || !testUrl}
+            className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
+          >
+            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Play size={18} />}
+            Testar
+          </button>
+        </div>
+        {error && <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">{error}</div>}
+        {testQualities.length > 0 && (
+          <div className="mt-6 bg-black/40 border border-violet-500/20 rounded-xl p-4">
+            <div className="text-xs font-black uppercase tracking-widest text-violet-400 mb-3">Qualidades Disponíveis ({testQualities.length})</div>
+            <div className="flex flex-wrap gap-2">
+              {testQualities.map(q => (
+                <button
+                  key={q.id}
+                  onClick={() => setTestSelectedQuality(q.id)}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${(testSelectedQuality || testQualities[0].id) === q.id ? 'bg-violet-500 text-black' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'}`}
+                  title={q.url}
+                >
+                  <Play size={12} /> {q.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {videoUrlToPlay && (
+          <div className="mt-4 rounded-xl overflow-hidden border border-white/10 bg-black">
+            <div className="bg-white/5 p-3 flex items-center gap-2 border-b border-white/10">
+              <Video size={16} className="text-violet-400" />
+              <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">Preview do Vídeo {testSelectedQuality && <span className="text-violet-400 ml-2">— {testSelectedQuality}</span>}</span>
+            </div>
+            <video ref={videoRef} controls className="w-full aspect-video outline-none" autoPlay />
+          </div>
+        )}
+        {testResult && (
+          <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-xl overflow-x-auto">
+            <h4 className="font-bold text-gray-300 mb-2 text-sm uppercase">Resultado Bruto da API</h4>
+            <pre className="text-xs text-violet-400 whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
