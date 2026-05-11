@@ -5,6 +5,7 @@ import teraboxV2Router from "./terabox-v2";
 import teraboxV3Router from "./terabox-v3";
 import proxyStreamRouter from "./proxy-stream";
 import keepwarmRouter from "./keepwarm";
+import probeStreamsRouter from "./probe-streams";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(teraboxV2Router);
 router.use(teraboxV3Router);
 router.use(proxyStreamRouter);
 router.use(keepwarmRouter);
+router.use(probeStreamsRouter);
 
 export default router;

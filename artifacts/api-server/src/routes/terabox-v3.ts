@@ -109,16 +109,20 @@ async function callV3Api(
     page: payload.page ?? 1,
   });
 
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = makeSignature(apiSecret, "POST", API_PATH, timestamp, body);
+  const reqHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-API-Key": apiKey,
+  };
+
+  if (apiSecret) {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = makeSignature(apiSecret, "POST", API_PATH, timestamp, body);
+    reqHeaders["X-Timestamp"] = timestamp;
+    reqHeaders["X-Signature"] = signature;
+  }
 
   const response = await axios.post(`${BASE_URL}${API_PATH}`, body, {
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-      "X-Timestamp": timestamp,
-      "X-Signature": signature,
-    },
+    headers: reqHeaders,
     timeout: 60000,
   });
 
@@ -157,8 +161,8 @@ async function handle(req: any, res: any) {
   const apiKey = process.env.TERABOX_V3_API_KEY;
   const apiSecret = process.env.TERABOX_V3_API_SECRET;
 
-  if (!apiKey || !apiSecret) {
-    res.status(503).json({ error: "TERABOX_V3_API_KEY or TERABOX_V3_API_SECRET not configured" });
+  if (!apiKey) {
+    res.status(503).json({ error: "TERABOX_V3_API_KEY not configured" });
     return;
   }
 

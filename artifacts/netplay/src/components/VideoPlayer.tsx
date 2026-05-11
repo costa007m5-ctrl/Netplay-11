@@ -369,8 +369,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             let { r, d } = await tryOnce(false);
             const isEmpty = r.ok && (!Array.isArray(d.list) || d.list.length === 0);
             if (!r.ok || isEmpty) {
-              console.warn(`[VideoPlayer] dyn-ref tentativa 1 falhou (status=${r.status}, vazio=${isEmpty}) — retry com nocache em 2s`);
-              await new Promise(res => setTimeout(res, 2000));
+              console.warn(`[VideoPlayer] dyn-ref tentativa 1 falhou (status=${r.status}, vazio=${isEmpty}) — retry com nocache em 500ms`);
+              await new Promise(res => setTimeout(res, 500));
               ({ r, d } = await tryOnce(true));
             }
             if (!r.ok) throw new Error(d?.error || `Falha ao resolver Terabox (${r.status})`);
@@ -459,234 +459,198 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       if (isTera) {
         setIsExtractingTerabox(true);
         try {
-          // Use Terabox 3.0 as default resolver for all plain terabox URLs
-          const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(u)}`);
-          if (res.ok) {
-            const text = await res.text();
-            let data: any;
+          // Tenta v3 → v2 → Pro em cascata até um funcionar
+          const tryApiJson = async (endpoint: string): Promise<any | null> => {
             try {
-              data = JSON.parse(text);
-            } catch {
-              console.error('[Terabox] Resposta não-JSON do servidor:', text.slice(0, 200));
-              throw new Error('Servidor Terabox retornou resposta inválida (provável timeout)');
+              const r = await fetch(`${endpoint}?url=${encodeURIComponent(u)}`);
+              if (!r.ok) return null;
+              const t = await r.text();
+              try { return JSON.parse(t); } catch { return null; }
+            } catch { return null; }
+          };
+
+          let data: any = await tryApiJson('/api/terabox-v3');
+          let rawList: any[] = Array.isArray(data?.list) ? data.list : (data?.list ? [data.list] : []);
+
+          if (rawList.length === 0) {
+            console.warn('[VideoPlayer] v3 vazio — fallback v2');
+            const d2 = await tryApiJson('/api/terabox-v2');
+            if (d2) { data = d2; rawList = Array.isArray(d2?.list) ? d2.list : (d2?.list ? [d2.list] : []); }
+          }
+          if (rawList.length === 0) {
+            console.warn('[VideoPlayer] v2 vazio — fallback Pro');
+            const dp = await tryApiJson('/api/terabox-pro');
+            if (dp) { data = dp; rawList = Array.isArray(dp?.list) ? dp.list : (dp?.list ? [dp.list] : []); }
+          }
+
+          // Sort files by filename for consistent ordering (natural sort)
+          const sortedList = [...rawList].sort((a: any, b: any) => {
+            const nameA = (a.filename || a.name || '').toLowerCase();
+            const nameB = (b.filename || b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+          });
+
+          // Find episode index by URL match (may be wrong when all share same URL)
+          const urlMatchIndex = movie.type === 'series' && movie.episodes
+            ? movie.episodes.findIndex(ep => ep.videoUrl === u || ep.videoUrl2 === u)
+            : -1;
+          const urlMatchEp = urlMatchIndex !== -1 && movie.episodes ? movie.episodes[urlMatchIndex] : null;
+
+          let vid: any = null;
+
+          if (sortedList.length > 0) {
+            const epFileName = (urlMatchEp as any)?.file_name;
+            const movieFileName = (movie as any).file_name;
+            const fileNameToMatch = epFileName || movieFileName;
+            if (fileNameToMatch) {
+              vid = sortedList.find((f: any) =>
+                f.filename === fileNameToMatch ||
+                f.name === fileNameToMatch ||
+                (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
+              ) || null;
+            }
+            if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
+              vid = sortedList[initialEpisodeIndex];
+            }
+            if (!vid && urlMatchEp && (urlMatchEp as any).episode > 0) {
+              const epNum = (urlMatchEp as any).episode - 1;
+              if (epNum < sortedList.length) vid = sortedList[epNum];
+            }
+            if (!vid && urlMatchIndex > 0 && urlMatchIndex < sortedList.length) {
+              vid = sortedList[urlMatchIndex];
+            }
+            if (!vid) vid = sortedList[0];
+          } else if (data?.filename || data?.fast_stream_url || data?.dlink) {
+            vid = data;
+          }
+
+          if (vid) {
+            // FAST PATH: qualidade admin forçada com URL direta — play imediato
+            const fsEarly = vid.fast_stream_url || {};
+            const epPrefEarly = (urlMatchEp as any)?.preferredQuality as string | undefined;
+            const moviePrefEarly = (movie as any).preferredQuality as string | undefined;
+            const preferredEarly = (epPrefEarly && epPrefEarly !== 'auto') ? epPrefEarly
+                                 : (moviePrefEarly && moviePrefEarly !== 'auto') ? moviePrefEarly
+                                 : null;
+            if (preferredEarly && typeof fsEarly[preferredEarly] === 'string' && fsEarly[preferredEarly]) {
+              console.log(`[VideoPlayer] qualidade forçada "${preferredEarly}" — tocando direto`);
+              setExtractedVideoUrl(fsEarly[preferredEarly]);
+              setFinalVideoUrl(fsEarly[preferredEarly]);
+              setExtractedQualities([{ id: preferredEarly, label: preferredEarly, url: fsEarly[preferredEarly] }]);
+              const subE = vid.subtitle_url || data?.subtitle || data?.subtitle_url;
+              if (subE) setExtractedSubtitleUrl(subE);
+              setIsExtractingTerabox(false);
+              return;
             }
 
-            const rawList: any[] = Array.isArray(data.list) ? data.list : (data.list ? [data.list] : []);
-
-            // Sort files by filename for consistent ordering (natural sort)
-            const sortedList = [...rawList].sort((a: any, b: any) => {
-              const nameA = (a.filename || a.name || '').toLowerCase();
-              const nameB = (b.filename || b.name || '').toLowerCase();
-              return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
-            });
-
-            // Find episode index by URL match (may be wrong when all share same URL)
-            const urlMatchIndex = movie.type === 'series' && movie.episodes
-              ? movie.episodes.findIndex(ep => ep.videoUrl === u || ep.videoUrl2 === u)
-              : -1;
-            const urlMatchEp = urlMatchIndex !== -1 && movie.episodes ? movie.episodes[urlMatchIndex] : null;
-
-            let vid: any = null;
-
-            if (sortedList.length > 0) {
-              // Priority 1: match by stored file_name on the episode
-              const epFileName = (urlMatchEp as any)?.file_name;
-              const movieFileName = (movie as any).file_name;
-              const fileNameToMatch = epFileName || movieFileName;
-              if (fileNameToMatch) {
-                vid = sortedList.find((f: any) =>
-                  f.filename === fileNameToMatch ||
-                  f.name === fileNameToMatch ||
-                  (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
-                ) || null;
+            // Build quality list
+            const qualityList: { id: string; label: string; url: string }[] = [];
+            const fs = vid.fast_stream_url || {};
+            const nativeQuality: string | undefined = typeof vid.quality === 'string' ? vid.quality : undefined;
+            const ladderRank: Record<string, number> = { '240p': 1, '360p': 2, '480p': 3, '720p': 4, '1080p': 5 };
+            const nativeRank = nativeQuality && ladderRank[nativeQuality] ? ladderRank[nativeQuality] : 99;
+            const qualityOrder: Array<{ k: string; label: string }> = [
+              { k: '1080p', label: '1080p (Full HD)' },
+              { k: '720p',  label: '720p (HD)' },
+              { k: '480p',  label: '480p (SD)' },
+              { k: '360p',  label: '360p' },
+              { k: '240p',  label: '240p' },
+            ];
+            for (const q of qualityOrder) {
+              if (fs[q.k] && typeof fs[q.k] === 'string') {
+                const rank = ladderRank[q.k] || 0;
+                if (rank > nativeRank) continue;
+                qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
               }
-
-              // Priority 2: use explicitly passed episode index (most reliable for folder URLs)
-              if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
-                vid = sortedList[initialEpisodeIndex];
-              }
-
-              // Priority 3: use episode's episode number (1-based) as index into sorted list
-              if (!vid && urlMatchEp && (urlMatchEp as any).episode > 0) {
-                const epNum = (urlMatchEp as any).episode - 1;
-                if (epNum < sortedList.length) vid = sortedList[epNum];
-              }
-
-              // Priority 4: URL-match index if it's unique (unambiguous)
-              if (!vid && urlMatchIndex > 0 && urlMatchIndex < sortedList.length) {
-                vid = sortedList[urlMatchIndex];
-              }
-
-              // Priority 5: first file as last resort
-              if (!vid) vid = sortedList[0];
-            } else if (data.filename || data.fast_stream_url || data.dlink) {
-              vid = data;
             }
-            
-            if (vid) {
-               // FAST PATH: if admin forced a specific quality and that quality exists, skip probe and play it directly
-               const fsEarly = vid.fast_stream_url || {};
-               const epPrefEarly = (urlMatchEp as any)?.preferredQuality as string | undefined;
-               const moviePrefEarly = (movie as any).preferredQuality as string | undefined;
-               const preferredEarly = (epPrefEarly && epPrefEarly !== 'auto') ? epPrefEarly
-                                    : (moviePrefEarly && moviePrefEarly !== 'auto') ? moviePrefEarly
-                                    : null;
-               if (preferredEarly && typeof fsEarly[preferredEarly] === 'string' && fsEarly[preferredEarly]) {
-                 const directUrl = fsEarly[preferredEarly];
-                 console.log(`[VideoPlayer] qualidade forçada "${preferredEarly}" — pulando probe, tocando direto`);
-                 setExtractedVideoUrl(directUrl);
-                 setFinalVideoUrl(directUrl);
-                 setExtractedQualities([{ id: preferredEarly, label: preferredEarly, url: directUrl }]);
-                 const subUrlEarly = vid.subtitle_url || data.subtitle || data.subtitle_url;
-                 if (subUrlEarly) setExtractedSubtitleUrl(subUrlEarly);
-                 setIsExtractingTerabox(false);
-                 return;
-               }
-
-               // Build COMPLETE quality list — all available resolutions, ordered best→worst
-               const qualityList: { id: string; label: string; url: string }[] = [];
-               const fs = vid.fast_stream_url || {};
-               // Resolução nativa do arquivo (segundo a API). Qualquer chave de fast_stream_url
-               // ACIMA disso seria upscale/fake e provavelmente retorna manifesto vazio.
-               const nativeQuality: string | undefined = typeof vid.quality === 'string' ? vid.quality : undefined;
-               const ladderRank: Record<string, number> = { '240p': 1, '360p': 2, '480p': 3, '720p': 4, '1080p': 5 };
-               const nativeRank = nativeQuality && ladderRank[nativeQuality] ? ladderRank[nativeQuality] : 99;
-               const qualityOrder: Array<{ k: string; label: string }> = [
-                 { k: '1080p', label: '1080p (Full HD)' },
-                 { k: '720p',  label: '720p (HD)' },
-                 { k: '480p',  label: '480p (SD)' },
-                 { k: '360p',  label: '360p' },
-                 { k: '240p',  label: '240p' },
-               ];
-               for (const q of qualityOrder) {
-                 if (fs[q.k] && typeof fs[q.k] === 'string') {
-                   const rank = ladderRank[q.k] || 0;
-                   // Pula qualidades acima da nativa do arquivo (upscale fake)
-                   if (rank > nativeRank) {
-                     console.log(`[VideoPlayer] pulando ${q.k} (acima da resolução nativa ${nativeQuality})`);
-                     continue;
-                   }
-                   qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
-                 }
-               }
-               if (nativeQuality) console.log(`[VideoPlayer] resolução nativa do arquivo: ${nativeQuality}`);
-               // Add "Auto (Stream)" — stream HLS com áudio completo
-               // Prioridade: fast_stream_url['auto'] > stream_url > url
-               const autoStreamUrl = fs['auto'] || vid.stream_url || vid.url || vid.video_url || vid.src || (vid.data && vid.data.url);
-               if (autoStreamUrl && !qualityList.some(q => q.url === autoStreamUrl)) {
-                 qualityList.push({ id: 'stream', label: 'Auto (Stream)', url: autoStreamUrl });
-               }
-               // Add "Link Direto" (normal_dlink) as an explicit selectable option
-               const directUrl = vid.normal_dlink || vid.dlink;
-               if (directUrl && !qualityList.some(q => q.url === directUrl)) {
-                 qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
-               }
-
-               // OVERRIDE MANUAL: se o admin escolheu uma qualidade fixa pro filme/episódio,
-               // priorizamos ela. Episódio tem prioridade sobre filme.
-               // IMPORTANTE: ainda probamos pra confirmar que a URL realmente entrega conteúdo
-               // (workers.dev às vezes retorna 200 com body vazio em qualidades "fantasma").
-               const epPreferred = (urlMatchEp as any)?.preferredQuality as string | undefined;
-               const moviePreferred = (movie as any).preferredQuality as string | undefined;
-               const preferred = (epPreferred && epPreferred !== 'auto') ? epPreferred
-                                : (moviePreferred && moviePreferred !== 'auto') ? moviePreferred
-                                : null;
-
-               // Monta uma ordem de tentativa: [forçada, depois desce a escada, depois sobe]
-               const ladder = ['1080p', '720p', '480p', '360p', '240p', 'stream', 'direct'];
-               let attemptOrder: typeof qualityList = [];
-               if (preferred) {
-                 const prefIdx = ladder.indexOf(preferred);
-                 const seen = new Set<string>();
-                 const pushIfExists = (id: string) => {
-                   if (seen.has(id)) return;
-                   const q = qualityList.find(x => x.id === id);
-                   if (q) { attemptOrder.push(q); seen.add(id); }
-                 };
-                 if (prefIdx !== -1) {
-                   for (let i = prefIdx; i < ladder.length; i++) pushIfExists(ladder[i]); // forçada → mais baixas
-                   for (let i = prefIdx - 1; i >= 0; i--) pushIfExists(ladder[i]);        // depois mais altas
-                 }
-                 // adiciona qualquer outra (ex: "auto" do dlink) como último recurso
-                 for (const q of qualityList) if (!seen.has(q.id)) attemptOrder.push(q);
-               } else {
-                 attemptOrder = qualityList;
-               }
-
-               let finalList = qualityList;
-               let forcedByAdmin = false;
-
-               // SMART PROBE: testa as URLs pra confirmar que entregam conteúdo.
-               // - Sem admin override: testa tudo em paralelo, mantém só as que funcionam
-               // - Com admin override: testa em ORDEM (forçada primeiro), para na primeira que funciona
-               if (qualityList.length >= 1) {
-                 const probeController = new AbortController();
-                 probeAbortRef.current?.abort();
-                 probeAbortRef.current = probeController;
-                 const probeMovieId = movie.id;
-                 const probeTimeout = setTimeout(() => probeController.abort(), preferred ? 8000 : 5000);
-                 try {
-                   const probeRes = await fetch('/api/probe-streams', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     signal: probeController.signal,
-                     body: JSON.stringify({
-                       urls: attemptOrder.slice(0, 6).map(q => ({
-                         quality: q.id,
-                         label: q.label,
-                         url: q.url,
-                       })),
-                     }),
-                   });
-                   clearTimeout(probeTimeout);
-                   if (probeMovieId === movie.id && probeRes.ok) {
-                     const probeData = await probeRes.json();
-                     const working: any[] = Array.isArray(probeData?.working) ? probeData.working : [];
-                     if (working.length > 0) {
-                       const workingIds = new Set(working.map(w => w.quality));
-                       const filtered = qualityList.filter(q => workingIds.has(q.id));
-                       if (filtered.length > 0) {
-                         if (preferred) {
-                           // Modo override: pega a PRIMEIRA da ordem de tentativa que sobreviveu ao probe
-                           const chosen = attemptOrder.find(q => workingIds.has(q.id));
-                           if (chosen) {
-                             finalList = [chosen, ...filtered.filter(q => q.id !== chosen.id)];
-                             forcedByAdmin = true;
-                             console.log(`[VideoPlayer] qualidade preferida "${preferred}" → tocando ${chosen.id} (validada via probe). Outras disponíveis: ${filtered.filter(q=>q.id!==chosen.id).map(q=>q.id).join(',') || 'nenhuma'}`);
-                           }
-                         } else {
-                           finalList = filtered;
-                           console.log(`[VideoPlayer] probe: ${filtered.length}/${qualityList.length} qualidades funcionais`,
-                             working.map((w:any) => `${w.quality}(${w.ms}ms)`).join(', '));
-                         }
-                       }
-                     } else {
-                       console.warn('[VideoPlayer] probe: nenhuma qualidade respondeu, usando lista original');
-                     }
-                   }
-                 } catch (probeErr: any) {
-                   clearTimeout(probeTimeout);
-                   if (probeErr?.name !== 'AbortError') {
-                     console.warn('[VideoPlayer] probe falhou (usando lista original):', probeErr);
-                   } else {
-                     console.warn('[VideoPlayer] probe timeout, usando lista original');
-                   }
-                 }
-               }
-
-               // Agora sim — define a URL inicial (só com qualidade VERIFICADA quando possível)
-               const stUrl = finalList[0]?.url;
-               if (stUrl) {
-                  setExtractedVideoUrl(stUrl);
-                  setFinalVideoUrl(stUrl);
-                  setExtractedQualities(finalList);
-               }
-               
-               const subUrl = vid.subtitle_url || data.subtitle || data.subtitle_url;
-               if (subUrl) {
-                  setExtractedSubtitleUrl(subUrl);
-               }
+            if (nativeQuality) console.log(`[VideoPlayer] resolução nativa: ${nativeQuality}`);
+            const autoStreamUrl = fs['auto'] || vid.stream_url || vid.url || vid.video_url || vid.src || (vid.data && vid.data.url);
+            if (autoStreamUrl && !qualityList.some(q => q.url === autoStreamUrl)) {
+              qualityList.push({ id: 'stream', label: 'Auto (Stream)', url: autoStreamUrl });
             }
+            const directUrl = vid.normal_dlink || vid.dlink;
+            if (directUrl && !qualityList.some(q => q.url === directUrl)) {
+              qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
+            }
+
+            const epPreferred = (urlMatchEp as any)?.preferredQuality as string | undefined;
+            const moviePreferred = (movie as any).preferredQuality as string | undefined;
+            const preferred = (epPreferred && epPreferred !== 'auto') ? epPreferred
+                             : (moviePreferred && moviePreferred !== 'auto') ? moviePreferred
+                             : null;
+
+            const subUrl = vid.subtitle_url || data?.subtitle || data?.subtitle_url;
+
+            if (qualityList.length === 0) throw new Error('Nenhum link de stream para este arquivo');
+
+            // ── PLAY IMEDIATO: define a URL sem esperar o probe ──────────────────
+            // O probe roda em background e atualiza a lista de qualidades quando termina.
+            // O vídeo começa a carregar assim que a API responde (~0.5–2s vs ~7–13s antes).
+            const initialUrl = preferred
+              ? (qualityList.find(q => q.id === preferred) || qualityList[0]).url
+              : qualityList[0].url;
+            setExtractedVideoUrl(initialUrl);
+            setFinalVideoUrl(initialUrl);
+            setExtractedQualities(qualityList);
+            if (subUrl) setExtractedSubtitleUrl(subUrl);
+            setIsExtractingTerabox(false); // libera o spinner imediatamente
+
+            // Probe em background — não bloqueia o play
+            if (qualityList.length >= 2) {
+              const probeMovieId = movie.id;
+              const ladder = ['1080p', '720p', '480p', '360p', '240p', 'stream', 'direct'];
+              const attemptOrder: typeof qualityList = preferred
+                ? (() => {
+                    const prefIdx = ladder.indexOf(preferred);
+                    const seen = new Set<string>();
+                    const out: typeof qualityList = [];
+                    const push = (id: string) => {
+                      if (seen.has(id)) return;
+                      const q = qualityList.find(x => x.id === id);
+                      if (q) { out.push(q); seen.add(id); }
+                    };
+                    if (prefIdx !== -1) {
+                      for (let i = prefIdx; i < ladder.length; i++) push(ladder[i]);
+                      for (let i = prefIdx - 1; i >= 0; i--) push(ladder[i]);
+                    }
+                    for (const q of qualityList) if (!seen.has(q.id)) out.push(q);
+                    return out;
+                  })()
+                : qualityList;
+
+              (async () => {
+                try {
+                  const ctrl = new AbortController();
+                  setTimeout(() => ctrl.abort(), 8000);
+                  const probeRes = await fetch('/api/probe-streams', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: ctrl.signal,
+                    body: JSON.stringify({
+                      urls: attemptOrder.slice(0, 6).map(q => ({ quality: q.id, label: q.label, url: q.url })),
+                    }),
+                  });
+                  if (probeMovieId !== movie.id) return;
+                  if (!probeRes.ok) return;
+                  const probeData = await probeRes.json();
+                  const working: any[] = Array.isArray(probeData?.working) ? probeData.working : [];
+                  if (working.length > 0) {
+                    const workingIds = new Set(working.map((w: any) => w.quality));
+                    let refined = qualityList.filter(q => workingIds.has(q.id));
+                    if (refined.length > 0) {
+                      if (preferred) {
+                        const chosen = attemptOrder.find(q => workingIds.has(q.id));
+                        if (chosen) refined = [chosen, ...refined.filter(q => q.id !== chosen.id)];
+                      }
+                      setExtractedQualities(refined);
+                      console.log(`[VideoPlayer] probe bg: ${refined.length}/${qualityList.length} qualidades ok`);
+                    }
+                  }
+                } catch { /* probe em background — ignorar erros */ }
+              })();
+            }
+
+            return; // evita setIsExtractingTerabox(false) duplicado no finally
           }
         } catch (e) {
           console.error("Failed to extract Terabox via API", e);

@@ -751,20 +751,25 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           if (Hls.isSupported() && !isIOS) {
             const hls = new Hls({
               enableWorker: true,
-              lowLatencyMode: true,
+              lowLatencyMode: false,        // VOD: desligar baixa latência melhora seeking drasticamente
               startFragPrefetch: true,
-              capLevelToPlayerSize: true, // Limits initial quality based on player frame size to start faster
+              capLevelToPlayerSize: true,
               autoStartLoad: true,
-              startLevel: -1, // Use auto level
+              startLevel: -1,
               startPosition: startPoint > 0 ? startPoint : -1,
-              maxBufferLength: 30,
-              maxMaxBufferLength: 60,
-              manifestLoadingMaxRetry: 10,
-              levelLoadingMaxRetry: 10,
-              fragLoadingMaxRetry: 10,
-              manifestLoadingRetryDelay: 500,
-              levelLoadingRetryDelay: 500,
-              fragLoadingRetryDelay: 500,
+              maxBufferLength: 60,              // mais buffer = seeking mais suave
+              maxMaxBufferLength: 120,
+              backBufferLength: 45,             // mantém 45s atrás para seeking reverso rápido
+              maxBufferHole: 0.5,               // tolera buracos pequenos sem travar
+              maxFragLookUpTolerance: 0.25,     // tolerância de busca de fragmento ao dar seek
+              nudgeMaxRetry: 5,
+              manifestLoadingMaxRetry: 8,
+              levelLoadingMaxRetry: 8,
+              fragLoadingMaxRetry: 8,
+              manifestLoadingRetryDelay: 300,
+              levelLoadingRetryDelay: 300,
+              fragLoadingRetryDelay: 300,
+              fragLoadingMaxRetryTimeout: 4000,
             });
             hls.attachMedia(video);
             hls.on(Hls.Events.MEDIA_ATTACHED, () => {
