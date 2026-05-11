@@ -85,6 +85,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const failedSourcesRef = useRef<Set<string>>(new Set());
   const cascadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cascadeSucceededRef = useRef(false);
+  const [cascadeDelaySecs, setCascadeDelaySecs] = useState(10);
   
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
@@ -272,8 +273,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
   }, [activeSrc, videoUrlOptions]);
 
-  // ── Vídeo Automático: cascata de qualidade com timeout de 5s (apenas API 1 Pro) ──────────
-  // Cada qualidade tem 5 segundos para iniciar o vídeo; se não iniciar, passa para a próxima
+  // ── Vídeo Automático: cascata de qualidade com timeout configurável (apenas API 1 Pro) ──────────
+  // Cada qualidade tem `cascadeDelaySecs` segundos para iniciar o vídeo; se não iniciar, passa para a próxima
   useEffect(() => {
     if (!autoQualityCascade || !activeSrc || !videoUrlOptions || videoUrlOptions.length <= 1) return;
 
@@ -297,7 +298,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const nextOpt = videoUrlOptions.find((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
       if (nextOpt) {
         if (activeSrc) failedSourcesRef.current.add(activeSrc);
-        console.log(`[AutoCascade] "${currentLabel}" sem resposta em 5s → ${nextOpt.label}`);
+        console.log(`[AutoCascade] "${currentLabel}" sem resposta em ${cascadeDelaySecs}s → ${nextOpt.label}`);
         setQualityToast(`⏩ Tentando ${nextOpt.label}...`);
         setTimeout(() => setQualityToast(null), 3000);
         setActiveSrc(nextOpt.url);
@@ -305,7 +306,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       } else {
         setQualityToast(null);
       }
-    }, 5000);
+    }, cascadeDelaySecs * 1000);
 
     cascadeTimerRef.current = timer;
     return () => { clearTimeout(timer); };
@@ -2557,6 +2558,46 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                     )}
                   </AnimatePresence>
                 </div>
+
+                {/* Tempo de Troca de Qualidade — apenas API 1 Pro */}
+                {autoQualityCascade && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black mb-3">Troca Automática de Qualidade</p>
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white text-xs font-bold">Tempo de espera</p>
+                          <p className="text-gray-500 text-[10px] mt-0.5">Segundos antes de tentar a próxima qualidade</p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2">
+                          <input
+                            type="number"
+                            min={3}
+                            max={60}
+                            value={cascadeDelaySecs}
+                            onChange={e => {
+                              const v = Math.max(3, Math.min(60, Number(e.target.value)));
+                              setCascadeDelaySecs(isNaN(v) ? 10 : v);
+                            }}
+                            className="w-12 bg-transparent text-white text-sm font-black text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <span className="text-gray-400 text-[10px] font-bold uppercase">seg</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {[3, 5, 10, 15, 20, 30].map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setCascadeDelaySecs(s)}
+                            className={`flex-1 py-2 rounded-xl text-[10px] font-black transition-all border ${cascadeDelaySecs === s ? 'bg-red-600 border-red-500 text-white shadow-[0_0_10px_rgba(220,38,38,0.4)]' : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10'}`}
+                          >
+                            {s}s
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Áudio */}
                 {hlsAudioTracks.length >= 1 && (
