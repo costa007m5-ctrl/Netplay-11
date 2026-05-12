@@ -27,7 +27,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [orientationKey, setOrientationKey] = useState(0);
   const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
-  const [isAutoProCascade, setIsAutoProCascade] = useState(false);
+  const [isAutoProCascade, setIsAutoProCascade] = useState(initialPlayerStyle === 'netflix-cascade');
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
     let url = movie.videoUrl || '';
     const isKing = url.includes('player.kingx.dev') || url.includes('teradl.kingx.dev');

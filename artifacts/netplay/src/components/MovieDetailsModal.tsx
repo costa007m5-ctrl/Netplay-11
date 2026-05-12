@@ -5,6 +5,8 @@ import { Movie } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import tmdb, { requests, getMovieLogo } from '../services/tmdb';
 import VideoPlayer from './VideoPlayer';
+import SmartPlayerSelector from './SmartPlayerSelector';
+import { isDynamicRef } from '../services/terabox';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -153,12 +155,24 @@ const MovieDetailsModal = React.memo(({
   const [logoUrl, setLogoUrl] = useState<string | null>(movie.logo_path || null);
   const [selectedEpisodeDetails, setSelectedEpisodeDetails] = useState<any>(null);
   const [isResolvingUrl, setIsResolvingUrl] = useState(false);
+  const [showSmartSelector, setShowSmartSelector] = useState(false);
+  const [pendingEpisodeUrl, setPendingEpisodeUrl] = useState<string | undefined>();
+  const [pendingStartTime, setPendingStartTime] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const handlePlay = (episodeUrl?: string, startTime?: number, playerStyle?: string) => {
-    // Open the player immediately — VideoPlayer handles TeraBox resolution internally,
-    // creating a single unified loading experience instead of two separate spinners.
     onPlay(movie, episodeUrl, startTime, playerStyle);
+  };
+
+  const triggerSmartPlay = (episodeUrl?: string, startTime?: number, playerStyle?: string) => {
+    const urlToCheck = episodeUrl || movie.videoUrl || '';
+    if (isDynamicRef(urlToCheck)) {
+      setPendingEpisodeUrl(episodeUrl);
+      setPendingStartTime(startTime || 0);
+      setShowSmartSelector(true);
+    } else {
+      handlePlay(episodeUrl, startTime, playerStyle);
+    }
   };
 
   const [resolvingError, setResolvingError] = useState<string | null>(null);
@@ -547,12 +561,17 @@ const MovieDetailsModal = React.memo(({
                     onClick={() => {
                       if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
                         const urlToPlay = savedUrl || movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
-                        handlePlay(urlToPlay, savedProgress, 'netflix');
+                        triggerSmartPlay(urlToPlay, savedProgress, 'netflix');
                       } else if (isYouTube || isKingX) {
                         const defaultUrl = movie.videoUrl;
                         handlePlay(savedUrl || defaultUrl || undefined, savedProgress);
                       } else {
-                        setShowVideo(true); setIsPlayingFullscreen(true);
+                        const movieUrl = movie.videoUrl || '';
+                        if (isDynamicRef(movieUrl)) {
+                          triggerSmartPlay(movieUrl, savedProgress, 'netflix');
+                        } else {
+                          setShowVideo(true); setIsPlayingFullscreen(true);
+                        }
                       }
                     }}
                     className="bg-white text-black hover:bg-gray-200 flex-1 md:flex-none px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl relative overflow-hidden group"
@@ -570,11 +589,16 @@ const MovieDetailsModal = React.memo(({
                       setUserResetProgress(true);
                       if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
                         const urlToPlay = movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
-                        handlePlay(urlToPlay, 0, 'netflix');
+                        triggerSmartPlay(urlToPlay, 0, 'netflix');
                       } else if (isYouTube || isKingX) {
                         handlePlay(movie.videoUrl, 0);
                       } else {
-                        setShowVideo(true); setIsPlayingFullscreen(true);
+                        const movieUrl = movie.videoUrl || '';
+                        if (isDynamicRef(movieUrl)) {
+                          triggerSmartPlay(movieUrl, 0, 'netflix');
+                        } else {
+                          setShowVideo(true); setIsPlayingFullscreen(true);
+                        }
                       }
                     }}
                     className="bg-white/10 text-white border-2 border-white/20 hover:bg-white/20 px-6 md:px-8 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl backdrop-blur-md transition-all"
@@ -597,11 +621,16 @@ const MovieDetailsModal = React.memo(({
                           }
                           if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
                             const urlToPlay = movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
-                            handlePlay(urlToPlay, 0, 'netflix');
+                            triggerSmartPlay(urlToPlay, 0, 'netflix');
                           } else if (isYouTube || isKingX) {
                             handlePlay(movie.videoUrl, 0, 'netflix');
                           } else {
-                            setShowVideo(true); setIsPlayingFullscreen(true);
+                            const movieUrl = movie.videoUrl || '';
+                            if (isDynamicRef(movieUrl)) {
+                              triggerSmartPlay(movieUrl, 0, 'netflix');
+                            } else {
+                              setShowVideo(true); setIsPlayingFullscreen(true);
+                            }
                           }
                         }}
                         className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
@@ -1186,7 +1215,7 @@ const MovieDetailsModal = React.memo(({
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-transparent" />
                 <button 
-                  onClick={() => handlePlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix')}
+                  onClick={() => triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix')}
                   className="absolute inset-0 flex items-center justify-center group-hover:bg-black/20 transition-all"
                 >
                   <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl scale-90 group-hover:scale-100 transition-transform">
@@ -1215,7 +1244,7 @@ const MovieDetailsModal = React.memo(({
                 
                 <div className="pt-4 flex gap-4">
                    <button
-                     onClick={(e) => { e.stopPropagation(); handlePlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix'); }}
+                     onClick={(e) => { e.stopPropagation(); triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix'); }}
                      className="bg-white hover:bg-gray-200 text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
                    >
                       <Play size={16} fill="black" /> {getVideoSourceType(selectedEpisodeDetails.videoUrl)}
@@ -1237,6 +1266,21 @@ const MovieDetailsModal = React.memo(({
 
     </motion.div>
 
+    <AnimatePresence>
+      {showSmartSelector && (
+        <SmartPlayerSelector
+          movie={movie}
+          episodeUrl={pendingEpisodeUrl}
+          startTime={pendingStartTime}
+          logoUrl={logoUrl || undefined}
+          onClose={() => setShowSmartSelector(false)}
+          onPlay={(url, startTime, playerStyle) => {
+            setShowSmartSelector(false);
+            handlePlay(url, startTime, playerStyle);
+          }}
+        />
+      )}
+    </AnimatePresence>
 
     <AnimatePresence>
       {resolvingError && (

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Server, CheckCircle2, XCircle } from 'lucide-react';
+import { Server, CheckCircle2, XCircle, Zap } from 'lucide-react';
+import { getNativeTeraboxApi, setNativeTeraboxApi } from '../SmartPlayerSelector';
 
 interface EnvStatus {
   hasUrl: boolean;
@@ -13,6 +14,12 @@ export function AdminAPIsTab() {
   const [status, setStatus] = useState<EnvStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nativeApi, setNativeApiState] = useState<'v1' | 'v3'>(getNativeTeraboxApi());
+
+  const handleNativeApiChange = (api: 'v1' | 'v3') => {
+    setNativeTeraboxApi(api);
+    setNativeApiState(api);
+  };
 
   useEffect(() => {
     fetch('/api/debug-env')
@@ -41,6 +48,42 @@ export function AdminAPIsTab() {
           Verifique se as variáveis de ambiente das APIs estão corretas no lado do servidor.
         </p>
       </div>
+
+      <section className="bg-white/5 p-6 md:p-12 rounded-[1.5rem] md:rounded-[3rem] border border-white/10 backdrop-blur-3xl relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+        <div className="relative z-10">
+          <h3 className="text-2xl font-bold text-white mb-2 uppercase tracking-wider flex items-center gap-3">
+            <Zap className="w-6 h-6 text-red-400" />
+            API Nativa do TeraBox
+          </h3>
+          <p className="text-gray-500 text-sm mb-6">
+            Define qual API do TeraBox é usada como padrão no Seletor de Player. A API alternativa e o modo automático se adaptam a esta configuração.
+          </p>
+          <div className="flex gap-3">
+            {(['v1', 'v3'] as const).map(api => {
+              const active = nativeApi === api;
+              const label = api === 'v3' ? 'API 03 (V3 Premium)' : 'API 01 (Pro)';
+              const desc = api === 'v3' ? 'Recomendado — Alta velocidade e qualidade' : 'Servidor alternativo confiável';
+              return (
+                <button
+                  key={api}
+                  onClick={() => handleNativeApiChange(api)}
+                  className={`flex-1 p-5 rounded-2xl border-2 text-left transition-all duration-200 ${active ? 'bg-red-600/20 border-red-500/60 shadow-[0_0_20px_rgba(239,68,68,0.15)]' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    {active && <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]" />}
+                    <span className={`text-sm font-black uppercase tracking-widest ${active ? 'text-red-400' : 'text-gray-400'}`}>
+                      {label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600">{desc}</p>
+                  {active && <p className="text-[10px] text-red-500 font-black uppercase tracking-widest mt-2 italic">ATIVO</p>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       <section className="bg-white/5 p-6 md:p-12 rounded-[1.5rem] md:rounded-[3rem] border border-white/10 backdrop-blur-3xl relative overflow-hidden group">
         <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
