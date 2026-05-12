@@ -3517,6 +3517,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             );
                           })}
                         </div>
+                        <div
+                          className="flex items-center justify-between pt-2 border-t border-white/10 cursor-pointer select-none"
+                          onClick={() => setEditingMovie({ ...editingMovie, cascadeToV3OnPenultimate: !((editingMovie as any).cascadeToV3OnPenultimate ?? true) } as any)}
+                        >
+                          <div>
+                            <p className="text-[10px] font-black text-white uppercase tracking-widest">⚡ Trocar para API 3.0 na penúltima qualidade</p>
+                            <p className="text-[9px] text-gray-500 mt-0.5">Quando ativado, o player pula a última opção (Link Direto) e vai direto para API 3.0 ao falhar na penúltima qualidade</p>
+                          </div>
+                          <div className={`ml-4 flex-shrink-0 w-10 h-5 rounded-full transition-colors ${(editingMovie as any).cascadeToV3OnPenultimate !== false ? 'bg-red-600' : 'bg-white/10'}`}>
+                            <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${(editingMovie as any).cascadeToV3OnPenultimate !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                          </div>
+                        </div>
                       </div>
                     </div>
                     {editingMovie.type !== 'series' && (

@@ -42,6 +42,7 @@ interface NetflixPlayerProps {
   autoQualityCascade?: boolean;
   cascadeDelaySecs?: number;
   teraboxV1Ref?: string;
+  cascadeToV3OnPenultimate?: boolean;
 }
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
@@ -79,6 +80,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   autoQualityCascade = false,
   cascadeDelaySecs: cascadeDelaySecsProp = 10,
   teraboxV1Ref,
+  cascadeToV3OnPenultimate = true,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -309,16 +311,32 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       if (activeSrc) failedSourcesRef.current.add(activeSrc);
 
       const nextOpt = videoUrlOptions.find((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
-      if (nextOpt) {
+
+      // Verifica se nextOpt é a ÚLTIMA opção disponível (ou seja, a qualidade atual é a penúltima)
+      const nextOptIdx = nextOpt ? videoUrlOptions.findIndex(o => o.url === nextOpt.url) : -1;
+      const hasAnyAfterNext = nextOpt
+        ? videoUrlOptions.some((o, i) => i > nextOptIdx && !failedSourcesRef.current.has(o.url))
+        : false;
+
+      // Se estamos na penúltima qualidade E cascadeToV3OnPenultimate está ativo E há fallback V3:
+      // pula a última qualidade (ex: Link Direto) e vai direto para API 3.0
+      const shouldSkipToV3 = cascadeToV3OnPenultimate && teraboxV1Ref && nextOpt && !hasAnyAfterNext;
+
+      if (nextOpt && !shouldSkipToV3) {
         console.log(`[AutoCascade] "${currentLabel}" sem resposta em ${cascadeDelaySecs}s → ${nextOpt.label}`);
         setQualityToast(`⏩ Tentando ${nextOpt.label}...`);
         setTimeout(() => setQualityToast(null), 3000);
         setActiveSrc(nextOpt.url);
         setCurrentQuality(nextOpt.label);
       } else if (teraboxV1Ref) {
-        // Todas as qualidades da API 1 falharam — fallback automático para API 3.0
-        console.log('[AutoCascade] Todas as qualidades da API 1 esgotadas → tentando API 3.0 (HMAC)');
-        setQualityToast('⚡ Todas as qualidades falharam. Mudando para API 3.0...');
+        // Penúltima falhou (ou todas falharam) — fallback automático para API 3.0
+        if (shouldSkipToV3 && nextOpt) {
+          failedSourcesRef.current.add(nextOpt.url); // marcar última qualidade como ignorada
+          console.log(`[AutoCascade] Penúltima "${currentLabel}" falhou → pulando para API 3.0 diretamente`);
+        } else {
+          console.log('[AutoCascade] Todas as qualidades da API 1 esgotadas → tentando API 3.0 (HMAC)');
+        }
+        setQualityToast('⚡ Mudando para API 3.0...');
         (async () => {
           try {
             const { folderUrl, filename } = parseDynamicRef(teraboxV1Ref);
