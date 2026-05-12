@@ -279,13 +279,17 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   }, [activeSrc, videoUrlOptions]);
 
   // ── Vídeo Automático: cascata de qualidade com timeout configurável (apenas API 1 Pro) ──────────
-  // Cada qualidade tem `cascadeDelaySecs` segundos para iniciar o vídeo; se não iniciar, passa para a próxima
+  // Cada qualidade tem `cascadeDelaySecs` segundos para iniciar o vídeo; se não iniciar, passa para a próxima.
+  // Se TODAS as qualidades falharem e teraboxV1Ref estiver disponível, tenta fallback automático para API 3.0.
   useEffect(() => {
     if (!autoQualityCascade || !activeSrc || !videoUrlOptions || videoUrlOptions.length <= 1) return;
 
     const currentIdx = videoUrlOptions.findIndex(o => o.url === activeSrc);
     const hasNext = videoUrlOptions.some((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
-    if (!hasNext) return;
+
+    // IMPORTANTE: não abortar quando hasNext=false se tiver fallback API 3.0 disponível.
+    // Sem esse check, a última qualidade nunca cria um timer e o fallback nunca executa.
+    if (!hasNext && !teraboxV1Ref) return;
 
     cascadeSucceededRef.current = false;
     const currentLabel = currentIdx >= 0 ? videoUrlOptions[currentIdx].label : 'qualidade';
@@ -300,9 +304,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         setQualityToast(null);
         return;
       }
+
+      // Marcar a fonte atual como falha
+      if (activeSrc) failedSourcesRef.current.add(activeSrc);
+
       const nextOpt = videoUrlOptions.find((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
       if (nextOpt) {
-        if (activeSrc) failedSourcesRef.current.add(activeSrc);
         console.log(`[AutoCascade] "${currentLabel}" sem resposta em ${cascadeDelaySecs}s → ${nextOpt.label}`);
         setQualityToast(`⏩ Tentando ${nextOpt.label}...`);
         setTimeout(() => setQualityToast(null), 3000);
@@ -315,7 +322,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         (async () => {
           try {
             const { folderUrl, filename } = parseDynamicRef(teraboxV1Ref);
-            const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(folderUrl)}`);
+            // Busca sem cache para garantir links frescos
+            const res = await fetch(`/api/terabox-v3?url=${encodeURIComponent(folderUrl)}&nocache=1`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || `API 3.0 retornou ${res.status}`);
             const list: any[] = Array.isArray(data.list) ? data.list : [];
@@ -327,17 +335,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                 (f.filename || f.name || '').toLowerCase() === filename.toLowerCase()
               ) || list[0];
             }
+            // Preferência: link direto > stream_url (para máxima compatibilidade)
             const directUrl = file?.normal_dlink || file?.dlink || file?.stream_url;
-            if (!directUrl) throw new Error('API 3.0 não retornou link direto');
+            if (!directUrl) throw new Error('API 3.0 não retornou link direto para este arquivo');
             console.log('[AutoCascade] API 3.0 → link direto obtido com sucesso');
-            setQualityToast('✅ API 3.0 conectada! Iniciando...');
-            setTimeout(() => setQualityToast(null), 3000);
+            setQualityToast('✅ API 3.0 ativada! Iniciando reprodução...');
+            setTimeout(() => setQualityToast(null), 4000);
             setActiveSrc(directUrl);
             setCurrentQuality('API 3.0 (Link Direto)');
           } catch (err: any) {
             console.error('[AutoCascade] Fallback API 3.0 falhou:', err.message);
             setQualityToast('❌ Todas as opções falharam. Tente outro player.');
-            setTimeout(() => setQualityToast(null), 5000);
+            setTimeout(() => setQualityToast(null), 6000);
           }
         })();
       } else {
