@@ -1,4 +1,4 @@
-export type PreferredQuality = 'auto' | 'stream' | '360p' | '480p' | '720p' | '1080p' | 'direct';
+export type PreferredQuality = 'auto' | 'stream' | 'stream_url' | 'stream_download' | '240p' | '360p' | '480p' | '720p' | '1080p' | 'direct';
 export type PreferredAudioLanguage = 'auto' | 'pt-BR' | 'pt-PT' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ja' | 'ko' | 'zh';
 
 export interface Episode {

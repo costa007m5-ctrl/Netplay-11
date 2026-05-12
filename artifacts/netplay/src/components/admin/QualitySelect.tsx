@@ -27,17 +27,17 @@ function resolveTarget(url: string): ResolvedTarget | null {
   return null;
 }
 
-async function fetchQualities(target: ResolvedTarget): Promise<{ qualities: string[]; hasDirect: boolean }> {
+async function fetchQualities(target: ResolvedTarget): Promise<{ qualities: string[]; hasDirect: boolean; hasStream: boolean; hasStreamDownload: boolean }> {
   const cacheKey = `${target.api}|${target.folderUrl}|${target.filename || ''}`;
   const cached = qualityCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) return cached as any;
   const existing = inflight.get(cacheKey);
-  if (existing) return existing;
+  if (existing) return existing as any;
 
   const promise = (async () => {
     try {
       const res = await fetch(`${target.api}?url=${encodeURIComponent(target.folderUrl)}`);
-      if (!res.ok) return { qualities: [], hasDirect: false };
+      if (!res.ok) return { qualities: [], hasDirect: false, hasStream: false, hasStreamDownload: false };
       const data = await res.json();
       const list: any[] = Array.isArray(data?.list) ? data.list : (data?.fast_stream_url ? [data] : []);
       let item: any = null;
@@ -49,17 +49,19 @@ async function fetchQualities(target: ResolvedTarget): Promise<{ qualities: stri
       const fs = item?.fast_stream_url || {};
       const qs = Object.keys(fs).filter(k => /^\d+p$/.test(k));
       const hasDirect = !!(item?.normal_dlink || item?.dlink);
-      const result = { qualities: qs, hasDirect };
-      qualityCache.set(cacheKey, result);
+      const hasStream = !!(fs['auto'] || item?.stream_url);
+      const hasStreamDownload = !!(item?.stream_download_url);
+      const result = { qualities: qs, hasDirect, hasStream, hasStreamDownload };
+      qualityCache.set(cacheKey, result as any);
       return result;
     } catch {
-      return { qualities: [], hasDirect: false };
+      return { qualities: [], hasDirect: false, hasStream: false, hasStreamDownload: false };
     } finally {
       inflight.delete(cacheKey);
     }
   })();
 
-  inflight.set(cacheKey, promise);
+  inflight.set(cacheKey, promise as any);
   return promise;
 }
 
@@ -84,17 +86,21 @@ const LONG_LABELS: Record<string, string> = {
 const QualitySelect: React.FC<Props> = ({ url, value, onChange, className, longLabels, title }) => {
   const [available, setAvailable] = useState<string[] | null>(null);
   const [hasDirect, setHasDirect] = useState(false);
+  const [hasStream, setHasStream] = useState(false);
+  const [hasStreamDownload, setHasStreamDownload] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const target = resolveTarget(url || '');
-    if (!target) { setAvailable(null); setHasDirect(false); setLoading(false); return; }
+    if (!target) { setAvailable(null); setHasDirect(false); setHasStream(false); setHasStreamDownload(false); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     fetchQualities(target).then(result => {
       if (cancelled) return;
       setAvailable(result.qualities);
       setHasDirect(result.hasDirect);
+      setHasStream(result.hasStream);
+      setHasStreamDownload(result.hasStreamDownload);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -111,7 +117,9 @@ const QualitySelect: React.FC<Props> = ({ url, value, onChange, className, longL
     ? (longLabels ? '🎯 Vídeo Automático (API 1 Pro)' : '🎯 Automático')
     : (longLabels ? 'Automática (usa stream principal)' : 'Auto (Stream)');
 
-  const directLabel = longLabels ? 'Link Direto (download direto)' : 'Link Direto';
+  const directLabel = longLabels ? 'Link Direto — Worker Proxy' : 'Link Direto';
+  const streamLabel = longLabels ? 'Stream HLS — HLS direto' : 'Stream HLS';
+  const dlLabel = longLabels ? 'Download Direto — via API' : 'Download Direto';
 
   return (
     <select
@@ -121,8 +129,10 @@ const QualitySelect: React.FC<Props> = ({ url, value, onChange, className, longL
       title={title}
     >
       <option value="auto">{autoLabel}{loading ? ' (detectando...)' : ''}</option>
+      {hasStream && <option value="stream">{streamLabel}</option>}
       {list.map(q => <option key={q} value={q}>{labels[q]}</option>)}
       {hasDirect && <option value="direct">{directLabel}</option>}
+      {hasStreamDownload && <option value="stream_download">{dlLabel}</option>}
     </select>
   );
 };

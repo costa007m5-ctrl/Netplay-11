@@ -29,12 +29,15 @@ const API_BTN: Record<TApi, string> = {
 };
 
 const QUALITY_OPTIONS: { value: PreferredQuality; label: string }[] = [
-  { value: 'auto',   label: 'Auto (Stream)' },
-  { value: '1080p',  label: '1080p — Full HD' },
-  { value: '720p',   label: '720p — HD' },
-  { value: '480p',   label: '480p — SD' },
-  { value: '360p',   label: '360p' },
-  { value: 'direct', label: 'Link Direto' },
+  { value: 'auto',            label: 'Auto (Stream HLS)' },
+  { value: 'stream',          label: 'Stream HLS — HLS direto' },
+  { value: '1080p',           label: '1080p — Full HD' },
+  { value: '720p',            label: '720p — HD' },
+  { value: '480p',            label: '480p — SD' },
+  { value: '360p',            label: '360p' },
+  { value: '240p',            label: '240p — Baixa' },
+  { value: 'direct',          label: 'Link Direto (Worker)' },
+  { value: 'stream_download', label: 'Download Direto' },
 ];
 
 function detectApi(url: string): TApi | null {
@@ -67,6 +70,7 @@ const MigrateBatchPanel: React.FC<Props> = ({ editingMovie, setEditingMovie }) =
   const [targetQuality, setTargetQuality] = useState<PreferredQuality>('auto');
   const [selected, setSelected]       = useState<Set<string>>(new Set());
   const [done, setDone]               = useState<string | null>(null);
+  const [seasonFilter, setSeasonFilter] = useState<number | null>(null);
 
   const isSeries = editingMovie.type === 'series';
   const episodes: Episode[] = editingMovie.episodes || [];
@@ -79,18 +83,40 @@ const MigrateBatchPanel: React.FC<Props> = ({ editingMovie, setEditingMovie }) =
     [episodes, isSeries],
   );
 
+  // Seasons available in eligible episodes
+  const availableSeasons = useMemo(() => {
+    const s = new Set(eligible.map(ep => ep.season));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [eligible]);
+
+  // Filtered episode list by season
+  const visibleEligible = useMemo(() =>
+    seasonFilter != null ? eligible.filter(ep => ep.season === seasonFilter) : eligible,
+    [eligible, seasonFilter],
+  );
+
   // Movie URL detection
   const movieApi = detectApi(editingMovie.videoUrl || '') || detectApi(editingMovie.videoUrl2 || '');
 
   // Don't render if there's nothing terabox-related
   if (!isSeries && !movieApi) return null;
 
-  const allSelected = eligible.length > 0 && eligible.every(ep => selected.has(ep.id));
-  const someSelected = selected.size > 0 && !allSelected;
+  // Selection helpers operate on visibleEligible (respects season filter)
+  const allVisibleSelected = visibleEligible.length > 0 && visibleEligible.every(ep => selected.has(ep.id));
+  const someSelected = selected.size > 0;
 
   const toggleAll = () => {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(eligible.map(ep => ep.id)));
+    if (allVisibleSelected) {
+      // Deselect only visible
+      const next = new Set(selected);
+      visibleEligible.forEach(ep => next.delete(ep.id));
+      setSelected(next);
+    } else {
+      // Add all visible to selection
+      const next = new Set(selected);
+      visibleEligible.forEach(ep => next.add(ep.id));
+      setSelected(next);
+    }
   };
 
   const toggleOne = (id: string) => {
@@ -155,12 +181,12 @@ const MigrateBatchPanel: React.FC<Props> = ({ editingMovie, setEditingMovie }) =
   };
 
   const applyAllApi = () => {
-    setSelected(new Set(eligible.map(ep => ep.id)));
+    setSelected(new Set(visibleEligible.map(ep => ep.id)));
     setTimeout(applySeriesApi, 0);
   };
 
   const applyAllQuality = () => {
-    const ids = new Set(eligible.map(ep => ep.id));
+    const ids = new Set(visibleEligible.map(ep => ep.id));
     setEditingMovie(prev => {
       if (!prev) return null;
       return {
@@ -171,7 +197,7 @@ const MigrateBatchPanel: React.FC<Props> = ({ editingMovie, setEditingMovie }) =
         }),
       };
     });
-    flash(`Qualidade "${targetQuality}" em todos (${eligible.length})`);
+    flash(`Qualidade "${targetQuality}" em ${ids.size} ep(s)${seasonFilter != null ? ` (T${String(seasonFilter).padStart(2,'0')})` : ''}`);
   };
 
   return (
@@ -293,33 +319,62 @@ const MigrateBatchPanel: React.FC<Props> = ({ editingMovie, setEditingMovie }) =
                 )}
               </div>
 
+              {/* Season filter — only shown when series has multiple seasons */}
+              {availableSeasons.length > 1 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9px] text-gray-600 font-black uppercase tracking-wide shrink-0">Temporada:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSeasonFilter(null)}
+                    className={`px-2.5 py-1 rounded-lg text-[9px] font-black border transition-all ${seasonFilter == null ? 'bg-violet-500/30 border-violet-500/60 text-violet-300' : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'}`}
+                  >
+                    Todas
+                  </button>
+                  {availableSeasons.map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSeasonFilter(s === seasonFilter ? null : s)}
+                      className={`px-2.5 py-1 rounded-lg text-[9px] font-black border transition-all ${seasonFilter === s ? 'bg-violet-500/30 border-violet-500/60 text-violet-300' : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'}`}
+                    >
+                      T{String(s).padStart(2, '0')}
+                    </button>
+                  ))}
+                  {seasonFilter != null && (
+                    <span className="text-[9px] text-gray-600 ml-1">
+                      {visibleEligible.length} ep{visibleEligible.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Quick-apply all + select all row */}
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Apply ALL without selecting */}
                 <button
                   type="button"
                   onClick={tab === 'api' ? applyAllApi : applyAllQuality}
-                  disabled={eligible.length === 0}
+                  disabled={visibleEligible.length === 0}
                   className="flex items-center gap-1.5 bg-orange-600/70 hover:bg-orange-600 disabled:opacity-30 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all border border-orange-500/50"
                 >
                   <CheckCheck size={11} />
-                  Todos ({eligible.length})
+                  {seasonFilter != null ? `T${String(seasonFilter).padStart(2,'0')} (${visibleEligible.length})` : `Todos (${eligible.length})`}
                 </button>
 
                 {/* Divider */}
                 <span className="text-[9px] text-gray-600 font-bold">ou selecione:</span>
 
-                {/* Toggle all */}
+                {/* Toggle all visible */}
                 <button
                   type="button"
                   onClick={toggleAll}
                   className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 hover:text-white transition-colors border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-xl"
                 >
-                  {allSelected
+                  {allVisibleSelected
                     ? <><CheckSquare size={11} className="text-red-400" /> Desmarcar</>
                     : someSelected
-                      ? <><Minus size={11} className="text-yellow-400" /> Marcar Todos</>
-                      : <><Square size={11} /> Marcar Todos</>
+                      ? <><Minus size={11} className="text-yellow-400" /> Marcar Visíveis</>
+                      : <><Square size={11} /> Marcar Visíveis</>
                   }
                 </button>
 
@@ -337,13 +392,13 @@ const MigrateBatchPanel: React.FC<Props> = ({ editingMovie, setEditingMovie }) =
               </div>
 
               {/* Episode list */}
-              {eligible.length === 0 ? (
+              {visibleEligible.length === 0 ? (
                 <p className="text-[9px] text-gray-600 text-center py-3 bg-black/20 rounded-xl">
-                  Nenhum episódio com URL Terabox dinâmica.
+                  {eligible.length === 0 ? 'Nenhum episódio com URL Terabox dinâmica.' : 'Nenhum episódio nessa temporada.'}
                 </p>
               ) : (
                 <div className="max-h-72 overflow-y-auto space-y-1 pr-0.5 scrollbar-hide">
-                  {eligible.map(ep => {
+                  {visibleEligible.map(ep => {
                     const api = detectApi(ep.videoUrl) || detectApi(ep.videoUrl2 || '');
                     const isSelected = selected.has(ep.id);
                     const quality = (ep as any).preferredQuality as string | undefined;

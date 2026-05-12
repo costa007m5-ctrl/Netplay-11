@@ -411,16 +411,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               qualityList.push({ id: q.k, label: q.label, url: fs[q.k] });
             }
           }
-          // Add "Auto (Stream)" — stream HLS com áudio completo
+          // Add "Auto (Stream)" — stream HLS M3U8 com áudio completo
           // Prioridade: fast_stream_url['auto'] > stream_url > url
           const autoStreamUrl = fs['auto'] || file.stream_url || file.url;
           if (autoStreamUrl && !qualityList.some(q => q.url === autoStreamUrl)) {
             qualityList.push({ id: 'stream', label: 'Auto (Stream)', url: autoStreamUrl });
           }
-          // Add "Link Direto" (normal_dlink) as an explicit selectable option
+          // Add "stream_url" separately when it differs from fast_stream_url.auto (HLS direto)
+          if (file.stream_url && file.stream_url !== autoStreamUrl && !qualityList.some(q => q.url === file.stream_url)) {
+            qualityList.push({ id: 'stream_url', label: 'Stream HLS', url: file.stream_url });
+          }
+          // Add "Link Direto" (normal_dlink / worker proxy) as an explicit selectable option
           const directUrl = file.normal_dlink || file.dlink;
           if (directUrl && !qualityList.some(q => q.url === directUrl)) {
             qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
+          }
+          // Add "Download Direto" (stream_download_url) — direct API download link
+          const dlUrl = (file as any).stream_download_url;
+          if (dlUrl && !qualityList.some(q => q.url === dlUrl)) {
+            qualityList.push({ id: 'stream_download', label: 'Download Direto', url: dlUrl });
           }
 
           if (qualityList.length === 0) throw new Error('Nenhum link de stream para este arquivo');
@@ -559,9 +568,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             if (autoStreamUrl && !qualityList.some(q => q.url === autoStreamUrl)) {
               qualityList.push({ id: 'stream', label: 'Auto (Stream)', url: autoStreamUrl });
             }
+            // stream_url separado quando difere do fast_stream_url.auto
+            if (vid.stream_url && vid.stream_url !== autoStreamUrl && !qualityList.some(q => q.url === vid.stream_url)) {
+              qualityList.push({ id: 'stream_url', label: 'Stream HLS', url: vid.stream_url });
+            }
             const directUrl = vid.normal_dlink || vid.dlink;
             if (directUrl && !qualityList.some(q => q.url === directUrl)) {
               qualityList.push({ id: 'direct', label: 'Link Direto', url: directUrl });
+            }
+            // Download Direto (stream_download_url) — link direto via servidor API
+            const dlUrl = vid.stream_download_url;
+            if (dlUrl && !qualityList.some(q => q.url === dlUrl)) {
+              qualityList.push({ id: 'stream_download', label: 'Download Direto', url: dlUrl });
             }
 
             const epPreferred = (urlMatchEp as any)?.preferredQuality as string | undefined;
@@ -589,7 +607,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             // Probe em background — não bloqueia o play
             if (qualityList.length >= 2) {
               const probeMovieId = movie.id;
-              const ladder = ['1080p', '720p', '480p', '360p', '240p', 'stream', 'direct'];
+              const ladder = ['1080p', '720p', '480p', '360p', '240p', 'stream', 'stream_url', 'direct', 'stream_download'];
               const attemptOrder: typeof qualityList = preferred
                 ? (() => {
                     const prefIdx = ladder.indexOf(preferred);

@@ -22,12 +22,13 @@ function normalizeItem(raw: any): any {
   if (!raw || typeof raw !== "object") return null;
   const name = raw.server_filename || raw.filename || raw.name || "Desconhecido";
 
-  const streamUrl = raw.stream_url || raw.stream_download_url || null;
-  const directLink = raw.direct_link || raw.normal_dlink || raw.dlink || null;
+  // Keep all 3 URL types separate — each serves a different purpose on the frontend
+  const streamUrl = raw.stream_url || null;                                  // HLS M3U8 (teraboxdl.site)
+  const streamDownloadUrl = raw.stream_download_url || null;                  // Direct download via API
+  const directLink = raw.direct_link || raw.normal_dlink || raw.dlink || null; // Worker proxy link
 
   // Build quality map from raw API response if it provides real per-quality URLs.
-  // Only fall back to mapping all keys to the same stream_url when no real ladder exists
-  // (otherwise the frontend probes N identical URLs wasting time).
+  // Only fall back to mapping all keys to the same stream_url when no real ladder exists.
   const rawFast = raw.fast_stream_url || raw.qualities || {};
   const fast: Record<string, string> = {};
 
@@ -40,9 +41,12 @@ function normalizeItem(raw: any): any {
       usedRealLadder = true;
     }
   }
-  // If the API doesn't provide a real ladder, use stream_url once under "auto"
-  // so the frontend can play it without probing 5 identical URLs.
-  if (!usedRealLadder && streamUrl) {
+  // Always include fast_stream_url.auto if present (it may differ from stream_url)
+  if (rawFast["auto"] && typeof rawFast["auto"] === "string") {
+    fast["auto"] = rawFast["auto"];
+  }
+  // If no quality ladder AND no auto, use stream_url once under "auto"
+  if (!usedRealLadder && !fast["auto"] && streamUrl) {
     fast["auto"] = streamUrl;
   }
 
@@ -54,8 +58,10 @@ function normalizeItem(raw: any): any {
     is_dir: raw.is_dir !== undefined ? String(raw.is_dir) : "0",
     size: raw.size,
     formatted_size: raw.formatted_size,
+    // All 3 URL types exposed separately
     normal_dlink: directLink,
     stream_url: streamUrl,
+    stream_download_url: streamDownloadUrl,
     fast_stream_url: Object.keys(fast).length ? fast : undefined,
     thumbnail: raw.thumbs?.url1 || raw.thumbs?.url2 || raw.thumbs?.icon || null,
     thumbs: raw.thumbs,

@@ -6,13 +6,15 @@ import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
 import { makeDynamicRefV3, isDynamicRef } from '../../services/terabox';
 
 const QUALITY_OPTIONS: { value: PreferredQuality; label: string }[] = [
-  { value: 'auto',   label: 'Auto (qualidade automática HLS)' },
-  { value: 'stream', label: 'Auto (Stream) — HLS com áudio' },
-  { value: '1080p',  label: '1080p — Full HD' },
-  { value: '720p',   label: '720p — HD' },
-  { value: '480p',   label: '480p — SD' },
-  { value: '360p',   label: '360p — Baixa' },
-  { value: 'direct', label: 'Link Direto (sem áudio garantido)' },
+  { value: 'auto',            label: 'Auto — HLS adaptativo (recomendado)' },
+  { value: 'stream',          label: 'Stream HLS — HLS direto' },
+  { value: '1080p',           label: '1080p — Full HD' },
+  { value: '720p',            label: '720p — HD' },
+  { value: '480p',            label: '480p — SD' },
+  { value: '360p',            label: '360p — Baixa' },
+  { value: '240p',            label: '240p — Mínima' },
+  { value: 'direct',          label: 'Link Direto (Worker Proxy)' },
+  { value: 'stream_download', label: 'Download Direto (API)' },
 ];
 
 const AUDIO_LANGUAGE_OPTIONS: { value: PreferredAudioLanguage; label: string }[] = [
@@ -147,33 +149,48 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
   }, [testResult]);
 
   const testQualities = React.useMemo(() => {
-    if (!testVid) return [] as { id: string; label: string; url: string }[];
+    if (!testVid) return [] as { id: string; label: string; url: string; desc: string }[];
     const fs = testVid.fast_stream_url || {};
     const order = [
-      { k: '1080p', label: '1080p (Full HD)' },
-      { k: '720p',  label: '720p (HD)' },
-      { k: '480p',  label: '480p (SD)' },
-      { k: '360p',  label: '360p' },
-      { k: 'auto',  label: 'Auto (Stream)' },
+      { k: '1080p', label: '1080p (Full HD)',  desc: 'HLS M3U8 — qualidade máxima' },
+      { k: '720p',  label: '720p (HD)',         desc: 'HLS M3U8 — HD' },
+      { k: '480p',  label: '480p (SD)',         desc: 'HLS M3U8 — SD' },
+      { k: '360p',  label: '360p',             desc: 'HLS M3U8 — baixa' },
+      { k: '240p',  label: '240p',             desc: 'HLS M3U8 — mínima' },
     ];
-    const list: { id: string; label: string; url: string }[] = [];
+    const list: { id: string; label: string; url: string; desc: string }[] = [];
     const seen = new Set<string>();
     for (const o of order) {
       if (fs[o.k] && typeof fs[o.k] === 'string' && !seen.has(fs[o.k])) {
         seen.add(fs[o.k]);
-        list.push({ id: o.k, label: o.label, url: fs[o.k] });
+        list.push({ id: o.k, label: o.label, url: fs[o.k], desc: o.desc });
       }
     }
-    // Add "Auto (Stream)" fallback from stream_url when fast_stream_url['auto'] not set
-    const streamFallback = testVid.stream_url || testVid.url;
+    // fast_stream_url.auto — HLS adaptativo (melhor compatibilidade, áudio completo)
+    if (fs['auto'] && !seen.has(fs['auto'])) {
+      seen.add(fs['auto']);
+      list.push({ id: 'auto', label: 'Auto (Stream)', url: fs['auto'], desc: 'HLS M3U8 adaptativo — melhor para streaming, áudio garantido' });
+    }
+    // stream_url — pode ser igual ao auto ou um HLS diferente
+    const streamFallback = testVid.stream_url;
     if (streamFallback && !seen.has(streamFallback)) {
       seen.add(streamFallback);
-      list.push({ id: 'stream', label: 'Auto (Stream)', url: streamFallback });
+      list.push({ id: 'stream', label: 'Stream HLS', url: streamFallback, desc: 'HLS M3U8 direto — usar se Auto Stream não funcionar' });
     }
+    // normal_dlink — proxy via Cloudflare Worker (fallback quando HLS falha)
     const direct = testVid.normal_dlink || testVid.direct_link;
-    if (direct && !seen.has(direct)) list.push({ id: 'direct', label: 'Link Direto', url: direct });
+    if (direct && !seen.has(direct)) {
+      seen.add(direct);
+      list.push({ id: 'direct', label: 'Link Direto (Worker)', url: direct, desc: 'Proxy via Cloudflare Worker — usar quando HLS não carrega. Compatível com MP4.' });
+    }
+    // stream_download_url — download direto via servidor API (alta compatibilidade)
+    const dlUrl = testVid.stream_download_url || testResult?._v3_raw?.list?.[0]?.stream_download_url;
+    if (dlUrl && !seen.has(dlUrl)) {
+      seen.add(dlUrl);
+      list.push({ id: 'stream_download', label: 'Download Direto', url: dlUrl, desc: 'Link direto via servidor API — máxima compatibilidade, ideal para download. Testar no player.' });
+    }
     return list;
-  }, [testVid]);
+  }, [testVid, testResult]);
 
   const videoUrlToPlay = React.useMemo(() => {
     if (!testQualities.length) return null;
@@ -1016,19 +1033,40 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         </div>
         {error && <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">{error}</div>}
         {testQualities.length > 0 && (
-          <div className="mt-6 bg-black/40 border border-violet-500/20 rounded-xl p-4">
-            <div className="text-xs font-black uppercase tracking-widest text-violet-400 mb-3">Qualidades Disponíveis ({testQualities.length})</div>
-            <div className="flex flex-wrap gap-2">
-              {testQualities.map(q => (
-                <button
-                  key={q.id}
-                  onClick={() => setTestSelectedQuality(q.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${(testSelectedQuality || testQualities[0].id) === q.id ? 'bg-violet-500 text-black' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'}`}
-                  title={q.url}
-                >
-                  <Play size={12} /> {q.label}
-                </button>
-              ))}
+          <div className="mt-6 bg-black/40 border border-violet-500/20 rounded-xl p-4 space-y-3">
+            <div className="text-xs font-black uppercase tracking-widest text-violet-400">
+              Rotas Disponíveis ({testQualities.length}) — clique para testar no player
+            </div>
+            <div className="space-y-2">
+              {testQualities.map(q => {
+                const isActive = (testSelectedQuality || testQualities[0].id) === q.id;
+                const typeColor: Record<string, string> = {
+                  auto: 'text-green-400', stream: 'text-blue-400', stream_url: 'text-blue-300',
+                  direct: 'text-yellow-400', stream_download: 'text-orange-400',
+                  '1080p': 'text-purple-400', '720p': 'text-purple-300', '480p': 'text-gray-400',
+                  '360p': 'text-gray-500', '240p': 'text-gray-600',
+                };
+                const typeIcon: Record<string, string> = {
+                  auto: '📡', stream: '🎞️', stream_url: '🎞️', direct: '🔗', stream_download: '⬇️',
+                  '1080p': '🎬', '720p': '🎬', '480p': '📺', '360p': '📺', '240p': '📺',
+                };
+                return (
+                  <div
+                    key={q.id}
+                    onClick={() => setTestSelectedQuality(q.id)}
+                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${isActive ? 'bg-violet-500/20 border-violet-500/50' : 'bg-white/3 border-white/5 hover:bg-white/8 hover:border-white/15'}`}
+                  >
+                    <span className="text-lg">{typeIcon[q.id] || '▶️'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-xs font-black ${typeColor[q.id] || 'text-white'}`}>{q.label}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{(q as any).desc || ''}</div>
+                    </div>
+                    <div className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black border transition-all ${isActive ? 'bg-violet-500 text-white border-violet-400' : 'bg-white/5 text-gray-400 border-white/10'}`}>
+                      <Play size={10} /> {isActive ? 'Testando' : 'Testar'}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
