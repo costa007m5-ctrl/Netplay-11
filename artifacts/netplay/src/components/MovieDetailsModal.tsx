@@ -1078,7 +1078,7 @@ const MovieDetailsModal = React.memo(({
                         {ep.episode}
                       </div>
                       
-                      <div className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10" onClick={(e) => { e.stopPropagation(); handlePlay(ep.videoUrl || ep.videoUrl2 || '', 0, 'netflix'); }}>
+                      <div className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10" onClick={(e) => { e.stopPropagation(); triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', 0, 'netflix'); }}>
                         <img 
                           src={ep.still_path || backgroundUrl} 
                           alt={ep.title} 
