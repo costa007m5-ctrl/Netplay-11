@@ -26,6 +26,27 @@ export function convertTeraboxToApi(url: string, api: 'v1' | 'v2' | 'v3'): strin
   return makeDynamicRef(folderUrl, filename);
 }
 
+export const SELECTED_SERVER_KEY = 'netplay_selected_server_mode';
+
+export interface SelectedServerPreference {
+  id: 'admin' | 'alternative' | 'auto';
+  playerStyle: string;
+  altApi: 'v1' | 'v3';
+  nativeApi: 'v1' | 'v3';
+}
+
+export function getSelectedServer(): SelectedServerPreference | null {
+  try {
+    const raw = localStorage.getItem(SELECTED_SERVER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as SelectedServerPreference;
+  } catch { return null; }
+}
+
+export function saveSelectedServer(data: SelectedServerPreference) {
+  try { localStorage.setItem(SELECTED_SERVER_KEY, JSON.stringify(data)); } catch {}
+}
+
 interface SmartPlayerSelectorProps {
   movie: Movie;
   episodeUrl?: string;
@@ -97,6 +118,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       available: hasAdminUrl,
       unavailableMsg: 'Nenhum link administrativo configurado para este título.',
       action: () => {
+        saveSelectedServer({ id: 'admin', playerStyle: 'netflix', altApi, nativeApi });
         onPlay(getAdminUrl(), startTime, 'netflix');
       },
     },
@@ -118,6 +140,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       available: hasTeraboxUrl,
       unavailableMsg: 'Não disponível para este tipo de link.',
       action: () => {
+        saveSelectedServer({ id: 'alternative', playerStyle: 'netflix', altApi, nativeApi });
         const converted = convertTeraboxToApi(currentUrl, altApi);
         onPlay(converted, startTime, 'netflix');
       },
@@ -140,6 +163,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       available: hasTeraboxUrl,
       unavailableMsg: 'Não disponível para este tipo de link.',
       action: () => {
+        saveSelectedServer({ id: 'auto', playerStyle: 'netflix-cascade', altApi, nativeApi });
         const nativeUrl = convertTeraboxToApi(currentUrl, nativeApi);
         onPlay(nativeUrl, startTime, 'netflix-cascade');
       },

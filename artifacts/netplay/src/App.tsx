@@ -16,6 +16,8 @@ const WatchPartyModal = React.lazy(() => import('./components/WatchPartyModal'))
 const SettingsModal = React.lazy(() => import('./components/SettingsModal'));
 const IntroVignette = React.lazy(() => import('./components/IntroVignette'));
 import { CATEGORIES } from './constants';
+import { isDynamicRef } from './services/terabox';
+import { getSelectedServer, convertTeraboxToApi } from './components/SmartPlayerSelector';
 import tmdb, { requests, getMovieLogo } from './services/tmdb';
 import { notificationService } from './services/notificationService';
 import { Movie, Profile, WatchHistory, ScannerState, ReScannerState, CollectionScannerState, MyList, AppSettings, Episode, StreamingProvider } from './types';
@@ -1521,7 +1523,26 @@ const MovieDetailRouteWrapper = ({
       recommendations={recommendations}
       onProgress={onProgress}
       onPlayNext={(m, url, idx) => {
-         if (handlePlayMovie) handlePlayMovie(m, url, 0, undefined, idx);
+         if (!handlePlayMovie) return;
+         let nextUrl = url;
+         let nextPlayerStyle: string | undefined = playerStyleFromState;
+
+         const saved = getSelectedServer();
+         if (saved && isDynamicRef(url)) {
+           if (saved.id === 'admin') {
+             const ep = m.episodes?.find((e: any) => e.videoUrl === url || e.videoUrl2 === url);
+             nextUrl = ep?.videoUrl2 || (m as any).videoUrl2 || url;
+             nextPlayerStyle = 'netflix';
+           } else if (saved.id === 'alternative') {
+             nextUrl = convertTeraboxToApi(url, saved.altApi);
+             nextPlayerStyle = 'netflix';
+           } else if (saved.id === 'auto') {
+             nextUrl = convertTeraboxToApi(url, saved.nativeApi);
+             nextPlayerStyle = 'netflix-cascade';
+           }
+         }
+
+         handlePlayMovie(m, nextUrl, 0, nextPlayerStyle, idx);
       }}
       roomId={currentRoomId}
       isHost={isHost}
@@ -4077,12 +4098,29 @@ export default function App() {
   const handlePlayNextEpisode = (currentMovie: Movie) => {
     if (currentMovie.type !== 'series' || !currentMovie.episodes) return;
 
-    // Encontrar o episódio atual baseado na URL
     const currentEpIndex = currentMovie.episodes.findIndex(ep => ep.videoUrl === currentMovie.videoUrl);
     
     if (currentEpIndex !== -1 && currentEpIndex < currentMovie.episodes.length - 1) {
       const nextEp = currentMovie.episodes[currentEpIndex + 1];
-      handlePlayMovie(currentMovie, nextEp.videoUrl);
+      const rawUrl = nextEp.videoUrl || '';
+      let nextUrl = rawUrl;
+      let nextPlayerStyle: string | undefined = undefined;
+
+      const saved = getSelectedServer();
+      if (saved && isDynamicRef(rawUrl)) {
+        if (saved.id === 'admin') {
+          nextUrl = nextEp.videoUrl2 || rawUrl;
+          nextPlayerStyle = 'netflix';
+        } else if (saved.id === 'alternative') {
+          nextUrl = convertTeraboxToApi(rawUrl, saved.altApi);
+          nextPlayerStyle = 'netflix';
+        } else if (saved.id === 'auto') {
+          nextUrl = convertTeraboxToApi(rawUrl, saved.nativeApi);
+          nextPlayerStyle = 'netflix-cascade';
+        }
+      }
+
+      handlePlayMovie(currentMovie, nextUrl, 0, nextPlayerStyle);
     }
   };
 
