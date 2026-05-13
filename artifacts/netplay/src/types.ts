@@ -14,6 +14,7 @@ export interface Episode {
   rating?: number;
   runtime?: number;
   credits_time?: number; // Segundos antes do fim para o Próximo Episódio
+  intro_skip_time?: number; // Segundo do início para mostrar o botão "Pular Abertura"
   preferredQuality?: PreferredQuality; // Qualidade fixa escolhida no admin (sobrescreve probe)
   preferredAudioLanguage?: PreferredAudioLanguage; // Idioma de áudio preferido
 }

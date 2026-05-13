@@ -4012,10 +4012,11 @@ export default function App() {
     const results: Array<{ movie: any; episode: any; episodeIndex: number }> = [];
     for (const m of visibleMovies) {
       if (m.type !== 'series' || !m.episodes) continue;
+      const seriesMatches = (m.title || m.name || '').toLowerCase().includes(query);
       (m.episodes as any[]).forEach((ep: any, idx: number) => {
         const title = (ep.title || '').toLowerCase();
         const overview = (ep.overview || '').toLowerCase();
-        if (title.includes(query) || overview.includes(query)) {
+        if (seriesMatches || title.includes(query) || overview.includes(query)) {
           results.push({ movie: m, episode: ep, episodeIndex: idx });
         }
       });
@@ -4605,6 +4606,7 @@ export default function App() {
         activeProfile={profile}
         activeTab={activeTab}
         onTabChange={(tab) => {
+          if (tab !== 'search') setSearchQuery('');
           if (tab === 'search' && searchQuery) {
             navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
           } else {
@@ -4614,9 +4616,6 @@ export default function App() {
         searchQuery={searchQuery}
         onSearchChange={(q) => {
           setSearchQuery(q);
-          if (q && q.trim().length > 0 && location.pathname !== '/search') {
-            navigate(`/search?q=${encodeURIComponent(q)}`, { replace: true });
-          }
         }}
         onStartReScan={startReScanner}
         scannerState={scannerState}

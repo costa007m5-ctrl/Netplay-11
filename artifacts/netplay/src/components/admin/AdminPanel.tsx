@@ -3184,7 +3184,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           <p className="text-[9px] text-gray-500 italic">Isso extrairá o link de vídeo real do player KingX.</p>
                         </div>
                         
-                        <div className="flex items-center justify-end gap-2 bg-white/5 border border-white/10 rounded-xl p-3">
+                        <div className="flex flex-wrap items-center justify-end gap-2 bg-white/5 border border-white/10 rounded-xl p-3">
                           <span className="text-[10px] text-gray-500 font-black uppercase">Auto-Next Global (s):</span>
                           <input 
                             id="bulkNewMovieCredits"
@@ -3204,6 +3204,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                               }
                             }}
                             className="bg-red-600/20 text-red-500 border border-red-500/30 hover:bg-red-600 hover:text-white transition-colors px-3 py-1 rounded-lg text-[10px] font-bold uppercase"
+                          >
+                            Aplicar Tudo
+                          </button>
+                          <span className="text-[10px] text-gray-500 font-black uppercase ml-2">Pular Vinheta Global (s):</span>
+                          <input 
+                            id="bulkNewMovieIntroSkip"
+                            type="number"
+                            placeholder="Ex: 90"
+                            className="w-20 bg-black/40 border border-white/5 rounded-lg py-1 px-2 text-xs font-mono text-center"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const val = (document.getElementById('bulkNewMovieIntroSkip') as HTMLInputElement).value;
+                              if (val !== '') {
+                                setNewMovie({
+                                  ...newMovie, 
+                                  episodes: newMovie.episodes?.map(ep => ({ ...ep, intro_skip_time: Number(val) }))
+                                });
+                              }
+                            }}
+                            className="bg-orange-600/20 text-orange-400 border border-orange-500/30 hover:bg-orange-600 hover:text-white transition-colors px-3 py-1 rounded-lg text-[10px] font-bold uppercase"
                           >
                             Aplicar Tudo
                           </button>
@@ -3289,6 +3311,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                       onChange={(e) => updateEpisode(newMovie, setNewMovie, ep.id, 'credits_time', e.target.value !== '' ? Number(e.target.value) : undefined)}
                                       className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-3 text-xs font-mono text-center"
                                       placeholder="Ex: 30"
+                                    />
+                                  </div>
+                                  <div className="col-span-1">
+                                    <label className="block text-[8px] font-black text-orange-500/70 uppercase mb-1 text-center whitespace-nowrap">Vinheta(s)</label>
+                                    <input 
+                                      type="number"
+                                      value={(ep as any).intro_skip_time !== undefined ? (ep as any).intro_skip_time : ''}
+                                      onChange={(e) => updateEpisode(newMovie, setNewMovie, ep.id, 'intro_skip_time', e.target.value !== '' ? Number(e.target.value) : undefined)}
+                                      className="w-full bg-black/40 border border-orange-500/10 rounded-lg py-1.5 px-3 text-xs font-mono text-center text-orange-400"
+                                      placeholder="Ex: 90"
                                     />
                                   </div>
                                 </div>
@@ -3761,7 +3793,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-end gap-2 bg-white/5 border border-white/10 rounded-xl p-3 mb-4 mt-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2 bg-white/5 border border-white/10 rounded-xl p-3 mb-4 mt-2">
                         <span className="text-[10px] text-gray-500 font-black uppercase">Auto-Next Global (s):</span>
                         <input 
                           id="bulkEditingMovieCreditsAdmin"
@@ -3781,6 +3813,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             }
                           }}
                           className="bg-red-600/20 text-red-500 border border-red-500/30 hover:bg-red-600 hover:text-white transition-colors px-3 py-1 rounded-lg text-[10px] font-bold uppercase"
+                        >
+                          Aplicar Tudo
+                        </button>
+                        <span className="text-[10px] text-gray-500 font-black uppercase ml-2">Pular Vinheta Global (s):</span>
+                        <input 
+                          id="bulkEditingMovieIntroSkipAdmin"
+                          type="number"
+                          placeholder="Ex: 90"
+                          className="w-20 bg-black/40 border border-white/5 rounded-lg py-1 px-2 text-xs font-mono text-center"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = (document.getElementById('bulkEditingMovieIntroSkipAdmin') as HTMLInputElement).value;
+                            if (val !== '') {
+                              setEditingMovie(prev => prev ? {
+                                ...prev,
+                                episodes: prev.episodes?.map((ep: any) => ({ ...ep, intro_skip_time: Number(val) }))
+                              } : null);
+                            }
+                          }}
+                          className="bg-orange-600/20 text-orange-400 border border-orange-500/30 hover:bg-orange-600 hover:text-white transition-colors px-3 py-1 rounded-lg text-[10px] font-bold uppercase"
                         >
                           Aplicar Tudo
                         </button>
@@ -3868,6 +3922,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                     onChange={(e) => updateEpisode(editingMovie, setEditingMovie, ep.id, 'credits_time', e.target.value !== '' ? Number(e.target.value) : undefined)}
                                     className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-3 text-xs font-mono text-center"
                                     placeholder="Ex: 30"
+                                  />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="block text-[8px] font-black text-orange-500/70 uppercase mb-1 text-center whitespace-nowrap">Vinheta(s)</label>
+                                  <input 
+                                    type="number"
+                                    value={(ep as any).intro_skip_time !== undefined ? (ep as any).intro_skip_time : ''}
+                                    onChange={(e) => updateEpisode(editingMovie, setEditingMovie, ep.id, 'intro_skip_time', e.target.value !== '' ? Number(e.target.value) : undefined)}
+                                    className="w-full bg-black/40 border border-orange-500/10 rounded-lg py-1.5 px-3 text-xs font-mono text-center text-orange-400"
+                                    placeholder="Ex: 90"
                                   />
                                 </div>
                               </div>

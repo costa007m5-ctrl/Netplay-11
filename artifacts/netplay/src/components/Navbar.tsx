@@ -82,9 +82,7 @@ const Navbar = React.memo(({
   const isOnSearchPage = window.location.pathname === '/search';
   
   useEffect(() => {
-    if (isOnSearchPage) {
-      setIsSearchOpen(true);
-    }
+    setIsSearchOpen(isOnSearchPage);
   }, [isOnSearchPage]);
 
   return (
@@ -167,48 +165,45 @@ const Navbar = React.memo(({
             ))}
           </ul>
 
-          {/* Search Bar (Top Area) */}
+          {/* Search Bar (Top Area) — hidden on /search page since AdvancedSearch has its own */}
           <div className="flex-1 flex justify-end items-center mr-4">
-               {(!isSearchOpen && !isOnSearchPage) ? (
-                 <button 
+            {!isOnSearchPage && (
+              !isSearchOpen ? (
+                <button 
                   onClick={handleSearchClick}
                   className="p-3 text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors border border-white/10"
-                 >
-                   <Search size={22} className="text-gray-300" />
-                 </button>
-               ) : (
-                 <motion.div 
-                   initial={{ width: 0, opacity: 0 }}
-                   animate={{ width: '100%', opacity: 1 }}
-                   className="relative flex items-center w-full max-w-2xl bg-black/60 backdrop-blur-xl border border-white/20 rounded-full overflow-hidden shadow-2xl shadow-red-600/10 h-12 md:h-14"
-                 >
-                   <div className="pl-5 pr-3 text-red-600">
-                     <Search size={22} />
-                   </div>
-                   <input
-                     autoFocus
-                     type="text"
-                     placeholder="Buscar filmes, séries, gêneros..."
-                     value={currentQuery}
-                     onChange={handleSearchInput}
-                     className="w-full bg-transparent text-white font-bold placeholder-gray-500 outline-none h-full text-sm md:text-base mr-3"
-                   />
-                   {(currentQuery || isOnSearchPage) && (
-                     <button 
-                       onClick={() => {
-                         setSearchParams({});
-                         if(!currentQuery) {
-                            setIsSearchOpen(false);
-                            navigate('/');
-                         }
-                       }}
-                       className="p-2 mr-2 text-gray-400 hover:text-white transition-colors"
-                     >
-                       <X size={20} />
-                     </button>
-                   )}
-                 </motion.div>
-               )}
+                >
+                  <Search size={22} className="text-gray-300" />
+                </button>
+              ) : (
+                <motion.div 
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: '100%', opacity: 1 }}
+                  className="relative flex items-center w-full max-w-2xl bg-black/60 backdrop-blur-xl border border-white/20 rounded-full overflow-hidden shadow-2xl shadow-red-600/10 h-12 md:h-14"
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Buscar filmes, séries, episódios..."
+                    value={currentQuery}
+                    onChange={handleSearchInput}
+                    className="w-full bg-transparent text-white font-bold placeholder-gray-500 outline-none h-full text-sm md:text-base pl-5 mr-3"
+                  />
+                  {currentQuery && (
+                    <button 
+                      onClick={() => {
+                        setSearchParams({});
+                        onSearchChange('');
+                        setIsSearchOpen(false);
+                      }}
+                      className="p-2 mr-2 text-gray-400 hover:text-white transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  )}
+                </motion.div>
+              )
+            )}
           </div>
         </div>
       </motion.div>

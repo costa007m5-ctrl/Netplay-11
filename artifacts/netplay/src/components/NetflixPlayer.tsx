@@ -419,7 +419,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showTvShare, setShowTvShare] = useState(false);
   const [showLogoOverlay, setShowLogoOverlay] = useState(false);
   const [showAutoNext, setShowAutoNext] = useState(false);
-  const showSkipIntro = hasNextEpisode !== undefined && currentTime >= 10 && currentTime <= 180;
+  const currentEpForIntro = !isMovie ? (episodes as any[])?.find((ep: any) => ep.videoUrl === activeSrc || ep.videoUrl2 === activeSrc) : null;
+  const introSkipStart: number | undefined = currentEpForIntro?.intro_skip_time;
+  const showSkipIntro = !isMovie && (
+    introSkipStart !== undefined
+      ? (currentTime >= introSkipStart && currentTime <= introSkipStart + 150)
+      : (hasNextEpisode !== undefined && currentTime >= 10 && currentTime <= 180)
+  );
   const [autoNextCounter, setAutoNextCounter] = useState(10);
   const [isLandscape, setIsLandscape] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<{ id: number; height: number; bitrate: number }[]>([]);
@@ -2321,13 +2327,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                   <button
                     key={ep.id}
                     onClick={() => {
+                        if (isActive) return;
                         setShowEpisodesSidebar(false);
                         const epUrl = ep.videoUrl || ep.videoUrl2 || "";
                         if (epUrl) prefetchStreamHost(epUrl);
                         if (onSelectEpisode) {
                            onSelectEpisode(ep);
                         } else {
-                           // Reset player state before switching
                            setIsLoading(true);
                            setLoadingProgress(0);
                            setError(null);
@@ -2335,7 +2341,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                            setActiveSrc(epUrl);
                         }
                     }}
-                    className={`w-full text-left p-3 rounded-xl flex gap-4 items-center group transition-all duration-300 ${isActive ? 'bg-red-600/20 border border-red-600/50 shadow-[0_0_20px_rgba(220,38,38,0.2)]' : 'hover:bg-white/5 border border-transparent'}`}
+                    className={`w-full text-left p-3 rounded-xl flex gap-4 items-center transition-all duration-300 ${isActive ? 'bg-red-600/15 border-l-[3px] border-l-red-500 border border-red-600/30 shadow-[0_0_24px_rgba(220,38,38,0.15)] cursor-default' : 'hover:bg-white/5 border border-transparent cursor-pointer group'}`}
                   >
                     <div className="w-28 h-16 bg-gray-900 rounded-md overflow-hidden relative shrink-0">
                        {ep.still_path ? (
@@ -2345,16 +2351,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                             <Tv size={24} className="text-white/20" />
                          </div>
                        )}
-                       {isActive && (
-                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                            <Play size={20} className="text-white" fill="white" />
+                       {isActive ? (
+                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                           <div className="flex items-end gap-[3px]">
+                             <div className="w-[3px] bg-red-500 rounded-full animate-bounce" style={{ height: '8px', animationDelay: '0s' }} />
+                             <div className="w-[3px] bg-red-500 rounded-full animate-bounce" style={{ height: '14px', animationDelay: '0.15s' }} />
+                             <div className="w-[3px] bg-red-500 rounded-full animate-bounce" style={{ height: '10px', animationDelay: '0.3s' }} />
+                           </div>
                          </div>
-                       )}
+                       ) : null}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-1">
-                        <h4 className={`font-bold text-sm truncate pr-2 ${isActive ? 'text-white' : 'text-gray-300'}`}>{ep.episode}. {ep.title}</h4>
-                        {ep.runtime && <span className="text-gray-400 text-[10px] uppercase font-bold tracking-widest shrink-0">{ep.runtime} min</span>}
+                        <h4 className={`font-bold text-sm truncate pr-2 ${isActive ? 'text-red-400' : 'text-gray-300'}`}>{ep.episode}. {ep.title}</h4>
+                        {isActive ? (
+                          <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-red-400 bg-red-600/20 border border-red-500/40 px-2 py-0.5 rounded-full animate-pulse">
+                            ● Assistindo
+                          </span>
+                        ) : ep.runtime ? (
+                          <span className="text-gray-400 text-[10px] uppercase font-bold tracking-widest shrink-0">{ep.runtime} min</span>
+                        ) : null}
                       </div>
                       {ep.overview && (
                         <p className="text-gray-500 text-[10px] leading-tight line-clamp-2 md:line-clamp-3">{ep.overview}</p>
