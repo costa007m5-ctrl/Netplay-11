@@ -347,9 +347,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           // Respeitar a API da URL: v1=Pro, v2=v2, v3=v3 — sem mistura entre APIs
           const endpoint = v3 ? '/api/terabox-v3' : v2 ? '/api/terabox-v2' : '/api/terabox-pro';
 
-          // Honor preferredQuality from episode/movie
+          // Honor preferredQuality from episode/movie — also match by filename for converted dynamic refs
           const urlMatchEp = movie.type === 'series' && movie.episodes
-            ? movie.episodes.find(ep => ep.videoUrl === u || ep.videoUrl2 === u)
+            ? movie.episodes.find(ep => {
+                if (ep.videoUrl === u || ep.videoUrl2 === u) return true;
+                if (isDynamicRef(u) && ep.videoUrl && isDynamicRef(ep.videoUrl)) {
+                  try {
+                    const { filename: epFn } = parseDynamicRef(ep.videoUrl);
+                    const { filename: mvFn } = parseDynamicRef(u);
+                    if (epFn && mvFn && epFn === mvFn) return true;
+                  } catch {}
+                }
+                return false;
+              })
             : null;
           const epPref = (urlMatchEp as any)?.preferredQuality;
           const moviePref = (movie as any).preferredQuality;
@@ -823,8 +833,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
 
   // NetflixPlayer é o único player — todos os links são roteados aqui
   {
-    const currentIndex = movie.type === 'series' && movie.episodes 
-      ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl)
+    const currentIndex = movie.type === 'series' && movie.episodes
+      ? movie.episodes.findIndex(ep => {
+          const mv = movie.videoUrl || '';
+          if (ep.videoUrl === mv || ep.videoUrl2 === mv) return true;
+          if (isDynamicRef(mv) && ep.videoUrl && isDynamicRef(ep.videoUrl)) {
+            try {
+              const { filename: epFn } = parseDynamicRef(ep.videoUrl);
+              const { filename: mvFn } = parseDynamicRef(mv);
+              if (epFn && mvFn && epFn === mvFn) return true;
+            } catch {}
+          }
+          return false;
+        })
       : -1;
     const currentEpisode = currentIndex !== -1 && movie.episodes ? movie.episodes[currentIndex] : null;
     const episodeTitle = currentEpisode ? (currentEpisode.title || `Episódio ${currentEpisode.episode}`) : "";

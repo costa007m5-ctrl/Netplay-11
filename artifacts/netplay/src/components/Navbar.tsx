@@ -142,6 +142,7 @@ const Navbar = React.memo(({
             {[
               { id: 'home', label: 'Início', icon: Home },
               { id: 'trending', label: 'Em Alta', icon: TrendingUp },
+              { id: 'novos-eps', label: 'Novos Ep.', icon: Bell },
               { id: 'universe', label: 'Explorar', icon: Sparkles },
               { id: 'profile', label: 'Perfil', icon: User },
             ].map((item) => (
@@ -150,6 +151,7 @@ const Navbar = React.memo(({
                 onClick={() => {
                    if(item.id === 'home') navigate('/menu');
                    else if(item.id === 'trending') navigate('/trending');
+                   else if(item.id === 'novos-eps') navigate('/novos-episodios');
                    else if(item.id === 'universe') navigate('/universe');
                    else if(item.id === 'profile') navigate('/perfil');
                    onTabChange(item.id);
@@ -216,6 +218,7 @@ const Navbar = React.memo(({
         {[
           { id: 'home', label: 'Início', icon: Home, path: '/menu' },
           { id: 'trending', label: 'Em Alta', icon: TrendingUp, path: '/trending' },
+          { id: 'novos-eps', label: 'Novos Ep.', icon: Bell, path: '/novos-episodios' },
           { id: 'universe', label: 'Explorar', icon: Sparkles, path: '/universe' },
           { id: 'profile', label: 'Perfil', icon: User, path: '/perfil' },
         ].map((item) => {

@@ -35,6 +35,7 @@ const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
 const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'));
 const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
+const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSelector'));
 
 import { Loader2, Play, Pause, Square, RefreshCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle } from 'lucide-react';
 
@@ -101,6 +102,86 @@ const ThemeContext = createContext<{
 
 export const useAppTheme = () => useContext(ThemeContext);
 
+const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
+  const latestEpisodes = useMemo(() => {
+    const results: { movie: any; episode: any; episodeIndex: number }[] = [];
+    for (const m of myMovies) {
+      if (m.type !== 'series' || !m.episodes || m.episodes.length === 0) continue;
+      const sorted = [...m.episodes].sort((a: any, b: any) => {
+        const aKey = (a.season || 0) * 10000 + (a.episode || 0);
+        const bKey = (b.season || 0) * 10000 + (b.episode || 0);
+        return bKey - aKey;
+      });
+      const latest = sorted[0];
+      const idx = m.episodes.findIndex((e: any) => e === latest || (e.id && e.id === latest.id));
+      results.push({ movie: m, episode: latest, episodeIndex: idx >= 0 ? idx : 0 });
+    }
+    return results;
+  }, [myMovies]);
+
+  return (
+    <div className="pt-24 px-4 md:px-12 min-h-screen animate-fade-in">
+      <div className="flex items-end gap-4 mb-8">
+        <h2 className="text-3xl md:text-5xl font-black text-white italic uppercase tracking-tighter">
+          Novos <span className="text-red-600">Episódios</span>
+        </h2>
+        <span className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest text-gray-500 italic mb-1">
+          {latestEpisodes.length} séries
+        </span>
+      </div>
+      {latestEpisodes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-40 text-center">
+          <p className="text-gray-600 font-black uppercase tracking-widest text-lg">Nenhuma série com episódios encontrada</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 pb-40">
+          {latestEpisodes.map(({ movie, episode, episodeIndex }) => (
+            <motion.div
+              key={`${movie.id}-${episode.id || episode.episode}`}
+              whileHover={{ scale: 1.02 }}
+              onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
+              className="group relative bg-white/5 rounded-2xl overflow-hidden border border-white/5 hover:border-red-600/40 cursor-pointer transition-all shadow-xl"
+            >
+              <div className="relative aspect-video overflow-hidden">
+                <img
+                  src={episode.still_path || (movie.backdrop_path ? (movie.backdrop_path.startsWith('http') ? movie.backdrop_path : `https://image.tmdb.org/t/p/w780/${movie.backdrop_path}`) : (movie.poster_path ? (movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w500/${movie.poster_path}`) : ''))}
+                  alt={episode.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="w-14 h-14 bg-red-600/90 rounded-full flex items-center justify-center shadow-2xl">
+                    <Play size={22} fill="white" className="text-white ml-1" />
+                  </div>
+                </div>
+                <div className="absolute top-3 left-3">
+                  <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2 py-1 rounded-full tracking-widest shadow-lg">
+                    {episode.season ? `T${episode.season} · ` : ''}Ep {episode.episode || '?'}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 flex items-start gap-3">
+                <img
+                  src={movie.poster_path ? (movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w92/${movie.poster_path}`) : ''}
+                  alt={movie.title || movie.name}
+                  className="w-9 h-14 object-cover rounded-lg border border-white/10 flex-shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] text-red-400 font-black uppercase tracking-widest truncate">{movie.title || movie.name}</p>
+                  <p className="text-white font-bold text-sm mt-0.5 line-clamp-2 leading-tight">{episode.title || `Episódio ${episode.episode}`}</p>
+                  {episode.runtime > 0 && <p className="text-gray-600 text-[9px] font-bold mt-1">{episode.runtime} min</p>}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const HomeView = React.memo(({ 
   myMovies, 
   streamingProviders, 
@@ -122,6 +203,8 @@ const HomeView = React.memo(({
   cinemaMovies,
   searchQuery,
   searchResults,
+  episodeSearchResults,
+  onEpisodePlay,
   categories,
   franchises
 }: any) => {
@@ -184,7 +267,7 @@ const HomeView = React.memo(({
           </div>
         </div>
 
-        {searchResults.length === 0 ? (
+        {searchResults.length === 0 && (!episodeSearchResults || episodeSearchResults.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-40 bg-white/[0.02] rounded-[4rem] border-2 border-dashed border-white/5">
             <Search className="text-gray-800 mb-8 animate-float" size={80} />
             <h3 className="text-3xl font-black text-white italic uppercase mb-2">Sem resultados na biblioteca</h3>
@@ -197,29 +280,71 @@ const HomeView = React.memo(({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-10 pb-40">
-            {searchResults.map((movie: any) => (
-              <div
-                key={movie.id}
-                className="relative cursor-pointer group hover:-translate-y-2 transition-transform animate-fade-in"
-                onClick={() => handleSelectMovie(movie)}
-              >
-                <div className="aspect-[2/3] rounded-[2rem] overflow-hidden border border-white/10 group-hover:border-red-600 transition-colors duration-300 shadow-xl relative">
-                   <img 
-                    src={movie.poster_path?.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w500/${movie.poster_path}`} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    alt={movie.title || movie.name}
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                   />
-                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                   <div className="absolute bottom-4 left-4 right-4">
-                      <p className="text-white font-black text-sm uppercase italic truncate leading-none">{movie.title || movie.name}</p>
-                   </div>
+          <>
+            {searchResults.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-10">
+                {searchResults.map((movie: any) => (
+                  <div
+                    key={movie.id}
+                    className="relative cursor-pointer group hover:-translate-y-2 transition-transform animate-fade-in"
+                    onClick={() => handleSelectMovie(movie)}
+                  >
+                    <div className="aspect-[2/3] rounded-[2rem] overflow-hidden border border-white/10 group-hover:border-red-600 transition-colors duration-300 shadow-xl relative">
+                       <img 
+                        src={movie.poster_path?.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w500/${movie.poster_path}`} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        alt={movie.title || movie.name}
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                       />
+                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+                       <div className="absolute bottom-4 left-4 right-4">
+                          <p className="text-white font-black text-sm uppercase italic truncate leading-none">{movie.title || movie.name}</p>
+                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {episodeSearchResults && episodeSearchResults.length > 0 && (
+              <div className={searchResults.length > 0 ? 'mt-12' : ''}>
+                <h3 className="text-xl md:text-3xl font-black text-white italic uppercase tracking-tighter mb-4">
+                  Episódios <span className="text-gray-500 text-base font-normal not-italic">{episodeSearchResults.length} encontrados</span>
+                </h3>
+                <div className="flex flex-col gap-3 pb-40">
+                  {episodeSearchResults.map(({ movie, episode, episodeIndex }: any) => (
+                    <motion.div
+                      key={`ep-${movie.id}-${episode.id || episode.episode}`}
+                      whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.06)' }}
+                      onClick={() => onEpisodePlay?.(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
+                      className="flex items-center gap-4 p-3 bg-white/5 rounded-2xl border border-white/5 hover:border-red-600/30 cursor-pointer transition-all"
+                    >
+                      <div className="relative w-28 md:w-40 aspect-video rounded-xl overflow-hidden flex-shrink-0 bg-gray-900">
+                        <img src={episode.still_path || (movie.backdrop_path ? (movie.backdrop_path.startsWith('http') ? movie.backdrop_path : `https://image.tmdb.org/t/p/w300/${movie.backdrop_path}`) : '')} alt={episode.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity">
+                          <Play size={20} fill="white" className="text-white" />
+                        </div>
+                        <div className="absolute top-1.5 left-1.5 bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest">
+                          T{episode.season || 1}·E{episode.episode || '?'}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[9px] text-red-400 font-black uppercase tracking-widest truncate">{movie.title || movie.name}</p>
+                        <p className="text-white font-bold text-sm md:text-base truncate mt-0.5">{episode.title || `Episódio ${episode.episode}`}</p>
+                        <p className="text-gray-500 text-[10px] mt-1 line-clamp-2 hidden md:block">{episode.overview}</p>
+                        {episode.runtime > 0 && <p className="text-gray-600 text-[9px] font-bold mt-1">{episode.runtime} min</p>}
+                      </div>
+                      <div className="flex-shrink-0 pr-2">
+                        <div className="w-9 h-9 bg-red-600/20 rounded-full flex items-center justify-center border border-red-600/30">
+                          <Play size={14} fill="currentColor" className="text-red-400 ml-0.5" />
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
     );
@@ -1431,7 +1556,7 @@ const MovieDetailRouteWrapper = ({
     <MovieDetailsModal 
       movie={movie}
       onClose={closeMovieDetails}
-      onPlay={(m, url, time) => handlePlayMovie(m, url, time)}
+      onPlay={(m, url, time, playerStyle) => handlePlayMovie(m, url, time, playerStyle)}
       onToggleMyList={() => toggleMyList(movie)}
       onToggleFavorite={() => toggleFavorite(movie)}
       similarMovies={myMovies.filter((m: any) => m.id?.toString() !== movie.id?.toString()).slice(0, 10)}
@@ -1898,6 +2023,7 @@ export default function App() {
 
   const [activeFranchise, setActiveFranchise] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [smartPlayState, setSmartPlayState] = useState<{ movie: any; episodeUrl: string; episodeIndex: number } | null>(null);
   const [categories, setCategories] = useState(() => {
     const saved = localStorage.getItem('netplay_categories');
     if (saved) {
@@ -3880,6 +4006,23 @@ export default function App() {
     });
   }, [visibleMovies, searchQuery]);
 
+  const episodeSearchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase();
+    const results: Array<{ movie: any; episode: any; episodeIndex: number }> = [];
+    for (const m of visibleMovies) {
+      if (m.type !== 'series' || !m.episodes) continue;
+      (m.episodes as any[]).forEach((ep: any, idx: number) => {
+        const title = (ep.title || '').toLowerCase();
+        const overview = (ep.overview || '').toLowerCase();
+        if (title.includes(query) || overview.includes(query)) {
+          results.push({ movie: m, episode: ep, episodeIndex: idx });
+        }
+      });
+    }
+    return results.slice(0, 30);
+  }, [visibleMovies, searchQuery]);
+
   const handleSelectProfile = (selectedProfile: Profile) => {
     setProfile(selectedProfile);
     localStorage.setItem('active_profile', JSON.stringify(selectedProfile));
@@ -3997,6 +4140,10 @@ export default function App() {
     const search = window.location.search;
     navigate(`/watch/${movie.id}${search}`, { state: { movie, episodeUrl, episodeIndex, startTime, playerStyle, backgroundLocation: location.state?.backgroundLocation } });
   }, [navigate, location.state]);
+
+  const handleSmartPlayEpisode = useCallback((movie: any, episodeUrl: string, episodeIndex: number) => {
+    setSmartPlayState({ movie, episodeUrl, episodeIndex });
+  }, []);
 
   const closeMovieDetails = () => {
     navigate(state?.backgroundLocation?.pathname || '/menu');
@@ -4461,7 +4608,7 @@ export default function App() {
           if (tab === 'search' && searchQuery) {
             navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
           } else {
-            navigate(`/${tab === 'home' ? 'menu' : tab === 'profile' ? 'perfil' : tab}`);
+            navigate(`/${tab === 'home' ? 'menu' : tab === 'profile' ? 'perfil' : tab === 'novos-eps' ? 'novos-episodios' : tab}`);
           }
         }}
         searchQuery={searchQuery}
@@ -4513,6 +4660,8 @@ export default function App() {
               profile={profile}
               searchQuery={searchQuery}
               searchResults={searchResults}
+              episodeSearchResults={episodeSearchResults}
+              onEpisodePlay={handleSmartPlayEpisode}
               categories={categories}
               franchises={dynamicFranchises}
             />
@@ -4530,6 +4679,7 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
+          <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} />} />
           <Route path="/universe" element={
             <UniverseTabView
               franchises={dynamicFranchises}
@@ -4648,6 +4798,20 @@ export default function App() {
           settings={appSettings}
           onClose={() => setIsSettingsOpen(false)}
           onUpdate={setAppSettings}
+        />
+      )}
+
+      {smartPlayState && (
+        <SmartPlayerSelector
+          movie={smartPlayState.movie}
+          episodeUrl={smartPlayState.episodeUrl}
+          startTime={0}
+          onClose={() => setSmartPlayState(null)}
+          onPlay={(url, startTime, playerStyle) => {
+            const { movie, episodeIndex } = smartPlayState;
+            setSmartPlayState(null);
+            handlePlayMovie(movie, url, startTime, playerStyle, episodeIndex);
+          }}
         />
       )}
 
