@@ -12,7 +12,7 @@ interface MovieDetailsModalProps {
   movie: Movie;
   similarMovies: Movie[];
   onClose: () => void;
-  onPlay: (movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string) => void;
+  onPlay: (movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => void;
   onSelectSimilar: (movie: Movie) => void;
   onWatchParty: (movie: Movie) => void;
   onToggleMyList: (movie: Movie) => void;
@@ -158,20 +158,30 @@ const MovieDetailsModal = React.memo(({
   const [showSmartSelector, setShowSmartSelector] = useState(false);
   const [pendingEpisodeUrl, setPendingEpisodeUrl] = useState<string | undefined>();
   const [pendingStartTime, setPendingStartTime] = useState(0);
+  const [pendingEpisodeIndex, setPendingEpisodeIndex] = useState<number | undefined>();
+  const [epProgress, setEpProgress] = useState<Record<number, { pos: number; dur: number }>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const handlePlay = (episodeUrl?: string, startTime?: number, playerStyle?: string) => {
-    onPlay(movie, episodeUrl, startTime, playerStyle);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`netplay_ep_progress_${movie.id}`);
+      if (stored) setEpProgress(JSON.parse(stored));
+    } catch {}
+  }, [movie.id]);
+
+  const handlePlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
+    onPlay(movie, episodeUrl, startTime, playerStyle, episodeIndex);
   };
 
-  const triggerSmartPlay = (episodeUrl?: string, startTime?: number, playerStyle?: string) => {
+  const triggerSmartPlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
     const urlToCheck = episodeUrl || movie.videoUrl || '';
     if (isDynamicRef(urlToCheck)) {
       setPendingEpisodeUrl(episodeUrl);
       setPendingStartTime(startTime || 0);
+      setPendingEpisodeIndex(episodeIndex);
       setShowSmartSelector(true);
     } else {
-      handlePlay(episodeUrl, startTime, playerStyle);
+      handlePlay(episodeUrl, startTime, playerStyle, episodeIndex);
     }
   };
 
@@ -248,15 +258,20 @@ const MovieDetailsModal = React.memo(({
     return null;
   }, [movie, savedUrl]);
 
-  // Organizar episódios por temporada
-  const episodesBySeason = movie.episodes?.reduce((acc, ep) => {
-    const s = ep.season || 1;
-    if (!acc[s]) acc[s] = [];
-    acc[s].push(ep);
-    return acc;
-  }, {} as Record<number, typeof movie.episodes>) || {};
+  // Organizar episódios por temporada e ordenar por número do episódio
+  const episodesBySeason = useMemo(() => {
+    const bySeason = movie.episodes?.reduce((acc, ep) => {
+      const s = ep.season || 1;
+      if (!acc[s]) acc[s] = [];
+      acc[s].push(ep);
+      return acc;
+    }, {} as Record<number, typeof movie.episodes>) || {};
+    // Sort episodes within each season by episode number ascending
+    Object.values(bySeason).forEach(eps => eps?.sort((a: any, b: any) => (a.episode || 0) - (b.episode || 0)));
+    return bySeason;
+  }, [movie.episodes]);
 
-  const seasons = Object.keys(episodesBySeason).map(Number).sort((a, b) => a - b);
+  const seasons = useMemo(() => Object.keys(episodesBySeason).map(Number).sort((a, b) => a - b), [episodesBySeason]);
 
   useEffect(() => {
     // Reset states when movie changes
@@ -1067,7 +1082,13 @@ const MovieDetailsModal = React.memo(({
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 md:gap-6">
-                  {episodesBySeason[selectedSeason]?.map((ep, idx) => (
+                  {episodesBySeason[selectedSeason]?.map((ep, idx) => {
+                    const epIdxInAll = movie.episodes?.findIndex((e: any) => e === ep || (e.id && e.id === ep.id)) ?? -1;
+                    const prog = epIdxInAll >= 0 ? epProgress[epIdxInAll] : undefined;
+                    const progressPct = prog && prog.dur > 0 ? Math.min(100, (prog.pos / prog.dur) * 100) : 0;
+                    const isWatched = progressPct >= 90;
+                    const isInProgress = progressPct > 2 && !isWatched;
+                    return (
                     <motion.div 
                       key={ep.id || idx}
                       whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.05)' }}
@@ -1078,7 +1099,14 @@ const MovieDetailsModal = React.memo(({
                         {ep.episode}
                       </div>
                       
-                      <div className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10" onClick={(e) => { e.stopPropagation(); triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', 0, 'netflix'); }}>
+                      <div
+                        className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const savedPos = isInProgress && prog ? prog.pos : 0;
+                          triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', savedPos, 'netflix', epIdxInAll >= 0 ? epIdxInAll : undefined);
+                        }}
+                      >
                         <img 
                           src={ep.still_path || backgroundUrl} 
                           alt={ep.title} 
@@ -1091,6 +1119,20 @@ const MovieDetailsModal = React.memo(({
                         <div className="absolute bottom-1 right-1 md:bottom-2 md:right-2 bg-black/80 px-1.5 md:px-2 py-0.5 md:py-1 rounded text-[6px] md:text-[8px] font-black text-white italic">
                            {getVideoSourceType(ep.videoUrl)}
                         </div>
+                        {/* Progress bar */}
+                        {(isInProgress || isWatched) && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                            <div
+                              className={`h-full transition-all ${isWatched ? 'bg-gray-400' : 'bg-red-500'}`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                        )}
+                        {isWatched && (
+                          <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded text-[7px] font-black text-gray-300 uppercase tracking-wider">
+                            Assistido
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0 pr-2 z-10 flex flex-col justify-center">
@@ -1108,9 +1150,23 @@ const MovieDetailsModal = React.memo(({
                         <p className="text-gray-400 text-[10px] md:text-sm mt-1 md:mt-2 line-clamp-2 md:line-clamp-3 leading-snug font-medium italic">
                           {ep.overview || "Sem sinopse disponível para este episódio."}
                         </p>
+
+                        {/* Inline progress bar below description */}
+                        {isInProgress && (
+                          <div className="mt-2 md:mt-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[8px] text-red-400 font-black uppercase tracking-widest">Em andamento</span>
+                              <span className="text-[8px] text-gray-500 font-bold">{Math.round(progressPct)}%</span>
+                            </div>
+                            <div className="h-0.5 bg-white/10 rounded-full overflow-hidden">
+                              <div className="h-full bg-red-500 rounded-full" style={{ width: `${progressPct}%` }} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </div>
               </motion.div>
             )}
@@ -1244,14 +1300,22 @@ const MovieDetailsModal = React.memo(({
                 
                 <div className="pt-4 flex gap-4">
                    <button
-                     onClick={(e) => { e.stopPropagation(); triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix'); }}
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       const detailIdx = movie.episodes?.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id)) ?? -1;
+                       triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
+                     }}
                      className="bg-white hover:bg-gray-200 text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
                    >
                       <Play size={16} fill="black" /> {getVideoSourceType(selectedEpisodeDetails.videoUrl)}
                    </button>
                    {selectedEpisodeDetails.videoUrl2 && (
                      <button
-                       onClick={(e) => { e.stopPropagation(); handlePlay(selectedEpisodeDetails.videoUrl2); }}
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         const detailIdx = movie.episodes?.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id)) ?? -1;
+                         handlePlay(selectedEpisodeDetails.videoUrl2, 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
+                       }}
                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
                      >
                         <Play size={16} fill="white" /> {getVideoSourceType(selectedEpisodeDetails.videoUrl2)}
@@ -1276,7 +1340,7 @@ const MovieDetailsModal = React.memo(({
           onClose={() => setShowSmartSelector(false)}
           onPlay={(url, startTime, playerStyle) => {
             setShowSmartSelector(false);
-            handlePlay(url, startTime, playerStyle);
+            handlePlay(url, startTime, playerStyle, pendingEpisodeIndex);
           }}
         />
       )}
