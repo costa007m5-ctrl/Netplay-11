@@ -136,24 +136,11 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
       ? (movie.logo_path.startsWith('http') ? movie.logo_path : `https://image.tmdb.org/t/p/w300/${movie.logo_path}`)
       : null;
 
-  // ALL episodes from every series added in the last 30 days — sorted by series date then ep order
-  const allEpisodes = useMemo(() => {
-    const results: { movie: any; episode: any; episodeIndex: number; addedAt: number }[] = [];
-    for (const m of myMovies) {
-      if (m.type !== 'series' || !m.episodes || m.episodes.length === 0 || !m.created_at) continue;
-      const addedAt = new Date(m.created_at).getTime();
-      if (now - addedAt > THIRTY_DAYS_MS) continue;
-      for (let i = 0; i < m.episodes.length; i++) {
-        results.push({ movie: m, episode: m.episodes[i], episodeIndex: i, addedAt });
-      }
-    }
-    results.sort((a, b) => {
-      if (b.addedAt !== a.addedAt) return b.addedAt - a.addedAt;
-      const aKey = (a.episode.season || 0) * 10000 + (a.episode.episode || 0);
-      const bKey = (b.episode.season || 0) * 10000 + (b.episode.episode || 0);
-      return aKey - bKey;
-    });
-    return results;
+  // Latest series added in last 30 days — ONE entry per series, sorted by most recent
+  const latestSeries = useMemo(() => {
+    return myMovies
+      .filter((m: any) => m.type === 'series' && m.created_at && (now - new Date(m.created_at).getTime()) <= THIRTY_DAYS_MS)
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [myMovies]);
 
   const latestMovies = useMemo(() => {
@@ -162,7 +149,7 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [myMovies]);
 
-  const heroItems = activeTab === 'series' ? allEpisodes.slice(0, 6) : latestMovies.slice(0, 6);
+  const heroItems = activeTab === 'series' ? latestSeries.slice(0, 6) : latestMovies.slice(0, 6);
 
   React.useEffect(() => {
     setHeroIdx(0);
@@ -182,7 +169,7 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
     heroTimerRef.current = setInterval(() => setHeroIdx(i => (i + 1) % heroItems.length), 5500);
   };
 
-  const isEmpty = allEpisodes.length === 0 && latestMovies.length === 0;
+  const isEmpty = latestSeries.length === 0 && latestMovies.length === 0;
 
   const heroItem = heroItems[heroIdx];
 
@@ -202,9 +189,7 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
               className="absolute inset-0"
             >
               <img
-                src={activeTab === 'series'
-                  ? ((heroItem as any).episode?.still_path || getImageUrl((heroItem as any).movie))
-                  : getImageUrl(heroItem as any)}
+                src={getImageUrl(heroItem as any)}
                 alt=""
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
@@ -224,9 +209,10 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.4 }}
               >
-                {activeTab === 'series' ? (() => {
-                  const { movie, episode, episodeIndex } = heroItem as any;
+                {(() => {
+                  const movie = heroItem as any;
                   const logo = getLogoUrl(movie);
+                  const isSeries = activeTab === 'series';
                   return (
                     <>
                       {logo
@@ -235,57 +221,30 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
                       }
                       <div className="flex flex-wrap items-center gap-2 mb-4">
                         <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-lg tracking-widest">
-                          {episode.season ? `T${episode.season} · ` : ''}Ep {episode.episode || '?'}
+                          {isSeries ? 'Nova Série' : 'Novo Filme'}
                         </span>
-                        <span className="text-white/70 text-[10px] font-semibold italic truncate max-w-[200px]">{episode.title || `Episódio ${episode.episode}`}</span>
+                        {isSeries && movie.episodes?.length > 0 && (
+                          <span className="text-white/60 text-[8px] font-bold uppercase tracking-widest">{movie.episodes.length} ep.</span>
+                        )}
+                        {!isSeries && movie.runtime && <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest">{movie.runtime} min</span>}
+                        {movie.vote_average > 0 && <span className="text-yellow-400 text-[8px] font-black">★ {movie.vote_average.toFixed(1)}</span>}
                         <span className="text-gray-500 text-[8px] font-bold uppercase tracking-widest ml-1">{formatRelativeDate(movie.created_at)}</span>
                       </div>
                       <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
-                          className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-[10px] px-5 py-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-xl"
-                        >
-                          <Play size={13} fill="currentColor" /> Assistir
-                        </button>
                         {onSelectMovie && (
                           <button
                             onClick={() => onSelectMovie(movie)}
-                            className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-white font-bold uppercase tracking-widest text-[10px] px-4 py-2.5 rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                            className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-[10px] px-5 py-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-xl"
                           >
-                            <Info size={12} /> Sinopse
+                            <Info size={13} /> {isSeries ? 'Ver Episódios' : 'Sinopse'}
                           </button>
                         )}
-                      </div>
-                    </>
-                  );
-                })() : (() => {
-                  const movie = heroItem as any;
-                  const logo = getLogoUrl(movie);
-                  return (
-                    <>
-                      {logo
-                        ? <img src={logo} alt={movie.title || movie.name} className="h-12 md:h-18 object-contain drop-shadow-2xl mb-3 max-w-[200px] md:max-w-xs" referrerPolicy="no-referrer" />
-                        : <p className="text-white font-black text-2xl md:text-4xl uppercase italic tracking-tighter drop-shadow-2xl mb-2 leading-none">{movie.title || movie.name}</p>
-                      }
-                      <div className="flex flex-wrap items-center gap-2 mb-4">
-                        <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-lg tracking-widest">Novo Filme</span>
-                        {movie.runtime && <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest">{movie.runtime} min</span>}
-                        {movie.vote_average > 0 && <span className="text-yellow-400 text-[8px] font-black">★ {movie.vote_average.toFixed(1)}</span>}
-                        <span className="text-gray-500 text-[8px] font-bold uppercase tracking-widest">{formatRelativeDate(movie.created_at)}</span>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => onEpisodeClick(movie, movie.videoUrl || movie.video_url || '', 0)}
-                          className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-[10px] px-5 py-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-xl"
-                        >
-                          <Play size={13} fill="currentColor" /> Assistir
-                        </button>
-                        {onSelectMovie && (
+                        {!isSeries && (
                           <button
-                            onClick={() => onSelectMovie(movie)}
+                            onClick={() => onEpisodeClick(movie, movie.videoUrl || movie.video_url || '', 0)}
                             className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-white font-bold uppercase tracking-widest text-[10px] px-4 py-2.5 rounded-xl hover:bg-white/20 transition-all border border-white/10"
                           >
-                            <Info size={12} /> Sinopse
+                            <Play size={12} fill="currentColor" /> Assistir
                           </button>
                         )}
                       </div>
@@ -314,10 +273,9 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
       {/* ── TAB SWITCHER ── */}
       <div className="sticky top-16 z-30 bg-[#0a0a0a]/95 backdrop-blur-xl">
         <div className="px-5 md:px-14 py-3 flex items-center gap-3">
-          {/* Pill switcher */}
           <div className="flex items-center bg-white/5 rounded-2xl p-1 border border-white/[0.07]">
             {[
-              { id: 'series', label: 'Séries', count: allEpisodes.length },
+              { id: 'series', label: 'Séries', count: latestSeries.length },
               { id: 'filmes', label: 'Filmes', count: latestMovies.length },
             ].map(tab => (
               <button
@@ -355,80 +313,108 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
           <p className="text-gray-700 text-xs max-w-xs">Novos filmes e séries aparecerão aqui assim que forem adicionados</p>
         </div>
       ) : activeTab === 'series' ? (
+        /* ── SÉRIES — one banner card per series ── */
         <div className="px-5 md:px-14 pt-6 pb-32">
-          {allEpisodes.length === 0 ? (
+          {latestSeries.length === 0 ? (
             <p className="text-gray-600 text-center py-20 font-bold uppercase tracking-widest text-xs">Nenhuma série nova</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
-              {allEpisodes.map(({ movie, episode, episodeIndex }, i) => (
-                <motion.div
-                  key={`${movie.id}-ep-${episodeIndex}`}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.5), duration: 0.3 }}
-                  className="group relative bg-white/[0.03] rounded-2xl overflow-hidden border border-white/[0.05] hover:border-red-600/40 transition-all shadow-lg hover:shadow-red-900/10 hover:shadow-xl"
-                >
-                  {/* Thumbnail */}
-                  <div
-                    className="relative aspect-video overflow-hidden cursor-pointer"
-                    onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+              {latestSeries.map((movie: any, i: number) => {
+                const logo = getLogoUrl(movie);
+                const backdrop = getImageUrl(movie);
+                const poster = getPosterUrl(movie);
+                const maxSeason = movie.episodes?.reduce((mx: number, ep: any) => Math.max(mx, ep.season || 0), 0) || 0;
+                const epCount = movie.episodes?.length || 0;
+                return (
+                  <motion.div
+                    key={movie.id}
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.04, 0.5), duration: 0.3 }}
+                    onClick={() => onSelectMovie && onSelectMovie(movie)}
+                    className="group relative cursor-pointer rounded-2xl overflow-hidden bg-white/[0.03] border border-white/[0.06] hover:border-red-600/50 transition-all shadow-lg hover:shadow-red-900/20 hover:shadow-xl"
                   >
-                    <img
-                      src={episode.still_path || getImageUrl(movie)}
-                      alt={episode.title || ''}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-250">
-                      <div className="w-12 h-12 bg-red-600/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-2xl border border-white/20">
-                        <Play size={18} fill="white" className="text-white ml-0.5" />
-                      </div>
-                    </div>
-                    <div className="absolute top-2 left-2">
-                      <span className="bg-red-600 text-white text-[7px] font-black uppercase px-2 py-0.5 rounded-md tracking-widest">
-                        {episode.season ? `T${episode.season} · ` : ''}Ep {episode.episode || '?'}
-                      </span>
-                    </div>
-                    <div className="absolute top-2 right-2">
-                      <span className="bg-black/55 backdrop-blur-sm text-white/60 text-[7px] font-bold uppercase px-1.5 py-0.5 rounded-md border border-white/[0.08] tracking-wide">
-                        {formatRelativeDate(movie.created_at)}
-                      </span>
-                    </div>
-                    {getLogoUrl(movie) && (
-                      <div className="absolute bottom-2 left-2">
-                        <img src={getLogoUrl(movie)!} alt="" className="h-6 object-contain object-left drop-shadow-xl max-w-[100px]" referrerPolicy="no-referrer" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info row */}
-                  <div className="p-3">
-                    <p className="text-[7px] text-red-400/80 font-black uppercase tracking-widest truncate mb-0.5">{movie.title || movie.name}</p>
-                    <p className="text-white/90 font-bold text-[11px] leading-tight line-clamp-1">{episode.title || `Episódio ${episode.episode}`}</p>
-                    {episode.overview && (
-                      <p className="text-gray-600 text-[9px] mt-1 line-clamp-2 leading-snug">{episode.overview}</p>
-                    )}
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-2 mt-2.5">
-                      <button
-                        onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
-                        className="flex-1 flex items-center justify-center gap-1 bg-red-600/80 hover:bg-red-600 text-white font-black text-[8px] uppercase tracking-widest py-1.5 rounded-lg transition-all"
-                      >
-                        <Play size={9} fill="white" /> Assistir
-                      </button>
-                      {onSelectMovie && (
-                        <button
-                          onClick={() => onSelectMovie(movie)}
-                          className="flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-bold text-[8px] uppercase tracking-widest py-1.5 px-2.5 rounded-lg transition-all border border-white/[0.07]"
-                        >
-                          <Info size={9} /> Sinopse
-                        </button>
+                    {/* Banner backdrop */}
+                    <div className="relative aspect-video overflow-hidden">
+                      {backdrop ? (
+                        <img
+                          src={backdrop}
+                          alt={movie.title || movie.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-white/5 flex items-center justify-center">
+                          <Play size={32} className="text-white/10" />
+                        </div>
                       )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent" />
+
+                      {/* NOVO badge */}
+                      <div className="absolute top-3 left-3">
+                        <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-lg tracking-widest shadow-lg">
+                          NOVO
+                        </span>
+                      </div>
+
+                      {/* Date badge */}
+                      <div className="absolute top-3 right-3">
+                        <span className="bg-black/60 backdrop-blur-sm text-white/60 text-[7px] font-bold uppercase px-2 py-1 rounded-lg border border-white/[0.08] tracking-wide">
+                          {formatRelativeDate(movie.created_at)}
+                        </span>
+                      </div>
+
+                      {/* Bottom info over banner */}
+                      <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 flex items-end gap-3">
+                        {poster && (
+                          <img
+                            src={poster}
+                            alt=""
+                            className="w-12 h-18 object-cover rounded-lg shadow-xl flex-shrink-0 border border-white/10"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          {logo ? (
+                            <img src={logo} alt="" className="h-8 object-contain object-left drop-shadow-2xl max-w-[160px] mb-1" referrerPolicy="no-referrer" />
+                          ) : (
+                            <p className="text-white font-black text-sm uppercase italic tracking-tight leading-tight line-clamp-1 drop-shadow-xl">{movie.title || movie.name}</p>
+                          )}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {maxSeason > 0 && (
+                              <span className="text-white/50 text-[8px] font-bold uppercase tracking-widest">{maxSeason} Temp.</span>
+                            )}
+                            {epCount > 0 && (
+                              <span className="text-white/50 text-[8px] font-bold uppercase tracking-widest">{epCount} ep.</span>
+                            )}
+                            {movie.vote_average > 0 && (
+                              <span className="text-yellow-400 text-[8px] font-black">★ {movie.vote_average.toFixed(1)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+
+                    {/* Action row */}
+                    <div className="flex items-center gap-0 border-t border-white/[0.05]">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onSelectMovie && onSelectMovie(movie); }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[9px] font-black uppercase tracking-widest text-white hover:bg-white/5 transition-colors"
+                      >
+                        <Play size={10} fill="white" /> Ver Episódios
+                      </button>
+                      <div className="w-px h-6 bg-white/[0.07]" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onSelectMovie && onSelectMovie(movie); }}
+                        className="flex items-center justify-center gap-1.5 px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
+                      >
+                        <Info size={10} /> Sinopse
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </div>

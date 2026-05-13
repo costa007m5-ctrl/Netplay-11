@@ -1271,7 +1271,10 @@ const MovieDetailsModal = React.memo(({
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-transparent" />
                 <button 
-                  onClick={() => triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix')}
+                  onClick={() => {
+                    const detailIdx = movie.episodes?.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id)) ?? -1;
+                    triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
+                  }}
                   className="absolute inset-0 flex items-center justify-center group-hover:bg-black/20 transition-all"
                 >
                   <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl scale-90 group-hover:scale-100 transition-transform">
