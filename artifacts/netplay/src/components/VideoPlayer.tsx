@@ -393,13 +393,34 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           if (list.length === 0) throw new Error('Pasta vazia ou expirada');
           if ((data as any)._source) console.log(`[VideoPlayer] dyn-ref resolvido via ${(data as any)._source}`);
 
-          // Find file by filename (fallback to first)
+          // Sort list by filename for consistent, deterministic ordering
+          const sortedList = [...list].sort((a: any, b: any) => {
+            const nameA = (a.filename || a.name || '').toLowerCase();
+            const nameB = (b.filename || b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+          });
+
+          // Find file: exact → case-insensitive → episode code (SxxExx) partial match → initialEpisodeIndex → first
           let file: any = null;
           if (filename) {
-            file = list.find(f => (f.filename || f.name) === filename)
-                || list.find(f => (f.filename || f.name || '').toLowerCase() === filename.toLowerCase());
+            file = sortedList.find(f => (f.filename || f.name) === filename)
+                || sortedList.find(f => (f.filename || f.name || '').toLowerCase() === filename.toLowerCase());
+            if (!file) {
+              const epCodeMatch = filename.match(/S(\d+)E(\d+)/i);
+              if (epCodeMatch) {
+                const targetCode = epCodeMatch[0].toUpperCase();
+                file = sortedList.find(f => (f.filename || f.name || '').toUpperCase().includes(targetCode)) || null;
+                if (file) console.log(`[VideoPlayer] dyn-ref: match parcial por código de episódio "${targetCode}"`);
+              }
+            }
           }
-          if (!file) file = list[0];
+          // Fallback 1: use initialEpisodeIndex in the sorted list (deterministic, avoids random file)
+          if (!file && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
+            file = sortedList[initialEpisodeIndex];
+            console.log(`[VideoPlayer] dyn-ref: filename não encontrado, usando índice ${initialEpisodeIndex} na lista ordenada (${(file?.filename || file?.name) ?? '?'})`);
+          }
+          // Fallback 2: first sorted file
+          if (!file) file = sortedList[0] || list[0];
 
           // Build COMPLETE quality list
           const fs = file.fast_stream_url || {};

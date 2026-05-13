@@ -37,7 +37,7 @@ const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
 const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSelector'));
 
-import { Loader2, Play, Pause, Square, RefreshCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle } from 'lucide-react';
+import { Loader2, Play, Pause, Square, RefreshCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info } from 'lucide-react';
 
 // Basic title cleaner to replace AI cleaning
 const cleanTitle = (fileName: string) => {
@@ -102,10 +102,12 @@ const ThemeContext = createContext<{
 
 export const useAppTheme = () => useContext(ThemeContext);
 
-const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
+const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }: any) => {
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
   const now = Date.now();
   const [activeTab, setActiveTab] = React.useState<'series' | 'filmes'>('series');
+  const [heroIdx, setHeroIdx] = React.useState(0);
+  const heroTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const formatRelativeDate = (dateStr: string) => {
     const diff = now - new Date(dateStr).getTime();
@@ -134,23 +136,23 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
       ? (movie.logo_path.startsWith('http') ? movie.logo_path : `https://image.tmdb.org/t/p/w300/${movie.logo_path}`)
       : null;
 
-  const latestEpisodes = useMemo(() => {
+  // ALL episodes from every series added in the last 30 days — sorted by series date then ep order
+  const allEpisodes = useMemo(() => {
     const results: { movie: any; episode: any; episodeIndex: number; addedAt: number }[] = [];
     for (const m of myMovies) {
-      if (m.type !== 'series' || !m.episodes || m.episodes.length === 0) continue;
-      if (!m.created_at) continue;
+      if (m.type !== 'series' || !m.episodes || m.episodes.length === 0 || !m.created_at) continue;
       const addedAt = new Date(m.created_at).getTime();
       if (now - addedAt > THIRTY_DAYS_MS) continue;
-      const sorted = [...m.episodes].sort((a: any, b: any) => {
-        const aKey = (a.season || 0) * 10000 + (a.episode || 0);
-        const bKey = (b.season || 0) * 10000 + (b.episode || 0);
-        return bKey - aKey;
-      });
-      const latest = sorted[0];
-      const idx = m.episodes.findIndex((e: any) => e === latest || (e.id && e.id === latest.id));
-      results.push({ movie: m, episode: latest, episodeIndex: idx >= 0 ? idx : 0, addedAt });
+      for (let i = 0; i < m.episodes.length; i++) {
+        results.push({ movie: m, episode: m.episodes[i], episodeIndex: i, addedAt });
+      }
     }
-    results.sort((a, b) => b.addedAt - a.addedAt);
+    results.sort((a, b) => {
+      if (b.addedAt !== a.addedAt) return b.addedAt - a.addedAt;
+      const aKey = (a.episode.season || 0) * 10000 + (a.episode.episode || 0);
+      const bKey = (b.episode.season || 0) * 10000 + (b.episode.episode || 0);
+      return aKey - bKey;
+    });
     return results;
   }, [myMovies]);
 
@@ -160,109 +162,190 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [myMovies]);
 
-  const heroSeries = latestEpisodes[0];
-  const heroMovie = latestMovies[0];
+  const heroItems = activeTab === 'series' ? allEpisodes.slice(0, 6) : latestMovies.slice(0, 6);
 
-  const isEmpty = latestEpisodes.length === 0 && latestMovies.length === 0;
+  React.useEffect(() => {
+    setHeroIdx(0);
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    if (heroItems.length <= 1) return;
+    heroTimerRef.current = setInterval(() => {
+      setHeroIdx(i => (i + 1) % heroItems.length);
+    }, 5500);
+    return () => { if (heroTimerRef.current) clearInterval(heroTimerRef.current); };
+  }, [heroItems.length, activeTab]);
+
+  const goHero = (idx: number) => {
+    setHeroIdx(idx);
+    if (heroTimerRef.current) clearInterval(heroTimerRef.current);
+    heroTimerRef.current = setInterval(() => setHeroIdx(i => (i + 1) % heroItems.length), 5500);
+  };
+
+  const isEmpty = allEpisodes.length === 0 && latestMovies.length === 0;
+
+  const heroItem = heroItems[heroIdx];
 
   return (
-    <div className="pt-20 min-h-screen animate-fade-in">
-      {/* Hero Banner */}
-      {(activeTab === 'series' ? heroSeries : heroMovie) && (
-        <div className="relative h-[45vh] md:h-[55vh] overflow-hidden mb-0">
-          <img
-            src={activeTab === 'series'
-              ? (heroSeries.episode.still_path || getImageUrl(heroSeries.movie))
-              : getImageUrl(heroMovie)}
-            alt={activeTab === 'series' ? heroSeries.movie.title : heroMovie.title}
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-black/50 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 pb-8 md:pb-10">
-            {activeTab === 'series' ? (
-              <>
-                {getLogoUrl(heroSeries.movie) ? (
-                  <img src={getLogoUrl(heroSeries.movie)!} alt={heroSeries.movie.title || heroSeries.movie.name}
-                    className="h-14 md:h-20 object-contain drop-shadow-2xl mb-3 max-w-xs md:max-w-sm"
-                    referrerPolicy="no-referrer" />
-                ) : (
-                  <h1 className="text-3xl md:text-6xl font-black text-white uppercase italic tracking-tighter drop-shadow-2xl mb-2">
-                    {heroSeries.movie.title || heroSeries.movie.name}
-                  </h1>
-                )}
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="bg-red-600 text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-full tracking-widest">
-                    T{heroSeries.episode.season} · Ep {heroSeries.episode.episode}
-                  </span>
-                  <span className="text-gray-300 text-xs font-bold italic truncate max-w-xs">{heroSeries.episode.title || `Episódio ${heroSeries.episode.episode}`}</span>
-                  <span className="text-gray-500 text-[9px] font-bold uppercase tracking-widest">{formatRelativeDate(heroSeries.movie.created_at)}</span>
-                </div>
-                <button
-                  onClick={() => onEpisodeClick(heroSeries.movie, heroSeries.episode.videoUrl || heroSeries.episode.videoUrl2 || '', heroSeries.episodeIndex)}
-                  className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-xs px-6 py-3 rounded-xl hover:bg-gray-100 transition-all shadow-2xl"
-                >
-                  <Play size={16} fill="black" /> Assistir Agora
-                </button>
-              </>
-            ) : (
-              <>
-                {getLogoUrl(heroMovie) ? (
-                  <img src={getLogoUrl(heroMovie)!} alt={heroMovie.title || heroMovie.name}
-                    className="h-14 md:h-20 object-contain drop-shadow-2xl mb-3 max-w-xs md:max-w-sm"
-                    referrerPolicy="no-referrer" />
-                ) : (
-                  <h1 className="text-3xl md:text-6xl font-black text-white uppercase italic tracking-tighter drop-shadow-2xl mb-2">
-                    {heroMovie.title || heroMovie.name}
-                  </h1>
-                )}
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="bg-red-600 text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-full tracking-widest">Novo Filme</span>
-                  {heroMovie.runtime && <span className="text-gray-400 text-[9px] font-bold uppercase tracking-widest">{heroMovie.runtime} min</span>}
-                  <span className="text-gray-500 text-[9px] font-bold uppercase tracking-widest">{formatRelativeDate(heroMovie.created_at)}</span>
-                </div>
-                <button
-                  onClick={() => onEpisodeClick(heroMovie, heroMovie.videoUrl || heroMovie.video_url || '', 0)}
-                  className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-xs px-6 py-3 rounded-xl hover:bg-gray-100 transition-all shadow-2xl"
-                >
-                  <Play size={16} fill="black" /> Assistir Agora
-                </button>
-              </>
-            )}
+    <div className="min-h-screen animate-fade-in bg-[#0a0a0a]">
+
+      {/* ── ROTATING HERO BANNER ── */}
+      {heroItem && (
+        <div className="relative h-[52vh] md:h-[62vh] overflow-hidden">
+          <AnimatePresence mode="sync">
+            <motion.div
+              key={`hero-${activeTab}-${heroIdx}`}
+              initial={{ opacity: 0, scale: 1.04 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.7, ease: 'easeInOut' }}
+              className="absolute inset-0"
+            >
+              <img
+                src={activeTab === 'series'
+                  ? ((heroItem as any).episode?.still_path || getImageUrl((heroItem as any).movie))
+                  : getImageUrl(heroItem as any)}
+                alt=""
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-black/40 to-black/10" />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-transparent" />
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Hero content */}
+          <div className="absolute bottom-0 left-0 right-0 px-5 md:px-14 pb-6 md:pb-10 pt-20">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`hero-info-${activeTab}-${heroIdx}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.4 }}
+              >
+                {activeTab === 'series' ? (() => {
+                  const { movie, episode, episodeIndex } = heroItem as any;
+                  const logo = getLogoUrl(movie);
+                  return (
+                    <>
+                      {logo
+                        ? <img src={logo} alt={movie.title || movie.name} className="h-12 md:h-18 object-contain drop-shadow-2xl mb-3 max-w-[200px] md:max-w-xs" referrerPolicy="no-referrer" />
+                        : <p className="text-white font-black text-2xl md:text-4xl uppercase italic tracking-tighter drop-shadow-2xl mb-2 leading-none">{movie.title || movie.name}</p>
+                      }
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-lg tracking-widest">
+                          {episode.season ? `T${episode.season} · ` : ''}Ep {episode.episode || '?'}
+                        </span>
+                        <span className="text-white/70 text-[10px] font-semibold italic truncate max-w-[200px]">{episode.title || `Episódio ${episode.episode}`}</span>
+                        <span className="text-gray-500 text-[8px] font-bold uppercase tracking-widest ml-1">{formatRelativeDate(movie.created_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
+                          className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-[10px] px-5 py-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-xl"
+                        >
+                          <Play size={13} fill="currentColor" /> Assistir
+                        </button>
+                        {onSelectMovie && (
+                          <button
+                            onClick={() => onSelectMovie(movie)}
+                            className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-white font-bold uppercase tracking-widest text-[10px] px-4 py-2.5 rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                          >
+                            <Info size={12} /> Sinopse
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  );
+                })() : (() => {
+                  const movie = heroItem as any;
+                  const logo = getLogoUrl(movie);
+                  return (
+                    <>
+                      {logo
+                        ? <img src={logo} alt={movie.title || movie.name} className="h-12 md:h-18 object-contain drop-shadow-2xl mb-3 max-w-[200px] md:max-w-xs" referrerPolicy="no-referrer" />
+                        : <p className="text-white font-black text-2xl md:text-4xl uppercase italic tracking-tighter drop-shadow-2xl mb-2 leading-none">{movie.title || movie.name}</p>
+                      }
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-lg tracking-widest">Novo Filme</span>
+                        {movie.runtime && <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest">{movie.runtime} min</span>}
+                        {movie.vote_average > 0 && <span className="text-yellow-400 text-[8px] font-black">★ {movie.vote_average.toFixed(1)}</span>}
+                        <span className="text-gray-500 text-[8px] font-bold uppercase tracking-widest">{formatRelativeDate(movie.created_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => onEpisodeClick(movie, movie.videoUrl || movie.video_url || '', 0)}
+                          className="flex items-center gap-2 bg-white text-black font-black uppercase tracking-widest text-[10px] px-5 py-2.5 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-xl"
+                        >
+                          <Play size={13} fill="currentColor" /> Assistir
+                        </button>
+                        {onSelectMovie && (
+                          <button
+                            onClick={() => onSelectMovie(movie)}
+                            className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-white font-bold uppercase tracking-widest text-[10px] px-4 py-2.5 rounded-xl hover:bg-white/20 transition-all border border-white/10"
+                          >
+                            <Info size={12} /> Sinopse
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </motion.div>
+            </AnimatePresence>
           </div>
+
+          {/* Dot indicators */}
+          {heroItems.length > 1 && (
+            <div className="absolute bottom-4 right-5 md:right-14 flex items-center gap-1.5">
+              {heroItems.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => goHero(i)}
+                  className={`rounded-full transition-all duration-300 ${i === heroIdx ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/60'}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Tab bar */}
-      <div className="sticky top-16 z-30 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5">
-        <div className="px-4 md:px-12 flex items-center gap-0">
-          {[
-            { id: 'series', label: 'Séries', count: latestEpisodes.length },
-            { id: 'filmes', label: 'Filmes', count: latestMovies.length },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`relative px-6 py-4 text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'text-white' : 'text-gray-600 hover:text-gray-400'}`}
-            >
-              {tab.label}
-              {tab.count > 0 && (
-                <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded-full font-black ${activeTab === tab.id ? 'bg-red-600 text-white' : 'bg-white/10 text-gray-500'}`}>
-                  {tab.count}
-                </span>
-              )}
-              {activeTab === tab.id && (
-                <motion.div layoutId="novidades-tab-indicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
-              )}
-            </button>
-          ))}
-          <div className="ml-auto pr-2">
-            <span className="text-gray-700 text-[9px] font-bold uppercase tracking-widest">Últimos 30 dias</span>
+      {/* ── TAB SWITCHER ── */}
+      <div className="sticky top-16 z-30 bg-[#0a0a0a]/95 backdrop-blur-xl">
+        <div className="px-5 md:px-14 py-3 flex items-center gap-3">
+          {/* Pill switcher */}
+          <div className="flex items-center bg-white/5 rounded-2xl p-1 border border-white/[0.07]">
+            {[
+              { id: 'series', label: 'Séries', count: allEpisodes.length },
+              { id: 'filmes', label: 'Filmes', count: latestMovies.length },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-1.5 ${
+                  activeTab === tab.id
+                    ? 'bg-red-600 text-white shadow-lg'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-white/10 text-gray-600'}`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto">
+            <span className="text-gray-700 text-[8px] font-bold uppercase tracking-[0.15em]">Últimos 30 dias</span>
           </div>
         </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
       </div>
 
+      {/* ── CONTENT ── */}
       {isEmpty ? (
         <div className="flex flex-col items-center justify-center py-40 text-center gap-4 px-4">
           <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-2">
@@ -272,81 +355,86 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
           <p className="text-gray-700 text-xs max-w-xs">Novos filmes e séries aparecerão aqui assim que forem adicionados</p>
         </div>
       ) : activeTab === 'series' ? (
-        /* === SÉRIES GRID === */
-        <div className="px-4 md:px-12 pt-8 pb-32">
-          {latestEpisodes.length === 0 ? (
+        <div className="px-5 md:px-14 pt-6 pb-32">
+          {allEpisodes.length === 0 ? (
             <p className="text-gray-600 text-center py-20 font-bold uppercase tracking-widest text-xs">Nenhuma série nova</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6">
-              {latestEpisodes.map(({ movie, episode, episodeIndex, addedAt }, i) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+              {allEpisodes.map(({ movie, episode, episodeIndex }, i) => (
                 <motion.div
-                  key={`${movie.id}-${episode.id || episode.episode}`}
-                  initial={{ opacity: 0, y: 16 }}
+                  key={`${movie.id}-ep-${episodeIndex}`}
+                  initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.35 }}
-                  whileHover={{ scale: 1.03, y: -4 }}
-                  onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
-                  className="group relative bg-white/[0.04] rounded-2xl overflow-hidden border border-white/[0.06] hover:border-red-600/50 cursor-pointer transition-all shadow-xl hover:shadow-red-900/20 hover:shadow-2xl"
+                  transition={{ delay: Math.min(i * 0.03, 0.5), duration: 0.3 }}
+                  className="group relative bg-white/[0.03] rounded-2xl overflow-hidden border border-white/[0.05] hover:border-red-600/40 transition-all shadow-lg hover:shadow-red-900/10 hover:shadow-xl"
                 >
-                  <div className="relative aspect-video overflow-hidden">
+                  {/* Thumbnail */}
+                  <div
+                    className="relative aspect-video overflow-hidden cursor-pointer"
+                    onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
+                  >
                     <img
                       src={episode.still_path || getImageUrl(movie)}
-                      alt={episode.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      alt={episode.title || ''}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <motion.div
-                        initial={{ scale: 0.7 }} whileHover={{ scale: 1.1 }}
-                        className="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center shadow-2xl shadow-red-900/50 border-2 border-white/20"
-                      >
-                        <Play size={20} fill="white" className="text-white ml-1" />
-                      </motion.div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-250">
+                      <div className="w-12 h-12 bg-red-600/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-2xl border border-white/20">
+                        <Play size={18} fill="white" className="text-white ml-0.5" />
+                      </div>
                     </div>
-                    {/* Episode badge */}
-                    <div className="absolute top-2.5 left-2.5">
-                      <span className="bg-red-600 text-white text-[7px] font-black uppercase px-2 py-1 rounded-lg tracking-widest shadow-lg">
+                    <div className="absolute top-2 left-2">
+                      <span className="bg-red-600 text-white text-[7px] font-black uppercase px-2 py-0.5 rounded-md tracking-widest">
                         {episode.season ? `T${episode.season} · ` : ''}Ep {episode.episode || '?'}
                       </span>
                     </div>
-                    {/* Time badge */}
-                    <div className="absolute top-2.5 right-2.5">
-                      <span className="bg-black/60 backdrop-blur-md text-white/70 text-[7px] font-bold uppercase px-2 py-1 rounded-lg tracking-widest border border-white/10">
+                    <div className="absolute top-2 right-2">
+                      <span className="bg-black/55 backdrop-blur-sm text-white/60 text-[7px] font-bold uppercase px-1.5 py-0.5 rounded-md border border-white/[0.08] tracking-wide">
                         {formatRelativeDate(movie.created_at)}
                       </span>
                     </div>
-                    {/* Logo or title at bottom of image */}
-                    {getLogoUrl(movie) ? (
-                      <div className="absolute bottom-2 left-2 right-2">
-                        <img src={getLogoUrl(movie)!} alt={movie.title || movie.name}
-                          className="h-7 object-contain object-left drop-shadow-2xl max-w-[120px]"
-                          referrerPolicy="no-referrer" />
+                    {getLogoUrl(movie) && (
+                      <div className="absolute bottom-2 left-2">
+                        <img src={getLogoUrl(movie)!} alt="" className="h-6 object-contain object-left drop-shadow-xl max-w-[100px]" referrerPolicy="no-referrer" />
                       </div>
-                    ) : null}
+                    )}
                   </div>
-                  <div className="p-3.5">
-                    <p className="text-[8px] text-red-400 font-black uppercase tracking-widest truncate mb-0.5">{movie.title || movie.name}</p>
-                    <p className="text-white font-bold text-sm leading-tight line-clamp-1 mb-1">{episode.title || `Episódio ${episode.episode}`}</p>
-                    <div className="flex items-center gap-2">
-                      {episode.runtime > 0 && (
-                        <span className="text-gray-600 text-[8px] font-bold uppercase tracking-wide">{episode.runtime} min</span>
-                      )}
-                      {movie.vote_average > 0 && (
-                        <span className="text-yellow-500/70 text-[8px] font-bold">★ {movie.vote_average.toFixed(1)}</span>
+
+                  {/* Info row */}
+                  <div className="p-3">
+                    <p className="text-[7px] text-red-400/80 font-black uppercase tracking-widest truncate mb-0.5">{movie.title || movie.name}</p>
+                    <p className="text-white/90 font-bold text-[11px] leading-tight line-clamp-1">{episode.title || `Episódio ${episode.episode}`}</p>
+                    {episode.overview && (
+                      <p className="text-gray-600 text-[9px] mt-1 line-clamp-2 leading-snug">{episode.overview}</p>
+                    )}
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <button
+                        onClick={() => onEpisodeClick(movie, episode.videoUrl || episode.videoUrl2 || '', episodeIndex)}
+                        className="flex-1 flex items-center justify-center gap-1 bg-red-600/80 hover:bg-red-600 text-white font-black text-[8px] uppercase tracking-widest py-1.5 rounded-lg transition-all"
+                      >
+                        <Play size={9} fill="white" /> Assistir
+                      </button>
+                      {onSelectMovie && (
+                        <button
+                          onClick={() => onSelectMovie(movie)}
+                          className="flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-bold text-[8px] uppercase tracking-widest py-1.5 px-2.5 rounded-lg transition-all border border-white/[0.07]"
+                        >
+                          <Info size={9} /> Sinopse
+                        </button>
                       )}
                     </div>
                   </div>
-                  {/* Hover glow bottom */}
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 </motion.div>
               ))}
             </div>
           )}
         </div>
       ) : (
-        /* === FILMES GRID — poster style === */
-        <div className="px-4 md:px-12 pt-8 pb-32">
+        /* ── FILMES — poster grid ── */
+        <div className="px-5 md:px-14 pt-6 pb-32">
           {latestMovies.length === 0 ? (
             <p className="text-gray-600 text-center py-20 font-bold uppercase tracking-widest text-xs">Nenhum filme novo</p>
           ) : (
@@ -354,72 +442,73 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
               {latestMovies.map((movie: any, i: number) => (
                 <motion.div
                   key={movie.id}
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.35 }}
-                  whileHover={{ scale: 1.05, y: -6 }}
-                  onClick={() => onEpisodeClick(movie, movie.videoUrl || movie.video_url || '', 0)}
+                  transition={{ delay: Math.min(i * 0.04, 0.5), duration: 0.3 }}
                   className="group relative cursor-pointer"
                 >
-                  {/* Poster */}
-                  <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-white/5 shadow-2xl border border-white/[0.06] group-hover:border-red-600/40 transition-all">
+                  <div
+                    className="relative aspect-[2/3] rounded-xl overflow-hidden bg-white/5 shadow-xl border border-white/[0.05] group-hover:border-red-600/35 transition-all"
+                    onClick={() => onEpisodeClick(movie, movie.videoUrl || movie.video_url || '', 0)}
+                  >
                     {getPosterUrl(movie) ? (
                       <img
                         src={getPosterUrl(movie)}
                         alt={movie.title || movie.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-white/5">
-                        <Play size={32} className="text-white/20" />
+                        <Play size={28} className="text-white/20" />
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    {/* Play button */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-2xl border-2 border-white/20">
-                        <Play size={18} fill="white" className="text-white ml-0.5" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-250">
+                      <div className="w-11 h-11 bg-red-600/90 rounded-full flex items-center justify-center shadow-2xl border border-white/20">
+                        <Play size={16} fill="white" className="text-white ml-0.5" />
                       </div>
                     </div>
-                    {/* Logo overlay on hover */}
                     {getLogoUrl(movie) && (
-                      <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                        <img src={getLogoUrl(movie)!} alt={movie.title || movie.name}
-                          className="h-8 object-contain object-left drop-shadow-2xl max-w-full"
-                          referrerPolicy="no-referrer" />
+                      <div className="absolute bottom-2.5 left-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                        <img src={getLogoUrl(movie)!} alt="" className="h-7 object-contain object-left drop-shadow-2xl" referrerPolicy="no-referrer" />
                       </div>
                     )}
-                    {/* NEW badge */}
                     <div className="absolute top-2 left-2">
-                      <span className="bg-red-600 text-white text-[7px] font-black uppercase px-2 py-0.5 rounded tracking-widest shadow">
-                        {formatRelativeDate(movie.created_at) === 'Agora mesmo' || formatRelativeDate(movie.created_at).includes('h') ? 'Novo!' : formatRelativeDate(movie.created_at)}
+                      <span className="bg-red-600 text-white text-[7px] font-black uppercase px-1.5 py-0.5 rounded tracking-widest">
+                        {formatRelativeDate(movie.created_at).includes('h') || formatRelativeDate(movie.created_at) === 'Agora mesmo' ? 'Novo!' : formatRelativeDate(movie.created_at)}
                       </span>
                     </div>
-                    {/* Rating */}
                     {movie.vote_average > 0 && (
                       <div className="absolute top-2 right-2">
-                        <span className="bg-black/70 backdrop-blur-sm text-yellow-400 text-[8px] font-black px-1.5 py-0.5 rounded border border-yellow-400/20">
+                        <span className="bg-black/65 backdrop-blur-sm text-yellow-400 text-[7px] font-black px-1.5 py-0.5 rounded border border-yellow-400/15">
                           ★ {movie.vote_average.toFixed(1)}
                         </span>
                       </div>
                     )}
                   </div>
+
                   {/* Info below poster */}
-                  <div className="mt-2.5 px-0.5">
+                  <div className="mt-2 px-0.5">
                     {getLogoUrl(movie) ? (
-                      <img src={getLogoUrl(movie)!} alt={movie.title || movie.name}
-                        className="h-5 object-contain object-left drop-shadow mb-1 max-w-[130px]"
-                        referrerPolicy="no-referrer" />
+                      <img src={getLogoUrl(movie)!} alt="" className="h-4 object-contain object-left drop-shadow mb-1 max-w-[110px]" referrerPolicy="no-referrer" />
                     ) : (
-                      <p className="text-white font-black text-sm uppercase italic tracking-tight leading-tight line-clamp-1 group-hover:text-red-400 transition-colors">
+                      <p className="text-white/90 font-black text-[11px] uppercase italic tracking-tight leading-tight line-clamp-1 group-hover:text-red-400 transition-colors">
                         {movie.title || movie.name}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {movie.runtime && <span className="text-gray-600 text-[8px] font-bold uppercase tracking-wide">{movie.runtime} min</span>}
-                      {movie.genre && <span className="text-gray-700 text-[8px] font-bold uppercase tracking-wide truncate">{movie.genre}</span>}
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      {movie.runtime && <span className="text-gray-600 text-[7px] font-bold uppercase tracking-wide">{movie.runtime} min</span>}
+                      {movie.genre && <span className="text-gray-700 text-[7px] font-bold uppercase tracking-wide truncate">{movie.genre}</span>}
                     </div>
+                    {onSelectMovie && (
+                      <button
+                        onClick={() => onSelectMovie(movie)}
+                        className="mt-1.5 w-full flex items-center justify-center gap-1 bg-white/[0.04] hover:bg-white/10 border border-white/[0.07] hover:border-white/20 text-gray-500 hover:text-white font-bold text-[7px] uppercase tracking-widest py-1.5 rounded-lg transition-all"
+                      >
+                        <Info size={8} /> Ver Sinopse
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -4927,7 +5016,7 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
-          <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} />} />
+          <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
               franchises={dynamicFranchises}
