@@ -103,10 +103,27 @@ const ThemeContext = createContext<{
 export const useAppTheme = () => useContext(ThemeContext);
 
 const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const formatRelativeDate = (dateStr: string) => {
+    const diff = now - new Date(dateStr).getTime();
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor(diff / (60 * 60 * 1000));
+    if (hours < 1) return 'Agora mesmo';
+    if (hours < 24) return `Há ${hours}h`;
+    if (days === 1) return 'Ontem';
+    return `Há ${days} dias`;
+  };
+
   const latestEpisodes = useMemo(() => {
-    const results: { movie: any; episode: any; episodeIndex: number }[] = [];
+    const results: { movie: any; episode: any; episodeIndex: number; addedAt: number }[] = [];
     for (const m of myMovies) {
       if (m.type !== 'series' || !m.episodes || m.episodes.length === 0) continue;
+      // Filtra séries adicionadas nos últimos 7 dias
+      if (!m.created_at) continue;
+      const addedAt = new Date(m.created_at).getTime();
+      if (now - addedAt > SEVEN_DAYS_MS) continue;
       const sorted = [...m.episodes].sort((a: any, b: any) => {
         const aKey = (a.season || 0) * 10000 + (a.episode || 0);
         const bKey = (b.season || 0) * 10000 + (b.episode || 0);
@@ -114,28 +131,35 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
       });
       const latest = sorted[0];
       const idx = m.episodes.findIndex((e: any) => e === latest || (e.id && e.id === latest.id));
-      results.push({ movie: m, episode: latest, episodeIndex: idx >= 0 ? idx : 0 });
+      results.push({ movie: m, episode: latest, episodeIndex: idx >= 0 ? idx : 0, addedAt });
     }
+    // Séries mais recentemente adicionadas primeiro
+    results.sort((a, b) => b.addedAt - a.addedAt);
     return results;
   }, [myMovies]);
 
   return (
     <div className="pt-24 px-4 md:px-12 min-h-screen animate-fade-in">
-      <div className="flex items-end gap-4 mb-8">
+      <div className="flex items-end gap-4 mb-2">
         <h2 className="text-3xl md:text-5xl font-black text-white italic uppercase tracking-tighter">
-          Novos <span className="text-red-600">Episódios</span>
+          Novidades
         </h2>
         <span className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest text-gray-500 italic mb-1">
           {latestEpisodes.length} séries
         </span>
       </div>
+      <p className="text-gray-600 text-xs font-bold uppercase tracking-widest mb-8">Séries adicionadas nos últimos 7 dias</p>
       {latestEpisodes.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-40 text-center">
-          <p className="text-gray-600 font-black uppercase tracking-widest text-lg">Nenhuma série com episódios encontrada</p>
+        <div className="flex flex-col items-center justify-center py-40 text-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
+            <Play size={28} className="text-white/20" />
+          </div>
+          <p className="text-gray-600 font-black uppercase tracking-widest text-sm">Nenhuma novidade nos últimos 7 dias</p>
+          <p className="text-gray-700 text-xs">Novas séries aparecerão aqui assim que forem adicionadas</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 pb-40">
-          {latestEpisodes.map(({ movie, episode, episodeIndex }) => (
+          {latestEpisodes.map(({ movie, episode, episodeIndex, addedAt }) => (
             <motion.div
               key={`${movie.id}-${episode.id || episode.episode}`}
               whileHover={{ scale: 1.02 }}
@@ -155,9 +179,14 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
                     <Play size={22} fill="white" className="text-white ml-1" />
                   </div>
                 </div>
-                <div className="absolute top-3 left-3">
+                <div className="absolute top-3 left-3 flex gap-2 items-center">
                   <span className="bg-red-600 text-white text-[8px] font-black uppercase px-2 py-1 rounded-full tracking-widest shadow-lg">
                     {episode.season ? `T${episode.season} · ` : ''}Ep {episode.episode || '?'}
+                  </span>
+                </div>
+                <div className="absolute top-3 right-3">
+                  <span className="bg-black/70 backdrop-blur-sm text-white/80 text-[8px] font-bold uppercase px-2 py-1 rounded-full tracking-widest border border-white/10">
+                    {formatRelativeDate(movie.created_at)}
                   </span>
                 </div>
               </div>
@@ -171,7 +200,10 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick }: any) => {
                 <div className="min-w-0 flex-1">
                   <p className="text-[9px] text-red-400 font-black uppercase tracking-widest truncate">{movie.title || movie.name}</p>
                   <p className="text-white font-bold text-sm mt-0.5 line-clamp-2 leading-tight">{episode.title || `Episódio ${episode.episode}`}</p>
-                  {episode.runtime > 0 && <p className="text-gray-600 text-[9px] font-bold mt-1">{episode.runtime} min</p>}
+                  <div className="flex items-center gap-2 mt-1">
+                    {episode.runtime > 0 && <p className="text-gray-600 text-[9px] font-bold">{episode.runtime} min</p>}
+                    <p className="text-gray-700 text-[9px] font-bold">Adicionado {formatRelativeDate(movie.created_at).toLowerCase()}</p>
+                  </div>
                 </div>
               </div>
             </motion.div>

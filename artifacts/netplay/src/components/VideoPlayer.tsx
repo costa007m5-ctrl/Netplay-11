@@ -509,7 +509,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           let vid: any = null;
 
           if (sortedList.length > 0) {
-            const epFileName = (urlMatchEp as any)?.file_name;
+            // Prioridade 1: usar o episódio pelo índice exato selecionado (mais confiável quando vários eps compartilham a mesma URL de pasta)
+            const indexedEp = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && movie.episodes && initialEpisodeIndex < movie.episodes.length)
+              ? movie.episodes[initialEpisodeIndex]
+              : null;
+            const indexedFileName = (indexedEp as any)?.file_name;
+            // Prioridade 2: episódio encontrado por URL match (fallback)
+            const epFileName = indexedFileName || (urlMatchEp as any)?.file_name;
             const movieFileName = (movie as any).file_name;
             const fileNameToMatch = epFileName || movieFileName;
             if (fileNameToMatch) {
@@ -519,6 +525,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                 (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
               ) || null;
             }
+            // Prioridade 3: usar initialEpisodeIndex como posição na lista ordenada
             if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
               vid = sortedList[initialEpisodeIndex];
             }
@@ -833,7 +840,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
 
   // NetflixPlayer é o único player — todos os links são roteados aqui
   {
-    const currentIndex = movie.type === 'series' && movie.episodes
+    // Prioridade: usar initialEpisodeIndex quando disponível (evita ambiguidade quando múltiplos eps têm a mesma URL)
+    const currentIndexByUrl = movie.type === 'series' && movie.episodes
       ? movie.episodes.findIndex(ep => {
           const mv = movie.videoUrl || '';
           if (ep.videoUrl === mv || ep.videoUrl2 === mv) return true;
@@ -847,6 +855,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           return false;
         })
       : -1;
+    const currentIndex = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && movie.episodes && initialEpisodeIndex < movie.episodes.length)
+      ? initialEpisodeIndex
+      : currentIndexByUrl;
     const currentEpisode = currentIndex !== -1 && movie.episodes ? movie.episodes[currentIndex] : null;
     const episodeTitle = currentEpisode ? (currentEpisode.title || `Episódio ${currentEpisode.episode}`) : "";
     const displayTitle = movie.type === 'series' && episodeTitle 
@@ -892,8 +903,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           title={displayTitle}
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}
           episodes={movie.episodes}
+          currentEpisodeIndex={currentIndex >= 0 ? currentIndex : undefined}
           onSelectEpisode={(ep) => {
-            const epIdx = movie.episodes ? movie.episodes.findIndex(e => e.id === ep.id) : -1;
+            const epIdx = movie.episodes ? movie.episodes.findIndex(e => e.id === ep.id || (e.videoUrl === ep.videoUrl && e.episode === ep.episode && e.season === ep.season)) : -1;
             if (onPlayNext) onPlayNext(movie, ep.videoUrl || ep.videoUrl2 || "", epIdx >= 0 ? epIdx : undefined);
           }}
           backdropUrl={movie.backdrop_path}
@@ -938,6 +950,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             currentTimeRef.current = time;
             if (duration !== undefined) durationRef.current = duration;
             if (onProgress) onProgress(movie.id, time, movie.videoUrl);
+
+            // Salva progresso por episódio no localStorage
+            if (movie.id && currentIndex >= 0 && time > 0) {
+              try {
+                const key = `netplay_ep_progress_${movie.id}`;
+                const existing: Record<number, { pos: number; dur: number }> = JSON.parse(localStorage.getItem(key) || '{}');
+                existing[currentIndex] = { pos: time, dur: duration ?? durationRef.current ?? 0 };
+                localStorage.setItem(key, JSON.stringify(existing));
+              } catch {}
+            }
             
             if (profileId && movie.id && appSettings?.subscription_plan !== 'hub') {
               const finalDuration = duration !== undefined ? duration : durationRef.current;

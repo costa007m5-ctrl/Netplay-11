@@ -36,6 +36,7 @@ interface NetflixPlayerProps {
   onClickBackground?: () => void;
   autoNextOffset?: number;
   episodes?: any[];
+  currentEpisodeIndex?: number;
   onSelectEpisode?: (episode: any) => void;
   preferredAudioLanguage?: string;
   recsOverlayOffset?: number;
@@ -74,6 +75,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   onClickBackground,
   autoNextOffset,
   episodes = [],
+  currentEpisodeIndex,
   onSelectEpisode,
   preferredAudioLanguage,
   recsOverlayOffset = 120,
@@ -416,6 +418,12 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showRecsOverlay, setShowRecsOverlay] = useState(false);
   const [showEpisodesSidebar, setShowEpisodesSidebar] = useState(false);
   const [activeSeason, setActiveSeason] = useState(1);
+  const [epProgressMap, setEpProgressMap] = useState<Record<number, { pos: number; dur: number }>>(() => {
+    if (!movieId) return {};
+    try {
+      return JSON.parse(localStorage.getItem(`netplay_ep_progress_${movieId}`) || '{}');
+    } catch { return {}; }
+  });
   const [showTvShare, setShowTvShare] = useState(false);
   const [showLogoOverlay, setShowLogoOverlay] = useState(false);
   const [showAutoNext, setShowAutoNext] = useState(false);
@@ -460,15 +468,30 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   }, [episodes]);
 
   useEffect(() => {
-    if (episodes && episodes.length > 0 && activeSrc) {
-       const currentEq = episodes.find(e => e.videoUrl === activeSrc || e.videoUrl2 === activeSrc);
-       if (currentEq) {
+    if (episodes && episodes.length > 0) {
+      // Usa currentEpisodeIndex se disponível, senão tenta by URL
+      if (currentEpisodeIndex !== undefined && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodes.length) {
+        setActiveSeason(episodes[currentEpisodeIndex].season || seasons[0] || 1);
+      } else if (activeSrc) {
+        const currentEq = episodes.find(e => e.videoUrl === activeSrc || e.videoUrl2 === activeSrc);
+        if (currentEq) {
           setActiveSeason(currentEq.season);
-       } else {
+        } else {
           setActiveSeason(seasons[0] || 1);
-       }
+        }
+      }
     }
-  }, [activeSrc, episodes, seasons]);
+  }, [activeSrc, currentEpisodeIndex, episodes, seasons]);
+
+  // Recarrega progresso por episódio do localStorage sempre que o sidebar abre
+  useEffect(() => {
+    if (showEpisodesSidebar && movieId) {
+      try {
+        const stored = JSON.parse(localStorage.getItem(`netplay_ep_progress_${movieId}`) || '{}');
+        setEpProgressMap(stored);
+      } catch {}
+    }
+  }, [showEpisodesSidebar, movieId]);
 
   const isMedianApp = () => {
     if (typeof navigator === 'undefined') return false;
@@ -2322,10 +2345,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {episodes?.filter(ep => ep.season === activeSeason).map(ep => {
-                const isActive = activeSrc === ep.videoUrl || activeSrc === ep.videoUrl2;
+                const globalIndex = episodes.findIndex(e => e === ep || (e.id && e.id === ep.id) || (e.episode === ep.episode && e.season === ep.season));
+                const isActive = currentEpisodeIndex !== undefined
+                  ? globalIndex === currentEpisodeIndex
+                  : (activeSrc === ep.videoUrl || activeSrc === ep.videoUrl2);
+                const epProg = epProgressMap[globalIndex];
+                const progressPct = epProg && epProg.dur > 0 ? Math.min(100, Math.round((epProg.pos / epProg.dur) * 100)) : 0;
+                const isWatched = progressPct >= 95;
                 return (
                   <button
-                    key={ep.id}
+                    key={ep.id || globalIndex}
                     onClick={() => {
                         if (isActive) return;
                         setShowEpisodesSidebar(false);
@@ -2360,13 +2389,26 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                            </div>
                          </div>
                        ) : null}
+                       {/* Barra de progresso vermelha na thumbnail */}
+                       {progressPct > 0 && !isActive && (
+                         <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/20 rounded-b-md overflow-hidden">
+                           <div
+                             className={`h-full rounded-b-md transition-all ${isWatched ? 'bg-white/60' : 'bg-red-600'}`}
+                             style={{ width: `${progressPct}%` }}
+                           />
+                         </div>
+                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-1">
-                        <h4 className={`font-bold text-sm truncate pr-2 ${isActive ? 'text-red-400' : 'text-gray-300'}`}>{ep.episode}. {ep.title}</h4>
+                        <h4 className={`font-bold text-sm truncate pr-2 ${isActive ? 'text-red-400' : isWatched ? 'text-white/50' : 'text-gray-300'}`}>{ep.episode}. {ep.title}</h4>
                         {isActive ? (
                           <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-red-400 bg-red-600/20 border border-red-500/40 px-2 py-0.5 rounded-full animate-pulse">
                             ● Assistindo
+                          </span>
+                        ) : isWatched ? (
+                          <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-white/40 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
+                            ✓ Assistido
                           </span>
                         ) : ep.runtime ? (
                           <span className="text-gray-400 text-[10px] uppercase font-bold tracking-widest shrink-0">{ep.runtime} min</span>
@@ -2374,6 +2416,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                       </div>
                       {ep.overview && (
                         <p className="text-gray-500 text-[10px] leading-tight line-clamp-2 md:line-clamp-3">{ep.overview}</p>
+                      )}
+                      {/* Barra de progresso abaixo da sinopse */}
+                      {progressPct > 0 && !isActive && (
+                        <div className="mt-2 h-[2px] bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${isWatched ? 'bg-white/40' : 'bg-red-600'}`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
                       )}
                     </div>
                   </button>
