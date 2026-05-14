@@ -394,22 +394,29 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
       .replace(/[\s._-]*[\(\[][^\)\]]{1,40}[\)\]][\s._-]*$/g, '')
       .trim();
 
-  // Extrai o nome do episódio do filename após o padrão SxxExx
-  // Ex: "(AnimesTotais) Series.S01E65.Star.Warners.1080p.WEB-DL.mkv" → "Star Warners"
+  // Regex de qualidade/codec compartilhado
+  const QUALITY_RE = /[\s._-]*(4K|2160p|1080p|720p|480p|360p|240p|UHD|FHD|HDR10?|SDR|HMAX|DSNP|AMZN|PCOK|NF|ATVP|WEB[-.]?DL|WEBRip|BluRay|Blu[-.]?Ray|HDTV|PDTV|DVDRip|BDRip|BRRip|WEB|DD[\d.]+|DDP[\d.]+|AAC[\d.]*|AC3|MP3|DTS[-\w]*|TrueHD|FLAC|x26[45]|H\.?26[45]|HEVC|AVC|REMUX|REPACK|PROPER|DUAL|MULTI|EXTENDED|DIRECTORS|UNRATED|REMASTERED|INTERNAL|RETAIL|LIMITED|COMPLETE|HYBRID).*/i;
+
+  // Extrai o nome do episódio do filename
+  // Caso 1 (tem SxxExx): extrai texto APÓS o padrão → "Star Warners"
+  // Caso 2 (sem SxxExx): usa o filename completo limpo → candidato para busca por nome no TMDB
   const parseEpisodeName = (filename: string): string | null => {
     if (!filename) return null;
-    // Remove extensão e tags de grupo antes de processar
     let name = filename.replace(/\.(mkv|mp4|avi|mov|webm|m4v|wmv|flv|ts|m3u8|m2ts|vob|mpg|mpeg)$/i, '');
     name = stripGroupTags(name);
+
+    // Caso 1: tem padrão SxxExx — extrai nome APÓS ele
     const seMatch = name.match(/[SsTt]\d{1,2}[\s._-]*[Ee]\d{1,3}[\s._-]+(.*)/);
-    if (!seMatch) return null;
-    let afterSE = seMatch[1];
-    afterSE = afterSE.replace(
-      /[\s._-]*(4K|2160p|1080p|720p|480p|360p|240p|UHD|FHD|HDR10?|SDR|HMAX|DSNP|AMZN|PCOK|NF|ATVP|WEB[-.]?DL|WEBRip|BluRay|Blu[-.]?Ray|HDTV|PDTV|DVDRip|BDRip|BRRip|WEB|DD[\d.]+|DDP[\d.]+|AAC[\d.]*|AC3|MP3|DTS[-\w]*|TrueHD|FLAC|x26[45]|H\.?26[45]|HEVC|AVC|REMUX|REPACK|PROPER|DUAL|MULTI|EXTENDED|DIRECTORS|UNRATED|REMASTERED|INTERNAL|RETAIL|LIMITED|COMPLETE|HYBRID).*/i,
-      ''
-    );
-    const cleaned = afterSE.replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
-    return cleaned.length >= 2 ? cleaned : null;
+    if (seMatch) {
+      const afterSE = seMatch[1].replace(QUALITY_RE, '');
+      const cleaned = afterSE.replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (cleaned.length >= 2) return cleaned;
+    }
+
+    // Caso 2: sem SxxExx — limpa qualidade/codec do final e usa o nome completo
+    // O TMDB fuzzy matching vai encontrar o episódio certo por sobreposição de palavras
+    const fullCleaned = name.replace(QUALITY_RE, '').replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
+    return fullCleaned.length >= 2 ? fullCleaned : null;
   };
 
   // Normaliza nome de episódio para comparação
@@ -503,6 +510,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
           season: parsed.season,
           episode: parsed.episode,
           detectedEpisodeName: detectedEpisodeName || undefined,
+          detectedBySE: true,
         });
         if (detectedEpisodeName) detectedByName++;
         detected++;
@@ -512,6 +520,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         fallbackBySeason[fallback].push({
           ...file,
           detectedEpisodeName: detectedEpisodeName || undefined,
+          detectedBySE: false,
         });
         unmatched++;
       }
@@ -557,78 +566,142 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
     if (!Object.keys(seasonScanResults).length) return;
     setEnrichingTmdb(true);
     try {
-      const updated = { ...seasonScanResults };
       let totalFilled = 0;
       let matchedByName = 0;
-      for (const seasonStr of Object.keys(updated)) {
-        const seasonNum = Number(seasonStr);
-        setEnrichStatus(`Buscando sinopses da Temporada ${seasonNum}...`);
+      let fixedSeasonEp = 0;
+
+      // 1. Pré-carrega dados TMDB de todas as temporadas presentes
+      const allSeasonNums = Object.keys(seasonScanResults).map(Number);
+      const tmdbSeasons: Record<number, any[]> = {};
+      for (const seasonNum of allSeasonNums) {
+        setEnrichStatus(`Carregando Temporada ${seasonNum} do TMDB...`);
         try {
           const seasonData = await fetchSeasonDetailsWithFallback(selectedSeries.id, seasonNum);
-          const tmdbEps: any[] = Array.isArray(seasonData?.data?.episodes) ? seasonData.data.episodes : [];
-          if (!tmdbEps.length) continue;
+          tmdbSeasons[seasonNum] = Array.isArray(seasonData?.data?.episodes) ? seasonData.data.episodes : [];
+        } catch (e: any) {
+          console.warn(`[TMDB V3] Falha Temporada ${seasonNum}:`, e.message);
+          tmdbSeasons[seasonNum] = [];
+        }
+      }
 
-          // Mapa por número de episódio (busca primária)
-          const byNum = new Map<number, any>();
-          for (const e of tmdbEps) byNum.set(Number(e.episode_number), e);
-
-          // Mapa por nome normalizado (busca secundária via nome do episódio)
-          const byName = new Map<string, any>();
-          for (const e of tmdbEps) {
-            if (e.name) byName.set(normalizeEpName(e.name), e);
+      // 2. Mapa cross-season por nome normalizado (para arquivos sem SxxExx)
+      const crossByName = new Map<string, { ep: any; seasonNum: number }>();
+      for (const [sNum, eps] of Object.entries(tmdbSeasons)) {
+        for (const ep of eps) {
+          if (ep.name) {
+            const key = normalizeEpName(ep.name);
+            if (!crossByName.has(key)) crossByName.set(key, { ep, seasonNum: Number(sNum) });
           }
+        }
+      }
 
-          updated[seasonNum] = (updated[seasonNum] as any[]).map(file => {
-            // 1ª tentativa: match pelo número do episódio
-            let match = byNum.get(Number(file.episode));
-            let usedNameMatch = false;
+      // 3. Processa arquivos de cada temporada
+      const newGrouped: Record<number, any[]> = {};
 
-            // 2ª tentativa: match pelo nome do episódio extraído do filename
+      for (const [seasonStr, files] of Object.entries(seasonScanResults)) {
+        const seasonNum = Number(seasonStr);
+        const eps = tmdbSeasons[seasonNum] || [];
+        const byNum = new Map<number, any>();
+        const byName = new Map<string, any>();
+        for (const e of eps) {
+          byNum.set(Number(e.episode_number), e);
+          if (e.name) byName.set(normalizeEpName(e.name), e);
+        }
+
+        for (const file of files as any[]) {
+          let match: any = null;
+          let usedNameMatch = false;
+          let resolvedSeason = seasonNum;
+
+          if (file.detectedBySE !== false) {
+            // — Arquivo COM SxxExx detectado —
+            // 1ª: por número de episódio
+            match = byNum.get(Number(file.episode));
+
+            // 2ª: por nome extraído do filename, dentro da temporada
             if (!match && file.detectedEpisodeName) {
-              const normalizedDetected = normalizeEpName(file.detectedEpisodeName);
-              match = byName.get(normalizedDetected);
+              const norm = normalizeEpName(file.detectedEpisodeName);
+              match = byName.get(norm);
               if (!match) {
-                let bestScore = 0;
-                let bestMatch: any = null;
-                for (const [key, ep] of byName) {
-                  const score = epNameScore(normalizedDetected, key);
-                  if (score > bestScore && score >= 0.5) { bestScore = score; bestMatch = ep; }
+                let best = 0, bestM: any = null;
+                for (const [k, ep] of byName) {
+                  const s = epNameScore(norm, k);
+                  if (s > best && s >= 0.5) { best = s; bestM = ep; }
                 }
-                if (bestMatch) match = bestMatch;
+                if (bestM) match = bestM;
               }
               if (match) usedNameMatch = true;
             }
 
-            // 3ª tentativa: busca pelo nome do arquivo completo (threshold mais alto)
+            // 3ª: filename completo contra temporada (threshold alto)
             if (!match) {
-              const fileNameNorm = normalizeEpName(file.filename || '');
-              let bestScore = 0;
-              let bestMatch: any = null;
-              for (const [key, ep] of byName) {
-                const score = epNameScore(fileNameNorm, key);
-                if (score > bestScore && score >= 0.65) { bestScore = score; bestMatch = ep; }
+              const fnorm = normalizeEpName(file.filename || '');
+              let best = 0, bestM: any = null;
+              for (const [k, ep] of byName) {
+                const s = epNameScore(fnorm, k);
+                if (s > best && s >= 0.65) { best = s; bestM = ep; }
               }
-              if (bestMatch) { match = bestMatch; usedNameMatch = true; }
+              if (bestM) { match = bestM; usedNameMatch = true; }
+            }
+          } else {
+            // — Arquivo SEM SxxExx — busca por nome em TODAS as temporadas —
+            const candidate = file.detectedEpisodeName || '';
+            if (candidate) {
+              const norm = normalizeEpName(candidate);
+              // Exato cross-season
+              const found = crossByName.get(norm);
+              if (found) { match = found.ep; resolvedSeason = found.seasonNum; usedNameMatch = true; }
+
+              // Fuzzy cross-season (threshold menor pois é o único critério)
+              if (!match) {
+                let best = 0, bestM: any = null, bestS = seasonNum;
+                for (const [k, { ep, seasonNum: sn }] of crossByName) {
+                  const s = epNameScore(norm, k);
+                  if (s > best && s >= 0.4) { best = s; bestM = ep; bestS = sn; }
+                }
+                if (bestM) { match = bestM; resolvedSeason = bestS; usedNameMatch = true; }
+              }
             }
 
-            if (!match) return file;
-            totalFilled++;
-            if (usedNameMatch) matchedByName++;
-            return {
-              ...file,
-              tmdbTitle: match.name || '',
-              tmdbOverview: match.overview || '',
-              tmdbStillPath: match.still_path ? `https://image.tmdb.org/t/p/w300${match.still_path}` : undefined,
-              // Se o match foi por nome, corrige o número do episódio para o do TMDB
-              ...(usedNameMatch ? { episode: match.episode_number, season: match.season_number ?? seasonNum } : {}),
-            };
-          });
-        } catch (e: any) { console.warn(`[TMDB V3] Falha na Temporada ${seasonNum}:`, e.message); }
+            // Filename completo cross-season (threshold médio)
+            if (!match) {
+              const fnorm = normalizeEpName(file.filename || '');
+              let best = 0, bestM: any = null, bestS = seasonNum;
+              for (const [k, { ep, seasonNum: sn }] of crossByName) {
+                const s = epNameScore(fnorm, k);
+                if (s > best && s >= 0.55) { best = s; bestM = ep; bestS = sn; }
+              }
+              if (bestM) { match = bestM; resolvedSeason = bestS; usedNameMatch = true; }
+            }
+          }
+
+          const didFix = match && (resolvedSeason !== seasonNum || (usedNameMatch && match.episode_number !== file.episode));
+          const enriched = match ? {
+            ...file,
+            season: resolvedSeason,
+            episode: match.episode_number,
+            tmdbTitle: match.name || '',
+            tmdbOverview: match.overview || '',
+            tmdbStillPath: match.still_path ? `https://image.tmdb.org/t/p/w300${match.still_path}` : undefined,
+          } : file;
+
+          if (match) { totalFilled++; if (usedNameMatch) matchedByName++; if (didFix) fixedSeasonEp++; }
+          const targetSeason = match ? resolvedSeason : seasonNum;
+          if (!newGrouped[targetSeason]) newGrouped[targetSeason] = [];
+          newGrouped[targetSeason].push(enriched);
+        }
       }
-      setSeasonScanResults(updated);
+
+      // Ordena cada temporada por número de episódio
+      for (const s of Object.keys(newGrouped)) {
+        (newGrouped[Number(s)] as any[]).sort((a, b) => (a.episode || 0) - (b.episode || 0));
+      }
+
+      setSeasonScanResults(newGrouped);
       setEnrichStatus(
         `${totalFilled} episódios enriquecidos com info do TMDB` +
-        (matchedByName ? ` (${matchedByName} encontrado${matchedByName === 1 ? '' : 's'} pelo nome do episódio)` : '') +
+        (matchedByName ? ` • ${matchedByName} encontrado${matchedByName === 1 ? '' : 's'} pelo nome` : '') +
+        (fixedSeasonEp ? ` • ${fixedSeasonEp} temporada/episódio corrigido${fixedSeasonEp === 1 ? '' : 's'} automaticamente` : '') +
         '.'
       );
     } catch (e: any) {
