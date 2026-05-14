@@ -615,11 +615,10 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
 
           if (file.detectedBySE !== false) {
             // — Arquivo COM SxxExx detectado —
-            // 1ª: por número de episódio
-            match = byNum.get(Number(file.episode));
+            // Nome é mais confiável que número (número pode estar errado no arquivo)
 
-            // 2ª: por nome extraído do filename, dentro da temporada
-            if (!match && file.detectedEpisodeName) {
+            // 1ª: por nome extraído do filename, dentro da temporada
+            if (file.detectedEpisodeName) {
               const norm = normalizeEpName(file.detectedEpisodeName);
               match = byName.get(norm);
               if (!match) {
@@ -633,15 +632,35 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
               if (match) usedNameMatch = true;
             }
 
-            // 3ª: filename completo contra temporada (threshold alto)
+            // 2ª: por nome extraído, buscando em TODAS as temporadas (número pode estar na temporada errada)
+            if (!match && file.detectedEpisodeName) {
+              const norm = normalizeEpName(file.detectedEpisodeName);
+              const found = crossByName.get(norm);
+              if (found) { match = found.ep; resolvedSeason = found.seasonNum; usedNameMatch = true; }
+              if (!match) {
+                let best = 0, bestM: any = null, bestS = seasonNum;
+                for (const [k, { ep, seasonNum: sn }] of crossByName) {
+                  const s = epNameScore(norm, k);
+                  if (s > best && s >= 0.5) { best = s; bestM = ep; bestS = sn; }
+                }
+                if (bestM) { match = bestM; resolvedSeason = bestS; usedNameMatch = true; }
+              }
+            }
+
+            // 3ª: por número de episódio (fallback — pode estar errado no arquivo)
+            if (!match) {
+              match = byNum.get(Number(file.episode));
+            }
+
+            // 4ª: filename completo contra todas as temporadas (último recurso)
             if (!match) {
               const fnorm = normalizeEpName(file.filename || '');
-              let best = 0, bestM: any = null;
-              for (const [k, ep] of byName) {
+              let best = 0, bestM: any = null, bestS = seasonNum;
+              for (const [k, { ep, seasonNum: sn }] of crossByName) {
                 const s = epNameScore(fnorm, k);
-                if (s > best && s >= 0.65) { best = s; bestM = ep; }
+                if (s > best && s >= 0.65) { best = s; bestM = ep; bestS = sn; }
               }
-              if (bestM) { match = bestM; usedNameMatch = true; }
+              if (bestM) { match = bestM; resolvedSeason = bestS; usedNameMatch = true; }
             }
           } else {
             // — Arquivo SEM SxxExx — busca por nome em TODAS as temporadas —
