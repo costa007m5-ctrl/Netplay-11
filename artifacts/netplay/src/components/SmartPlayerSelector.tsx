@@ -151,9 +151,9 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     {
       id: 'alternative',
       num: '02',
-      title: `Servidor ${altLabel}`,
-      subtitle: 'API Alternativa',
-      desc: `${nativeApi === 'v3' ? 'Conecta via API 01 (Pro). Ideal como backup do servidor nativo.' : 'Conecta via API 03 (V3 Premium). Alta confiabilidade.'}`,
+      title: `Servidor API 01`,
+      subtitle: 'Cascata Automática',
+      desc: `Testa cada qualidade da API 01 (Pro) em cascata. Se todas falharem, muda automaticamente para API 3.0.`,
       icon: RefreshCcw,
       gradient: 'from-purple-600/12 to-purple-900/5',
       border: 'border-purple-500/20 hover:border-purple-400/50',
@@ -161,14 +161,14 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       iconColor: 'text-purple-400',
       badgeBg: 'bg-purple-500/20',
       badgeColor: 'text-purple-300',
-      badge: 'ALTERNATIVO',
+      badge: 'CASCATA',
       glowColor: 'shadow-purple-500/10',
       available: hasTeraboxUrl,
       unavailableMsg: 'Não disponível para este tipo de link.',
       action: () => {
-        saveSelectedServer({ id: 'alternative', playerStyle: 'netflix', altApi, nativeApi });
-        const converted = convertTeraboxToApi(currentUrl, altApi);
-        onPlay(converted, startTime, 'netflix');
+        saveSelectedServer({ id: 'alternative', playerStyle: 'netflix-cascade', altApi, nativeApi });
+        const converted = convertTeraboxToApi(currentUrl, 'v1');
+        onPlay(converted, startTime, 'netflix-cascade');
       },
     },
     {

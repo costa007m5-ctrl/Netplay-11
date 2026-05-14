@@ -71,6 +71,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [extractedSubtitleUrl, setExtractedSubtitleUrl] = useState<string | null>(getInitialExtracted('subtitle'));
   const [isExtractingTerabox, setIsExtractingTerabox] = useState(false);
   const [extractedQualities, setExtractedQualities] = useState<{ id: string; label: string; url: string }[]>([]);
+  const [dubbingOptions, setDubbingOptions] = useState<{ id: string; label: string; url: string }[]>([]);
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
   const [showEmotePicker, setShowEmotePicker] = useState(false);
@@ -488,6 +489,46 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           const subUrl = file.subtitle_url || data.subtitle || data.subtitle_url;
           if (subUrl) setExtractedSubtitleUrl(subUrl);
           console.log(`[VideoPlayer] dyn-ref: ${qualityList.length} qualidades disponíveis (${qualityList.map(q => q.id).join(', ')})`);
+
+          // Extração de dublagem: busca streams das outras APIs em background para oferecer opções de áudio
+          (async () => {
+            const allApis = [
+              { id: 'v1', label: 'API Pro (V1)', endpoint: '/api/terabox-pro' },
+              { id: 'v2', label: 'API V2', endpoint: '/api/terabox-v2' },
+              { id: 'v3', label: 'API V3 (Premium)', endpoint: '/api/terabox-v3' },
+            ];
+            const primaryId = v3 ? 'v3' : v2 ? 'v2' : 'v1';
+            const dubOpts: { id: string; label: string; url: string }[] = [];
+            const primaryStreamUrl = file.stream_url || file.fast_stream_url?.['720p'] || file.fast_stream_url?.['1080p'] || file.normal_dlink || file.dlink;
+            if (primaryStreamUrl) {
+              dubOpts.push({ id: primaryId, label: `API ${primaryId.toUpperCase()} (atual)`, url: primaryStreamUrl });
+            }
+            await Promise.allSettled(
+              allApis
+                .filter(api => api.id !== primaryId)
+                .map(async (api) => {
+                  try {
+                    const r = await fetch(`${api.endpoint}?url=${encodeURIComponent(folderUrl)}`, { signal: AbortSignal.timeout(8000) });
+                    if (!r.ok) return;
+                    const d = await r.json().catch(() => ({}));
+                    const files: any[] = Array.isArray(d.list) ? d.list : [];
+                    if (files.length === 0) return;
+                    let f = filename
+                      ? (files.find((x: any) => (x.filename || x.name) === filename) ||
+                         files.find((x: any) => (x.filename || x.name || '').toLowerCase() === filename.toLowerCase()) ||
+                         files[0])
+                      : files[0];
+                    if (!f) return;
+                    const streamUrl = f.stream_url || f.fast_stream_url?.['720p'] || f.fast_stream_url?.['1080p'] || f.normal_dlink || f.dlink;
+                    if (streamUrl) dubOpts.push({ id: api.id, label: api.label, url: streamUrl });
+                  } catch { /* silently ignore */ }
+                })
+            );
+            if (dubOpts.length > 1) {
+              setDubbingOptions(dubOpts);
+              console.log(`[VideoPlayer] dublagem: ${dubOpts.length} fontes disponíveis`);
+            }
+          })();
         } catch (e: any) {
           console.error('[VideoPlayer] dyn-ref falhou:', e?.message || e);
           setExtractedVideoUrl(u);
@@ -947,6 +988,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
           }}
           videoUrlOptions={videoUrlOptions}
+          dubbingOptions={dubbingOptions}
           autoQualityCascade={isAutoProCascade}
           cascadeDelaySecs={(movie as any).qualityCascadeDelay ?? 10}
           teraboxV1Ref={isAutoProCascade ? (movie.videoUrl || undefined) : undefined}

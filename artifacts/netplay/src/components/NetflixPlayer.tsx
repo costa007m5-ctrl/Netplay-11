@@ -44,6 +44,7 @@ interface NetflixPlayerProps {
   cascadeDelaySecs?: number;
   teraboxV1Ref?: string;
   cascadeToV3OnPenultimate?: boolean;
+  dubbingOptions?: { id: string; label: string; url: string }[];
 }
 
 const NetflixPlayer: React.FC<NetflixPlayerProps> = ({ 
@@ -83,6 +84,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   cascadeDelaySecs: cascadeDelaySecsProp = 10,
   teraboxV1Ref,
   cascadeToV3OnPenultimate = true,
+  dubbingOptions = [],
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -445,6 +447,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [hlsAudioTracks, setHlsAudioTracks] = useState<{ id: number; name: string; lang: string; default?: boolean }[]>([]);
   const [currentAudioTrackId, setCurrentAudioTrackId] = useState<number | null>(null);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showDubbingMenu, setShowDubbingMenu] = useState(false);
+  const [activeDubbingId, setActiveDubbingId] = useState<string | null>(null);
   const [canCast, setCanCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
   const [qualityToast, setQualityToast] = useState<string | null>(null);
@@ -2789,6 +2793,60 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                               {track.lang && <span className="text-[10px] uppercase tracking-widest opacity-60">{track.lang}</span>}
                             </button>
                           ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* Dublagem */}
+                {dubbingOptions.length > 1 && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black mb-3">Fonte de Dublagem</p>
+                    <button
+                      onClick={() => setShowDubbingMenu(!showDubbingMenu)}
+                      className="w-full py-4 px-5 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-xs font-bold transition-all border border-white/5 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Languages size={14} className="text-purple-400" />
+                        <span>
+                          {activeDubbingId
+                            ? (dubbingOptions.find(d => d.id === activeDubbingId)?.label || 'Dublagem')
+                            : (dubbingOptions[0]?.label || 'Dublagem')}
+                        </span>
+                      </div>
+                      <Settings size={16} className={`transition-transform duration-300 ${showDubbingMenu ? 'rotate-90 text-purple-500' : 'text-gray-400'}`} />
+                    </button>
+                    <AnimatePresence>
+                      {showDubbingMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-2 space-y-2 overflow-hidden px-1"
+                        >
+                          {dubbingOptions.map(opt => {
+                            const isActive = activeDubbingId ? activeDubbingId === opt.id : dubbingOptions[0]?.id === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                onClick={() => {
+                                  setActiveDubbingId(opt.id);
+                                  setActiveSrc(opt.url);
+                                  setShowDubbingMenu(false);
+                                  setQualityToast(`Dublagem: ${opt.label}`);
+                                  setTimeout(() => setQualityToast(null), 3000);
+                                }}
+                                className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-3 ${isActive ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.3)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+                              >
+                                <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
+                                <span className="flex-1 text-left">{opt.label}</span>
+                                {opt.id.startsWith('v') && (
+                                  <span className="text-[10px] uppercase tracking-widest opacity-60">{opt.id.toUpperCase()}</span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </motion.div>
                       )}
                     </AnimatePresence>

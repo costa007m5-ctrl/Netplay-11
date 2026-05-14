@@ -1129,7 +1129,7 @@ const MovieDetailsModal = React.memo(({
                           </div>
                         )}
                         {isWatched && (
-                          <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded text-[7px] font-black text-gray-300 uppercase tracking-wider">
+                          <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded text-[7px] font-black text-red-400 uppercase tracking-wider">
                             Assistido
                           </div>
                         )}
@@ -1146,6 +1146,14 @@ const MovieDetailsModal = React.memo(({
                              </span>
                            )}
                         </div>
+
+                        {/* Status abaixo do título */}
+                        {isWatched && (
+                          <span className="text-red-500 text-[9px] md:text-[10px] font-black uppercase tracking-widest mt-0.5 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                            Assistido
+                          </span>
+                        )}
                         
                         <p className="text-gray-400 text-[10px] md:text-sm mt-1 md:mt-2 line-clamp-2 md:line-clamp-3 leading-snug font-medium italic">
                           {ep.overview || "Sem sinopse disponível para este episódio."}
