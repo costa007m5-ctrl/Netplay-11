@@ -447,6 +447,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [hlsAudioTracks, setHlsAudioTracks] = useState<{ id: number; name: string; lang: string; default?: boolean }[]>([]);
   const [currentAudioTrackId, setCurrentAudioTrackId] = useState<number | null>(null);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [nativeAudioTracks, setNativeAudioTracks] = useState<{ id: string; label: string; lang: string; enabled: boolean }[]>([]);
+  const [currentNativeAudioId, setCurrentNativeAudioId] = useState<string | null>(null);
   const [showDubbingMenu, setShowDubbingMenu] = useState(false);
   const [activeDubbingId, setActiveDubbingId] = useState<string | null>(null);
   const [canCast, setCanCast] = useState(false);
@@ -931,6 +933,32 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const lowerSrc = videoToPlay.toLowerCase();
       let startLoadTimer: NodeJS.Timeout;
 
+      const applyHlsAudioTracks = (hls: any) => {
+        const tracks: { id: number; name: string; lang: string; default?: boolean }[] = (hls.audioTracks || []).map((t: any, i: number) => ({
+          id: i,
+          name: t.name || t.lang || `Faixa ${i + 1}`,
+          lang: (t.lang || '').toLowerCase(),
+          default: t.default,
+        }));
+        if (tracks.length > 1) {
+          setHlsAudioTracks(tracks);
+          const pref = (preferredAudioLanguage || 'pt-BR').toLowerCase().replace('_', '-');
+          const prefBase = pref.split('-')[0];
+          const isPortuguese = prefBase === 'pt' || pref.startsWith('por');
+          const ptCodes = new Set(['pt', 'pt-br', 'por', 'por-br', 'pb', 'pob', 'ptbr', 'portuguese', 'pt-pt', 'por-pt']);
+          const prefTrack = isPortuguese
+            ? (tracks.find(t => ptCodes.has(t.lang)) || tracks.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.lang === 'pb' || t.lang === 'pob'))
+            : (tracks.find(t => t.lang === pref || t.lang === prefBase || t.lang.startsWith(prefBase)));
+          if (prefTrack && prefTrack.id !== hls.audioTrack) {
+            hls.audioTrack = prefTrack.id;
+            setCurrentAudioTrackId(prefTrack.id);
+            console.log(`[NetflixPlayer] HLS áudio auto-selecionado: ${prefTrack.name} (${prefTrack.lang})`);
+          } else {
+            setCurrentAudioTrackId(hls.audioTrack ?? 0);
+          }
+        }
+      };
+
       const initUnifiedMode = () => {
         if (!isMounted || !video) return;
         setLoadingProgress(3);
@@ -989,36 +1017,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               setLoadingProgress(prev => Math.max(prev, 55));
 
               // Detect and auto-select audio tracks
-              const tracks: { id: number; name: string; lang: string; default?: boolean }[] = (hls.audioTracks || []).map((t: any, i: number) => ({
-                id: i,
-                name: t.name || t.lang || `Track ${i + 1}`,
-                lang: (t.lang || '').toLowerCase(),
-                default: t.default,
-              }));
-              if (tracks.length > 1) {
-                setHlsAudioTracks(tracks);
-                // Auto-select preferred language — Portuguese has many ISO codes:
-                // pt-BR, pt, por, pb, pob, ptbr, portuguese, por-BR, pt-br, por-br
-                const pref = (preferredAudioLanguage || 'pt-BR').toLowerCase().replace('_', '-');
-                const prefBase = pref.split('-')[0]; // e.g. "pt"
-                const isPortuguese = prefBase === 'pt' || pref.startsWith('por');
-                const ptCodes = new Set(['pt', 'pt-br', 'por', 'por-br', 'pb', 'pob', 'ptbr', 'portuguese', 'pt-pt', 'por-pt']);
-                const prefTrack = isPortuguese
-                  ? (tracks.find(t => ptCodes.has(t.lang))
-                     || tracks.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.lang === 'pb' || t.lang === 'pob'))
-                  : (tracks.find(t => t.lang === pref || t.lang === prefBase || t.lang.startsWith(prefBase)));
-                if (prefTrack && prefTrack.id !== hls.audioTrack) {
-                  hls.audioTrack = prefTrack.id;
-                  setCurrentAudioTrackId(prefTrack.id);
-                  console.log(`[NetflixPlayer] áudio auto-selecionado: ${prefTrack.name} (${prefTrack.lang})`);
-                } else {
-                  setCurrentAudioTrackId(hls.audioTrack);
-                }
-              }
+              applyHlsAudioTracks(hls);
               
               if (video) {
                  video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
               }
+            });
+            hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+              applyHlsAudioTracks(hls);
             });
             hls.on(Hls.Events.FRAG_BUFFERED, () => {
               setLoadingProgress(prev => Math.min(Math.max(prev, 60) + 8, 95));
@@ -1105,7 +1111,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                 if (duration > 0 && safeStartPoint >= duration - threshold) { safeStartPoint = 0; }
                 video.currentTime = safeStartPoint;
               }
+              detectNativeAudioTracks(video);
             }, { once: true });
+            video.addEventListener('canplay', () => detectNativeAudioTracks(video), { once: true });
             video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
           }
         } else {
@@ -1119,7 +1127,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                  if (duration > 0 && safeStartPoint >= duration - threshold) { safeStartPoint = 0; }
                  video.currentTime = safeStartPoint;
                }
+               detectNativeAudioTracks(video);
           }, { once: true });
+          video.addEventListener('canplay', () => detectNativeAudioTracks(video), { once: true });
           video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
         }
       };
@@ -1775,6 +1785,42 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       }
     }
     setShowAudioMenu(false);
+  };
+
+  const handleNativeAudioTrackChange = (trackId: string) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const tracks = (video as any).audioTracks as any;
+    if (!tracks) return;
+    for (let i = 0; i < tracks.length; i++) {
+      tracks[i].enabled = tracks[i].id === trackId;
+    }
+    setCurrentNativeAudioId(trackId);
+    const found = nativeAudioTracks.find(t => t.id === trackId);
+    if (found) {
+      setQualityToast(`Áudio: ${found.label || found.lang}`);
+      setTimeout(() => setQualityToast(null), 3000);
+    }
+    setShowAudioMenu(false);
+  };
+
+  const detectNativeAudioTracks = (video: HTMLVideoElement) => {
+    const tracks = (video as any).audioTracks as any;
+    if (!tracks || tracks.length <= 1) return;
+    const list: { id: string; label: string; lang: string; enabled: boolean }[] = [];
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      list.push({ id: t.id || String(i), label: t.label || t.language || `Faixa ${i + 1}`, lang: (t.language || '').toLowerCase(), enabled: t.enabled });
+    }
+    setNativeAudioTracks(list);
+    const enabled = list.find(t => t.enabled);
+    if (enabled) setCurrentNativeAudioId(enabled.id);
+    // Auto-select Portuguese if present
+    const ptTrack = list.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.label.toLowerCase().includes('portugu') || t.label.toLowerCase().includes('pt'));
+    if (ptTrack && !ptTrack.enabled) {
+      handleNativeAudioTrackChange(ptTrack.id);
+    }
+    console.log('[NetflixPlayer] audioTracks nativos detectados:', list);
   };
 
   const handleQualityChange = (levelId: number | string) => {
@@ -2756,8 +2802,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                   </AnimatePresence>
                 </div>
 
-                {/* Áudio */}
-                {hlsAudioTracks.length >= 1 && (
+                {/* Áudio — HLS e/ou nativo */}
+                {(hlsAudioTracks.length >= 2 || nativeAudioTracks.length >= 2) && (
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest font-black mb-3">Faixa de Áudio</p>
                     <button
@@ -2767,9 +2813,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                       <div className="flex items-center gap-2">
                         <Languages size={14} className="text-blue-400" />
                         <span>
-                          {currentAudioTrackId !== null
-                            ? (hlsAudioTracks.find(t => t.id === currentAudioTrackId)?.name || 'Áudio')
-                            : 'Áudio'}
+                          {hlsAudioTracks.length >= 2
+                            ? (currentAudioTrackId !== null ? (hlsAudioTracks.find(t => t.id === currentAudioTrackId)?.name || 'Áudio') : 'Áudio')
+                            : (currentNativeAudioId !== null ? (nativeAudioTracks.find(t => t.id === currentNativeAudioId)?.label || 'Áudio') : 'Áudio')}
                         </span>
                       </div>
                       <Settings size={16} className={`transition-transform duration-300 ${showAudioMenu ? 'rotate-90 text-blue-500' : 'text-gray-400'}`} />
@@ -2782,14 +2828,27 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-2 space-y-2 overflow-hidden px-1"
                         >
-                          {hlsAudioTracks.map(track => (
+                          {/* HLS tracks */}
+                          {hlsAudioTracks.length >= 2 && hlsAudioTracks.map(track => (
                             <button
-                              key={track.id}
+                              key={`hls-${track.id}`}
                               onClick={() => handleAudioTrackChange(track.id)}
                               className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-3 ${currentAudioTrackId === track.id ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                             >
                               <div className={`w-2 h-2 rounded-full shrink-0 ${currentAudioTrackId === track.id ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
                               <span className="flex-1 text-left">{track.name}</span>
+                              {track.lang && <span className="text-[10px] uppercase tracking-widest opacity-60">{track.lang}</span>}
+                            </button>
+                          ))}
+                          {/* Native MP4 tracks */}
+                          {nativeAudioTracks.length >= 2 && nativeAudioTracks.map(track => (
+                            <button
+                              key={`native-${track.id}`}
+                              onClick={() => handleNativeAudioTrackChange(track.id)}
+                              className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-3 ${currentNativeAudioId === track.id ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+                            >
+                              <div className={`w-2 h-2 rounded-full shrink-0 ${currentNativeAudioId === track.id ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
+                              <span className="flex-1 text-left">{track.label}</span>
                               {track.lang && <span className="text-[10px] uppercase tracking-widest opacity-60">{track.lang}</span>}
                             </button>
                           ))}
