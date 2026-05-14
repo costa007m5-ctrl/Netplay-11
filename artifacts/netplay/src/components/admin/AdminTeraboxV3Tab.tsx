@@ -383,11 +383,24 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
     return null;
   };
 
+  // Remove tags de grupo de lançamento do início/fim do filename
+  // Ex: "(AnimesTotais) Series.S01E65..." → "Series.S01E65..."
+  //     "[SubGrupo] Series.S01E65..."  → "Series.S01E65..."
+  const stripGroupTags = (filename: string): string =>
+    filename
+      // Remove tags entre parênteses ou colchetes no início
+      .replace(/^[\s._-]*[\(\[][^\)\]]{1,40}[\)\]][\s._-]*/g, '')
+      // Remove tags entre parênteses ou colchetes no final
+      .replace(/[\s._-]*[\(\[][^\)\]]{1,40}[\)\]][\s._-]*$/g, '')
+      .trim();
+
   // Extrai o nome do episódio do filename após o padrão SxxExx
-  // Ex: "Series.S01E65.Star.Warners.1080p.WEB-DL.mkv" → "Star Warners"
+  // Ex: "(AnimesTotais) Series.S01E65.Star.Warners.1080p.WEB-DL.mkv" → "Star Warners"
   const parseEpisodeName = (filename: string): string | null => {
     if (!filename) return null;
-    const name = filename.replace(/\.(mkv|mp4|avi|mov|webm|m4v|wmv|flv|ts|m3u8|m2ts|vob|mpg|mpeg)$/i, '');
+    // Remove extensão e tags de grupo antes de processar
+    let name = filename.replace(/\.(mkv|mp4|avi|mov|webm|m4v|wmv|flv|ts|m3u8|m2ts|vob|mpg|mpeg)$/i, '');
+    name = stripGroupTags(name);
     const seMatch = name.match(/[SsTt]\d{1,2}[\s._-]*[Ee]\d{1,3}[\s._-]+(.*)/);
     if (!seMatch) return null;
     let afterSE = seMatch[1];
