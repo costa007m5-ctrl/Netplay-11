@@ -99,13 +99,24 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     return movie.videoUrl2 || currentUrl;
   };
 
+  const defaultAvailable = hasAdminUrl || hasTeraboxUrl;
+  const defaultDesc = hasAdminUrl
+    ? 'Link configurado manualmente pelo admin. Melhor estabilidade garantida.'
+    : `Reproduz com a API nativa (${nativeLabel}) e a qualidade configurada ao adicionar o título.`;
+
+  const getDefaultUrl = (): string => {
+    const adminUrl = getAdminUrl();
+    if (hasAdminUrl) return adminUrl;
+    return convertTeraboxToApi(currentUrl, nativeApi);
+  };
+
   const options = [
     {
       id: 'admin',
       num: '01',
       title: 'Servidor Padrão',
-      subtitle: 'Administrativo',
-      desc: 'Link configurado manualmente pelo admin. Melhor estabilidade garantida.',
+      subtitle: hasAdminUrl ? 'Administrativo' : `Nativo: ${nativeLabel}`,
+      desc: defaultDesc,
       icon: Server,
       gradient: 'from-blue-600/12 to-blue-900/5',
       border: 'border-blue-500/20 hover:border-blue-400/50',
@@ -113,13 +124,13 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       iconColor: 'text-blue-400',
       badgeBg: 'bg-blue-500/20',
       badgeColor: 'text-blue-300',
-      badge: 'ADMIN',
+      badge: hasAdminUrl ? 'ADMIN' : nativeLabel,
       glowColor: 'shadow-blue-500/10',
-      available: hasAdminUrl,
-      unavailableMsg: 'Nenhum link administrativo configurado para este título.',
+      available: defaultAvailable,
+      unavailableMsg: 'Nenhum link configurado para este título.',
       action: () => {
         saveSelectedServer({ id: 'admin', playerStyle: 'netflix', altApi, nativeApi });
-        onPlay(getAdminUrl(), startTime, 'netflix');
+        onPlay(getDefaultUrl(), startTime, 'netflix');
       },
     },
     {
