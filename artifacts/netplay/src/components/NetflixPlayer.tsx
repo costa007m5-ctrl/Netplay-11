@@ -1804,23 +1804,64 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     setShowAudioMenu(false);
   };
 
-  const detectNativeAudioTracks = (video: HTMLVideoElement) => {
+  const snapshotNativeAudioTracks = (video: HTMLVideoElement) => {
     const tracks = (video as any).audioTracks as any;
-    if (!tracks || tracks.length <= 1) return;
+    if (!tracks || tracks.length < 2) return false;
     const list: { id: string; label: string; lang: string; enabled: boolean }[] = [];
     for (let i = 0; i < tracks.length; i++) {
       const t = tracks[i];
-      list.push({ id: t.id || String(i), label: t.label || t.language || `Faixa ${i + 1}`, lang: (t.language || '').toLowerCase(), enabled: t.enabled });
+      list.push({
+        id: t.id != null && t.id !== '' ? String(t.id) : String(i),
+        label: t.label || t.language || `Faixa ${i + 1}`,
+        lang: (t.language || '').toLowerCase(),
+        enabled: t.enabled,
+      });
     }
     setNativeAudioTracks(list);
-    const enabled = list.find(t => t.enabled);
-    if (enabled) setCurrentNativeAudioId(enabled.id);
-    // Auto-select Portuguese if present
-    const ptTrack = list.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.label.toLowerCase().includes('portugu') || t.label.toLowerCase().includes('pt'));
+    const enabledTrack = list.find(t => t.enabled) ?? list[0];
+    setCurrentNativeAudioId(enabledTrack.id);
+    // Auto-select Portuguese
+    const ptCodes = ['pt', 'pt-br', 'por', 'por-br', 'pb', 'pob', 'ptbr', 'portuguese'];
+    const ptTrack = list.find(t =>
+      ptCodes.includes(t.lang) ||
+      t.lang.startsWith('pt') ||
+      t.lang.startsWith('por') ||
+      t.label.toLowerCase().includes('portugu') ||
+      t.label.toLowerCase().includes('português')
+    );
     if (ptTrack && !ptTrack.enabled) {
-      handleNativeAudioTrackChange(ptTrack.id);
+      // Directly set without calling handleNativeAudioTrackChange to avoid stale closure
+      const rawTracks = (video as any).audioTracks as any;
+      for (let i = 0; i < rawTracks.length; i++) rawTracks[i].enabled = false;
+      const rawPt = [...Array(rawTracks.length)].map((_, i) => rawTracks[i]).find((t: any) =>
+        String(t.id ?? i) === ptTrack.id || String(i) === ptTrack.id
+      );
+      if (rawPt) rawPt.enabled = true;
+      setCurrentNativeAudioId(ptTrack.id);
     }
-    console.log('[NetflixPlayer] audioTracks nativos detectados:', list);
+    console.log('[NetflixPlayer] MKV/MP4 audioTracks detectados:', list);
+    return true;
+  };
+
+  const detectNativeAudioTracks = (video: HTMLVideoElement) => {
+    // Try immediately — works for MP4
+    if (snapshotNativeAudioTracks(video)) return;
+    // MKV: tracks appear asynchronously via addtrack event
+    const audioTracks = (video as any).audioTracks as any;
+    if (!audioTracks) return;
+    const onAddTrack = () => {
+      snapshotNativeAudioTracks(video);
+    };
+    audioTracks.addEventListener?.('addtrack', onAddTrack);
+    // Also poll for up to 5 seconds for MKV files whose tracks load late
+    let attempts = 0;
+    const poll = setInterval(() => {
+      attempts++;
+      if (snapshotNativeAudioTracks(video) || attempts >= 10) {
+        clearInterval(poll);
+        audioTracks.removeEventListener?.('addtrack', onAddTrack);
+      }
+    }, 500);
   };
 
   const handleQualityChange = (levelId: number | string) => {
