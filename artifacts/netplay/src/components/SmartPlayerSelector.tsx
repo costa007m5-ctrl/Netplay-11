@@ -69,7 +69,19 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
 
   const currentUrl = episodeUrl || movie.videoUrl || '';
   const hasTeraboxUrl = isDynamicRef(currentUrl);
-  const hasAdminUrl = !!movie.videoUrl2;
+
+  // Para episódios: hasAdminUrl só é verdadeiro se o episódio específico tem videoUrl2 próprio.
+  // Isso evita usar o videoUrl2 da série (nível global) como URL do episódio errado.
+  const hasAdminUrl = (() => {
+    if (episodeUrl && movie.type === 'series' && movie.episodes) {
+      const ep = (movie.episodes as any[]).find(
+        (e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl
+      );
+      // Só considera admin se o episódio tem videoUrl2 diferente do episodeUrl em si
+      return !!(ep?.videoUrl2 && ep.videoUrl2 !== episodeUrl);
+    }
+    return !!movie.videoUrl2;
+  })();
 
   const backdropUrl = movie.backdrop_path?.startsWith('http')
     ? movie.backdrop_path
@@ -91,12 +103,17 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
   const altLabel = altApi === 'v3' ? 'API 03' : 'API 01';
   const isResuming = startTime > 5;
 
+  // Retorna o URL admin do episódio específico (nunca cai no videoUrl2 da série)
   const getAdminUrl = (): string => {
     if (episodeUrl && movie.type === 'series' && movie.episodes) {
-      const ep = movie.episodes.find(e => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl);
-      if (ep?.videoUrl2) return ep.videoUrl2;
+      const ep = (movie.episodes as any[]).find(
+        (e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl
+      );
+      if (ep?.videoUrl2 && ep.videoUrl2 !== episodeUrl) return ep.videoUrl2;
+      // Episódio sem videoUrl2 próprio → usa o próprio episodeUrl convertido para a API nativa
+      return convertTeraboxToApi(episodeUrl, nativeApi);
     }
-    return movie.videoUrl2 || currentUrl;
+    return movie.videoUrl2 || convertTeraboxToApi(currentUrl, nativeApi);
   };
 
   const defaultAvailable = hasAdminUrl || hasTeraboxUrl;
@@ -105,9 +122,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     : `Reproduz com a API nativa (${nativeLabel}) e a qualidade configurada ao adicionar o título.`;
 
   const getDefaultUrl = (): string => {
-    const adminUrl = getAdminUrl();
-    if (hasAdminUrl) return adminUrl;
-    return convertTeraboxToApi(currentUrl, nativeApi);
+    return getAdminUrl();
   };
 
   const options = [

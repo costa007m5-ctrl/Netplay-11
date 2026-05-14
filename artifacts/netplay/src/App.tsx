@@ -136,17 +136,24 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
       ? (movie.logo_path.startsWith('http') ? movie.logo_path : `https://image.tmdb.org/t/p/w300/${movie.logo_path}`)
       : null;
 
-  // Latest series added in last 30 days — ONE entry per series, sorted by most recent
+  // Retorna a data mais recente entre created_at e updated_at do item
+  const getRecentDate = (m: any): number => {
+    const c = m.created_at ? new Date(m.created_at).getTime() : 0;
+    const u = m.updated_at ? new Date(m.updated_at).getTime() : 0;
+    return Math.max(c, u);
+  };
+
+  // Latest series added OR updated in last 30 days — ONE entry per series, sorted by most recent
   const latestSeries = useMemo(() => {
     return myMovies
-      .filter((m: any) => m.type === 'series' && m.created_at && (now - new Date(m.created_at).getTime()) <= THIRTY_DAYS_MS)
-      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .filter((m: any) => m.type === 'series' && (now - getRecentDate(m)) <= THIRTY_DAYS_MS)
+      .sort((a: any, b: any) => getRecentDate(b) - getRecentDate(a));
   }, [myMovies]);
 
   const latestMovies = useMemo(() => {
     return myMovies
-      .filter((m: any) => m.type !== 'series' && m.created_at && (now - new Date(m.created_at).getTime()) <= THIRTY_DAYS_MS)
-      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .filter((m: any) => m.type !== 'series' && (now - getRecentDate(m)) <= THIRTY_DAYS_MS)
+      .sort((a: any, b: any) => getRecentDate(b) - getRecentDate(a));
   }, [myMovies]);
 
   const heroItems = activeTab === 'series' ? latestSeries.slice(0, 6) : latestMovies.slice(0, 6);
@@ -228,7 +235,7 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
                         )}
                         {!isSeries && movie.runtime && <span className="text-gray-400 text-[8px] font-bold uppercase tracking-widest">{movie.runtime} min</span>}
                         {movie.vote_average > 0 && <span className="text-yellow-400 text-[8px] font-black">★ {movie.vote_average.toFixed(1)}</span>}
-                        <span className="text-gray-500 text-[8px] font-bold uppercase tracking-widest ml-1">{formatRelativeDate(movie.created_at)}</span>
+                        <span className="text-gray-500 text-[8px] font-bold uppercase tracking-widest ml-1">{formatRelativeDate(movie.updated_at || movie.created_at)}</span>
                       </div>
                       <div className="flex items-center gap-2.5">
                         {onSelectMovie && (
@@ -361,7 +368,7 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
                       {/* Date badge */}
                       <div className="absolute top-3 right-3">
                         <span className="bg-black/60 backdrop-blur-sm text-white/60 text-[7px] font-bold uppercase px-2 py-1 rounded-lg border border-white/[0.08] tracking-wide">
-                          {formatRelativeDate(movie.created_at)}
+                          {formatRelativeDate(movie.updated_at || movie.created_at)}
                         </span>
                       </div>
 
@@ -3706,7 +3713,8 @@ export default function App() {
         collection_name: movie.collection_name,
         collection_poster_path: movie.collection_poster_path,
         collection_logo_path: movie.collection_logo_path,
-        preferred_quality: (movie as any).preferredQuality || (movie as any).preferred_quality || null
+        preferred_quality: (movie as any).preferredQuality || (movie as any).preferred_quality || null,
+        updated_at: new Date().toISOString()
       };
 
       if (movie.type === 'series' && Array.isArray(movie.episodes)) {
