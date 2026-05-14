@@ -633,41 +633,93 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
   }, []);
 
+  // Remote Playback API (Chromecast / AirPlay / DLNA)
   useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (!videoRef.current) return;
-      
+    const video = videoRef.current as any;
+    if (!video || !video.remote) return;
+
+    const onConnecting = () => setIsCasting(true);
+    const onConnect = () => setIsCasting(true);
+    const onDisconnect = () => setIsCasting(false);
+
+    video.remote.addEventListener('connecting', onConnecting);
+    video.remote.addEventListener('connect', onConnect);
+    video.remote.addEventListener('disconnect', onDisconnect);
+
+    // Monitora disponibilidade de dispositivos na rede
+    video.remote.watchAvailability((available: boolean) => {
+      setCanCast(available);
+    }).catch(() => {
+      // watchAvailability não suportado — mostra botão de cast assim mesmo
+      setCanCast(true);
+    });
+
+    return () => {
       try {
-        if (document.hidden) {
-          // Quando a aba/app ficar oculta, tentar ativar o PiP
-          // Apenas se o vídeo estiver tocando
-          if (!videoRef.current.paused && document.pictureInPictureEnabled) {
-            // Em navegadores que suportam autoPictureInPicture, isso já será tratado nativamente.
-            // Aqui estamos apenas tentando forçar caso seja possível nativamente.
-            // Ignoraremos o erro de permissão.
-            if (!(videoRef.current as any).autoPictureInPicture) {
-                await videoRef.current.requestPictureInPicture();
-            }
-          }
-        } else {
-          // Quando voltar para a aba, sair do PiP se estiver ativo
-          // Para navegadores com autoPictureInPicture nativo, ele geralmente sai automaticamente,
-          // Então verificaremos.
-          if (document.pictureInPictureElement) {
-             await document.exitPictureInPicture();
+        video.remote.removeEventListener('connecting', onConnecting);
+        video.remote.removeEventListener('connect', onConnect);
+        video.remote.removeEventListener('disconnect', onDisconnect);
+        video.remote.cancelWatchAvailability().catch(() => {});
+      } catch {}
+    };
+  }, [sessionKey]);
+
+  // PiP automático: entra no mini player quando o usuário sai da aba ou do app
+  useEffect(() => {
+    const enterPiP = async () => {
+      const video = videoRef.current;
+      if (!video || video.paused) return;
+      try {
+        // Tenta API padrão (Chrome/Firefox/Edge desktop e Android Chrome)
+        if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+          await video.requestPictureInPicture();
+          return;
+        }
+        // Fallback Safari (webkit)
+        const v = video as any;
+        if (v.webkitSupportsPresentationMode && typeof v.webkitSetPresentationMode === 'function') {
+          if (v.webkitPresentationMode !== 'picture-in-picture') {
+            v.webkitSetPresentationMode('picture-in-picture');
           }
         }
-      } catch (error: any) {
-        // Ignora erro de "user gesture required" (comportamento nativo bloqueado)
-        if (error.name !== 'NotAllowedError') {
-           console.warn('Erro ao processar Picture-in-Picture:', error);
+      } catch (err: any) {
+        if (err.name !== 'NotAllowedError') {
+          console.warn('PiP auto-enter error:', err);
         }
       }
     };
 
+    const exitPiP = async () => {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+          return;
+        }
+        const v = videoRef.current as any;
+        if (v?.webkitPresentationMode === 'picture-in-picture') {
+          v.webkitSetPresentationMode('inline');
+        }
+      } catch (err: any) {
+        console.warn('PiP exit error:', err);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        enterPiP();
+      } else {
+        exitPiP();
+      }
+    };
+
+    // pagehide cobre o caso de sair do navegador/app no mobile
+    const handlePageHide = () => { enterPiP(); };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
     };
   }, []);
 
@@ -1626,13 +1678,23 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
   };
 
-  const toggleCast = () => {
-    if (videoRef.current && (videoRef.current as any).remote) {
-      (videoRef.current as any).remote.prompt().catch((err: any) => {
-        console.warn("Casting failed or dismissed:", err);
-        // If native prompt fails, show our custom sharing UI
+  const toggleCast = async () => {
+    const video = videoRef.current as any;
+    if (video?.remote) {
+      try {
+        // Se já está transmitindo, desconecta
+        if (isCasting) {
+          await video.remote.disconnect?.();
+          setIsCasting(false);
+          return;
+        }
+        // Abre o seletor nativo de dispositivos (Chromecast / AirPlay / DLNA)
+        await video.remote.prompt();
+      } catch (err: any) {
+        console.warn("Cast prompt failed or dismissed:", err);
+        // Fallback: mostra QR de compartilhamento
         setShowTvShare(true);
-      });
+      }
     } else {
       setShowTvShare(true);
     }
