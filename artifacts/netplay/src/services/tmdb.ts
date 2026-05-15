@@ -76,8 +76,8 @@ export const getMovieLogo = async (id: number, type: 'movie' | 'tv' = 'movie'): 
     const logos = data.logos || [];
     if (logos.length === 0) { logoCache.set(cacheKey, null); return null; }
 
-    const logo = logos.find((l: any) => l.iso_639_1 === 'pt') ||
-                 logos.find((l: any) => l.iso_639_1 === 'en') ||
+    const logo = logos.find((l: any) => l.iso_639_1 === 'en') ||
+                 logos.find((l: any) => l.iso_639_1 === 'pt') ||
                  logos[0];
 
     const url = logo ? `https://image.tmdb.org/t/p/w300${logo.file_path}` : null;

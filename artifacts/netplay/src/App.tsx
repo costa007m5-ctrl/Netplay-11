@@ -4694,13 +4694,23 @@ export default function App() {
             skipped++;
           }
         } else {
-          const primaryType = item.mediaType as 'movie' | 'tv';
-          const fallbackType: 'movie' | 'tv' = primaryType === 'tv' ? 'movie' : 'tv';
-          let logo = await getMovieLogo(item.id as number, primaryType);
-          if (!logo) logo = await getMovieLogo(item.id as number, fallbackType);
+          // Busca direta no TMDB (sem cache) tentando ambos os endpoints em paralelo
+          const tmdbId = item.id as number;
+          const [movieRes, tvRes] = await Promise.allSettled([
+            tmdb.get(`/movie/${tmdbId}/images`, { params: { include_image_language: 'en,pt,null' } }),
+            tmdb.get(`/tv/${tmdbId}/images`, { params: { include_image_language: 'en,pt,null' } }),
+          ]);
+          const allLogos: any[] = [
+            ...(movieRes.status === 'fulfilled' ? movieRes.value.data.logos || [] : []),
+            ...(tvRes.status === 'fulfilled' ? tvRes.value.data.logos || [] : []),
+          ];
+          const best = allLogos.find((l: any) => l.iso_639_1 === 'en') ||
+                       allLogos.find((l: any) => l.iso_639_1 === 'pt') ||
+                       allLogos[0];
+          const logo = best ? `https://image.tmdb.org/t/p/w500${best.file_path}` : null;
           if (logo) {
-            await supabase.from('movies').update({ logo_path: logo }).eq('id', item.id);
-            setMyMovies(prev => prev.map(m => m.id === item.id ? { ...m, logo_path: logo } : m));
+            await supabase.from('movies').update({ logo_path: logo }).eq('id', tmdbId);
+            setMyMovies(prev => prev.map(m => m.id === tmdbId ? { ...m, logo_path: logo } : m));
             updated++;
           } else {
             skipped++;
