@@ -4627,9 +4627,7 @@ export default function App() {
     if (logoScannerCancelRef.current) return;
     logoScannerCancelRef.current = false;
 
-    type ScanItem = { id: number; label: string; mediaType: 'movie' | 'tv' } | { id: string; label: string; mediaType: 'collection'; collectionId: number; movieIds: number[] };
-
-    const items: ScanItem[] = [];
+    const items: Array<{ id: number; label: string; mediaType: 'movie' | 'tv' } | { id: string; label: string; mediaType: 'collection'; collectionId: number; movieIds: number[] }> = [];
 
     const hasMissingLogo = (m: Movie) => !m.logo_path || m.logo_path === '' || m.logo_path.includes('placeholder');
 
@@ -4649,7 +4647,7 @@ export default function App() {
 
     // Coleções
     if (scope === 'collections' || scope === 'all') {
-      const collMap = new Map<number, { name: string; movieIds: number[]; hasLogo: boolean }>();
+      const collMap: Map<number, { name: string; movieIds: number[]; hasLogo: boolean }> = new Map();
       for (const m of myMovies) {
         if (!m.collection_id) continue;
         if (!collMap.has(m.collection_id)) {
