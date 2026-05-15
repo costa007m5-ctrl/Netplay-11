@@ -972,13 +972,6 @@ const HomeView = React.memo(({
            </div>
         </section>
 
-        {/* ── Franchise & Collection Carousels ── filmes reais da biblioteca por saga */}
-        {franchises && franchises.length > 0 && (
-          <Suspense fallback={null}>
-            <FranchiseCarousels franchises={franchises} onSelectMovie={handleSelectMovie} />
-          </Suspense>
-        )}
-
         {/* 🌟 MEGA UI: LIVE CHANNELS / TRAILER HUB */}
         {newMovies.length > 0 && (
           <section className="px-4 md:px-12 mb-12">
@@ -1685,6 +1678,69 @@ const UniverseTabView = React.memo(({
                 </div>
               </div>
             </div>
+
+            {/* ───────── COLEÇÕES COM BANNER ───────── */}
+            {!searchTerm && franchises && franchises.length > 0 && (
+              <div className="mt-6">
+                <div className="px-4 flex items-center gap-2 mb-3">
+                  <LayoutGrid size={13} style={{ color: '#e53e3e' }} />
+                  <div>
+                    <p className="text-white font-black uppercase leading-none" style={{ fontSize: 13, letterSpacing: '-0.01em' }}>Coleções</p>
+                    <p className="font-bold uppercase" style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em' }}>Clique para explorar a coleção</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 pb-1">
+                  {franchises.filter((f: any) => (f.movies?.length || 0) >= 2).map((f: any) => (
+                    <motion.div
+                      key={`col-${f.id}`}
+                      whileTap={{ scale: 0.96 }}
+                      className="flex-none relative rounded-2xl overflow-hidden cursor-pointer"
+                      style={{ width: '72vw', maxWidth: 280, height: '42vw', maxHeight: 165, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}
+                      onClick={() => navigate(`/universe/${f.id}`)}
+                    >
+                      <img
+                        src={f.backdrop?.startsWith('http') ? f.backdrop : f.backdrop ? `https://image.tmdb.org/t/p/w780${f.backdrop}` : (f.poster?.startsWith('http') ? f.poster : f.poster ? `https://image.tmdb.org/t/p/w342${f.poster}` : '')}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{ opacity: 0.75 }}
+                        referrerPolicy="no-referrer"
+                        alt={f.name}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }}
+                      />
+                      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.3) 55%, transparent 100%)' }} />
+                      {f.color && <div className="absolute inset-0" style={{ background: `${f.color}18` }} />}
+                      <div className="absolute inset-x-0 bottom-0 p-3">
+                        {getLogoForFranchise(f) ? (
+                          <img src={getLogoForFranchise(f)!} alt={f.name} className="h-7 object-contain drop-shadow-2xl mb-1.5" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                        ) : (
+                          <p className="text-white font-black uppercase leading-none mb-1.5" style={{ fontSize: 16, letterSpacing: '-0.02em', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>{f.name}</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="font-black uppercase text-white/70" style={{ fontSize: 9 }}>{f.movies?.length || 0} títulos</span>
+                          <div style={{ width: 1, height: 10, background: 'rgba(255,255,255,0.2)' }} />
+                          <span className="font-black uppercase" style={{ fontSize: 9, color: '#fc8181' }}>Ver Saga →</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ───────── SAGAS & COLEÇÕES (carrosseis por franquia) ───────── */}
+            {!searchTerm && franchises && franchises.length > 0 && (
+              <div className="mt-5">
+                <div className="px-4 flex items-center gap-2 mb-3">
+                  <List size={13} style={{ color: '#e53e3e' }} />
+                  <div>
+                    <p className="text-white font-black uppercase leading-none" style={{ fontSize: 13, letterSpacing: '-0.01em' }}>Sagas & Coleções</p>
+                    <p className="font-bold uppercase" style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em' }}>Sua biblioteca organizada por franquias</p>
+                  </div>
+                </div>
+                <Suspense fallback={null}>
+                  <FranchiseCarousels franchises={franchises} onSelectMovie={handleSelectMovie} />
+                </Suspense>
+              </div>
+            )}
 
             {/* Quiz modal */}
             <AnimatePresence>
