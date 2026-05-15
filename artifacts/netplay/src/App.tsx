@@ -4495,8 +4495,23 @@ export default function App() {
   }, [navigate, location.state]);
 
   const handleSmartPlayEpisode = useCallback((movie: any, episodeUrl: string, episodeIndex: number) => {
+    // If the URL doesn't need TeraBox APIs, play immediately without showing the server selector modal
+    if (!isDynamicRef(episodeUrl)) {
+      handlePlayMovie(movie, episodeUrl, 0, undefined, episodeIndex);
+      return;
+    }
+
+    // If the user already has a saved server preference, honour it automatically
+    const savedPref = getSelectedServer();
+    if (savedPref) {
+      const resolvedUrl = convertTeraboxToApi(episodeUrl, savedPref.altApi);
+      handlePlayMovie(movie, resolvedUrl, 0, savedPref.playerStyle, episodeIndex);
+      return;
+    }
+
+    // Needs TeraBox and no saved preference → show selector
     setSmartPlayState({ movie, episodeUrl, episodeIndex });
-  }, []);
+  }, [handlePlayMovie]);
 
   const closeMovieDetails = () => {
     navigate(state?.backgroundLocation?.pathname || '/menu');
