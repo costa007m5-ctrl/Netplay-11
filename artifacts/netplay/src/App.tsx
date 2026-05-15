@@ -76,20 +76,309 @@ const FRANCHISES: {
   logoMovieId?: number,
   tmdbCollectionId?: number,
 }[] = [
-  { id: 'marvel', name: 'Marvel', keywords: ['marvel', 'avengers', 'vingadores', 'spider-man', 'spiderman', 'iron man', 'thor', 'captain america', 'capitão américa', 'black panther', 'pantera negra', 'guardians of the galaxy', 'guardiões da galáxia', 'x-men'], color: '#e62429', bg: 'bg-[#0f0f0f]', accent: 'text-red-600', icon: Zap, description: 'O Universo Cinematográfico mais épico da história. Uma saga interligada de heróis lutando pela sobrevivência da humanidade contra ameaças universais.', backdrop: 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=1920&q=80&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Marvel_Logo.svg', logoMovieId: 299534 },
-  { id: 'star-wars', name: 'Star Wars', keywords: ['star wars', 'mandalorian', 'obi-wan', 'skywalker', 'jedi', 'sith', 'andor'], color: '#ffe81f', bg: 'bg-black', accent: 'text-yellow-400', icon: Ghost, description: 'Uma galáxia muito, muito distante... Acompanhe a eterna luta entre a Luz e o Lado Sombrio pela liberdade de todos os sistemas estelares.', backdrop: 'https://images.unsplash.com/photo-1506443432602-ac2fcd6f54e0?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6c/Star_Wars_Logo.svg', logoMovieId: 11, tmdbCollectionId: 10 },
-  { id: 'dc', name: 'DC Comics', keywords: ['dc comics', 'batman', 'superman', 'wonder woman', 'mulher maravilha', 'justice league', 'liga da justiça', 'aquaman', 'the flash', 'joker', 'coringa'], color: '#0476f2', bg: 'bg-[#000d1a]', accent: 'text-blue-500', icon: Shield, description: 'Onde nascem as lendas e os deuses caminham. De Gotham a Metrópolis, os maiores vigilantes do multiverso protegem a justiça.', backdrop: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=1920&q=80&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3d/DC_Comics_logo.svg', logoMovieId: 297762 },
-  { id: 'harry-potter', name: 'Harry Potter', keywords: ['harry potter', 'pedra filosofal', 'câmara secreta', 'prisioneiro de azkaban', 'cálice de fogo', 'ordem da fênix', 'enigma do príncipe', 'relíquias da morte', 'animais fantásticos'], color: '#ffd700', bg: 'bg-[#0a0a0c]', accent: 'text-yellow-500', icon: Sparkles, description: 'A magia vive aqui. Entre no mundo bruxo e descubra os segredos de Hogwarts na batalha definitiva contra o Lorde das Trevas.', backdrop: 'https://images.unsplash.com/photo-1481026469463-66327c86e544?w=1920&q=80&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Harry_Potter_wordmark.svg', logoMovieId: 671, tmdbCollectionId: 1241 },
-  { id: 'lord-of-the-rings', name: 'Terra Média', keywords: ['senhor dos anéis', 'lord of the rings', 'hobbit', 'sociedade do anel', 'duas torres', 'retorno do rei'], color: '#9d7b3c', bg: 'bg-[#0f0e0d]', accent: 'text-[#d4af37]', icon: History, description: 'A jornada épica de Tolkien pela Terra Média. Três anéis para os Reis-Elfos... e um para o Senhor do Escuro.', backdrop: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/22/The_Lord_of_the_Rings_logo.svg', logoMovieId: 120, tmdbCollectionId: 119 },
-  { id: 'fast-furious', name: 'Fast & Furious', keywords: ['velozes e furiosos', 'fast & furious', 'toretto'], color: '#d00', bg: 'bg-[#0a0a0a]', accent: 'text-red-700', icon: Zap, description: 'Velocidade, família e adrenalina pura. Acompanhe Dominic Toretto e sua equipe em missões impossíveis ao redor do mundo.', backdrop: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Fast_%26_Furious_logo.png', logoMovieId: 168259, tmdbCollectionId: 9485 },
-  { id: 'disney', name: 'Disney Classics', keywords: ['rei leão', 'lion king', 'aladdin', 'pequena sereia', 'bela e a fera', 'cinderela', 'branca de neve', 'pinóquio', 'frozen'], color: '#009dff', bg: 'bg-[#000a1a]', accent: 'text-blue-300', icon: Sparkles, description: 'Onde os sonhos se tornam realidade. Clássicos atemporais que moldaram gerações em contos de fadas e aventuras mágicas.', backdrop: 'https://images.unsplash.com/photo-1605487903301-a1e109c44e53?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', logoMovieId: 109445 },
-  { id: 'pixar', name: 'Pixar', keywords: ['toy story', 'procurando nemo', 'finding nemo', 'monstros s.a', 'carro', 'cars', 'divertida mente', 'inside out', 'coco', 'viva a vida'], color: '#00aae4', bg: 'bg-[#00121a]', accent: 'text-blue-400', icon: Sparkles, description: 'Imaginação sem limites em cada frame. Pioneiros na animação digital, contando histórias que tocam o coração de jovens e adultos.', backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Pixar_logo.svg', logoMovieId: 862 },
-  { id: 'national', name: 'National Geographic', keywords: ['cosmos', 'natureza', 'terra', 'vida', 'ocean', 'planeta', 'national geographic'], color: '#ffcc00', bg: 'bg-[#1a1600]', accent: 'text-yellow-500', icon: Sparkles, description: 'Explorando nosso mundo misterioso e as maravilhas da natureza.', backdrop: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/National_Geographic_logo_text.svg' },
-  { id: 'horror', name: 'Terror & Horror', keywords: ['halloween', 'pânico', 'scream', 'invocação do mal', 'conjuring', 'it a coisa', 'sexta-feira 13', 'friday the 13th', 'terror', 'horror', 'sobrenatural'], color: '#ff0000', bg: 'bg-[#050000]', accent: 'text-red-600', icon: Ghost, description: 'Enfrente seus maiores medos.', backdrop: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?w=1920&q=90&fit=crop', logoMovieId: 436270 },
-  { id: 'adventure', name: 'Aventura', keywords: ['aventura', 'adventure', 'exploração', 'journey', 'indiana jones', 'jumanji', 'piratas do caribe'], color: '#22c55e', bg: 'bg-[#061a0f]', accent: 'text-green-500', icon: Map, description: 'Grandes jornadas em terras desconhecidas.', backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop', logoMovieId: 89 },
-  { id: 'fantasy', name: 'Fantasia', keywords: ['fantasia', 'fantasy', 'magia', 'magic', 'bruxo', 'wizard', 'dragão', 'dragon'], color: '#a855f7', bg: 'bg-[#150a1f]', accent: 'text-purple-500', icon: Sparkles, description: 'Onde o impossível ganha vida.', backdrop: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1920&q=90&fit=crop', logoMovieId: 120 },
-  { id: 'action', name: 'Ação', keywords: ['ação', 'action', 'combate', 'explosão', 'tiro', 'gun', 'fight', 'luta'], color: '#ef4444', bg: 'bg-[#1a0505]', accent: 'text-red-500', icon: Zap, description: 'Pura adrenalina e combates épicos.', backdrop: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&q=80&fit=crop', logoMovieId: 299534 },
-  { id: 'anime', name: 'Mundo Anime', keywords: ['dragon ball', 'naruto', 'one piece', 'gibi', 'anime', 'mangá', 'manga'], color: '#ff6600', bg: 'bg-[#1a0f00]', accent: 'text-orange-500', icon: Zap, description: 'A arte e a cultura japonesa em sua forma mais vibrante.', backdrop: 'https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=1920&q=90&fit=crop' },
+  {
+    id: 'marvel', name: 'Marvel', color: '#e62429', bg: 'bg-[#0f0f0f]', accent: 'text-red-600', icon: Zap,
+    description: 'O Universo Cinematográfico mais épico da história. Uma saga interligada de heróis lutando pela sobrevivência da humanidade.',
+    backdrop: 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=1920&q=80&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Marvel_Logo.svg', logoMovieId: 299534,
+    keywords: [
+      'marvel', 'mcu',
+      'avengers', 'vingadores', 'infinity war', 'guerra infinita', 'endgame',
+      'spider-man', 'spiderman', 'homem-aranha', 'homem aranha', 'peter parker',
+      'iron man', 'homem de ferro', 'tony stark',
+      'thor', 'asgard', 'ragnarok', 'amor e trovão',
+      'captain america', 'capitão américa', 'capitão america', 'steve rogers', 'guerra civil',
+      'black panther', 'pantera negra', 'wakanda',
+      'guardians of the galaxy', 'guardiões da galáxia', 'guardioes da galaxia',
+      'x-men', 'x men', 'mutantes', 'xavier',
+      'doctor strange', 'doutor estranho', 'multiverse',
+      'black widow', 'viúva negra', 'viuda negra', 'natasha',
+      'hawkeye', 'gavião arqueiro', 'olho de falcão',
+      'ant-man', 'homem-formiga', 'homem formiga', 'scott lang',
+      'eternals', 'eternos',
+      'shang-chi', 'shang chi',
+      'loki', 'wandavision', 'wanda', 'scarlet witch', 'feiticeira escarlate',
+      'moon knight', 'cavaleiro da lua',
+      'she-hulk', 'ms. marvel', 'ms marvel',
+      'deadpool', 'wolverine',
+      'hulk', 'bruce banner',
+      'nick fury', 'shield', 's.h.i.e.l.d.',
+      'thor: ragnarok', 'thor: o mundo sombrio', 'thor: amor',
+      'pantera negra: wakanda', 'doutor estranho no multiverso',
+      'captain marvel', 'capitã marvel',
+      'what if', 'secret invasion',
+    ],
+  },
+  {
+    id: 'star-wars', name: 'Star Wars', color: '#ffe81f', bg: 'bg-black', accent: 'text-yellow-400', icon: Ghost,
+    description: 'Uma galáxia muito, muito distante... A eterna luta entre a Luz e o Lado Sombrio.',
+    backdrop: 'https://images.unsplash.com/photo-1506443432602-ac2fcd6f54e0?w=1920&q=90&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6c/Star_Wars_Logo.svg', logoMovieId: 11, tmdbCollectionId: 10,
+    keywords: [
+      'star wars', 'guerra nas estrelas',
+      'mandalorian', 'the mandalorian',
+      'obi-wan', 'obi wan', 'kenobi',
+      'skywalker', 'jedi', 'sith',
+      'andor', 'rogue one',
+      'darth vader', 'dark vader', 'palpatine',
+      'yoda', 'clone wars', 'the clone wars',
+      'bad batch', 'ahsoka', 'ashoka',
+      'force awakens', 'despertar da força',
+      'last jedi', 'últimos jedi',
+      'rise of skywalker', 'ascensão skywalker',
+      'phantom menace', 'ameaça fantasma',
+      'attack of the clones', 'ataque dos clones',
+      'revenge of the sith', 'vingança dos sith',
+    ],
+  },
+  {
+    id: 'dc', name: 'DC Comics', color: '#0476f2', bg: 'bg-[#000d1a]', accent: 'text-blue-500', icon: Shield,
+    description: 'Onde nascem as lendas. De Gotham a Metrópolis, os maiores vigilantes do multiverso protegem a justiça.',
+    backdrop: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=1920&q=80&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3d/DC_Comics_logo.svg', logoMovieId: 297762,
+    keywords: [
+      'dc comics', 'dc universe', 'dceu',
+      'batman', 'bruce wayne', 'gotham', 'knight', 'cavaleiro',
+      'superman', 'clark kent', 'metropolis', 'homem de aço', 'man of steel',
+      'wonder woman', 'mulher-maravilha', 'mulher maravilha', 'diana prince',
+      'justice league', 'liga da justiça',
+      'aquaman', 'arthur curry',
+      'the flash', 'o flash', 'flash', 'barry allen',
+      'joker', 'coringa',
+      'shazam',
+      'suicide squad', 'esquadrão suicida', 'esquadrao suicida',
+      'birds of prey', 'aves de rapina',
+      'cyborg', 'green lantern', 'lanterna verde',
+      'black adam', 'adão negro',
+      'blue beetle', 'besouro azul',
+      'harley quinn',
+    ],
+  },
+  {
+    id: 'harry-potter', name: 'Harry Potter', color: '#ffd700', bg: 'bg-[#0a0a0c]', accent: 'text-yellow-500', icon: Sparkles,
+    description: 'A magia vive aqui. Entre no mundo bruxo e descubra os segredos de Hogwarts.',
+    backdrop: 'https://images.unsplash.com/photo-1481026469463-66327c86e544?w=1920&q=80&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Harry_Potter_wordmark.svg', logoMovieId: 671, tmdbCollectionId: 1241,
+    keywords: [
+      'harry potter', 'hogwarts',
+      'pedra filosofal', 'philosopher\'s stone', 'sorcerer\'s stone',
+      'câmara secreta', 'chamber of secrets',
+      'prisioneiro de azkaban', 'prisoner of azkaban', 'azkaban',
+      'cálice de fogo', 'goblet of fire',
+      'ordem da fênix', 'order of the phoenix',
+      'enigma do príncipe', 'half-blood prince',
+      'relíquias da morte', 'deathly hallows',
+      'animais fantásticos', 'fantastic beasts',
+      'voldemort', 'hermione', 'dumbledore', 'malfoy', 'sirius', 'snape',
+    ],
+  },
+  {
+    id: 'lord-of-the-rings', name: 'Terra Média', color: '#9d7b3c', bg: 'bg-[#0f0e0d]', accent: 'text-[#d4af37]', icon: History,
+    description: 'A jornada épica de Tolkien pela Terra Média. Três anéis para os Reis-Elfos...',
+    backdrop: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=90&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/2/22/The_Lord_of_the_Rings_logo.svg', logoMovieId: 120, tmdbCollectionId: 119,
+    keywords: [
+      'senhor dos anéis', 'lord of the rings',
+      'hobbit', 'shire', 'anel do poder', 'rings of power',
+      'sociedade do anel', 'fellowship',
+      'duas torres', 'two towers',
+      'retorno do rei', 'return of the king',
+      'tolkien', 'gandalf', 'frodo', 'aragorn', 'legolas', 'bilbo',
+    ],
+  },
+  {
+    id: 'fast-furious', name: 'Velozes & Furiosos', color: '#d00', bg: 'bg-[#0a0a0a]', accent: 'text-red-700', icon: Zap,
+    description: 'Velocidade, família e adrenalina pura.',
+    backdrop: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=90&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Fast_%26_Furious_logo.png', logoMovieId: 168259, tmdbCollectionId: 9485,
+    keywords: [
+      'velozes e furiosos', 'velozes & furiosos',
+      'fast & furious', 'fast and furious', 'furious',
+      'toretto', 'vin diesel', 'hobbs', 'shaw',
+      'fast five', 'fast six', 'fast seven', 'f9',
+      'velocidade furiosa',
+    ],
+  },
+  {
+    id: 'jurassic', name: 'Jurassic Park', color: '#22c55e', bg: 'bg-[#051a05]', accent: 'text-green-400', icon: Zap,
+    description: 'A vida encontra um jeito. Dinossauros voltam a dominar a Terra.',
+    backdrop: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=1920&q=90&fit=crop',
+    logo: undefined, logoMovieId: 329, tmdbCollectionId: 328,
+    keywords: [
+      'jurassic park', 'jurassic world', 'jurassic',
+      'parque dos dinossauros', 'mundo dos dinossauros',
+      'dinossauro', 'dinosaur',
+      'velociraptor', 't-rex',
+    ],
+  },
+  {
+    id: 'mission-impossible', name: 'Missão Impossível', color: '#ff4500', bg: 'bg-[#1a0500]', accent: 'text-orange-500', icon: Zap,
+    description: 'A missão, caso decida aceitá-la...',
+    backdrop: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&q=80&fit=crop',
+    logo: undefined, logoMovieId: 954, tmdbCollectionId: 87359,
+    keywords: [
+      'missão impossível', 'mission impossible', 'mission: impossible',
+      'ethan hunt', 'imf',
+    ],
+  },
+  {
+    id: 'john-wick', name: 'John Wick', color: '#ffd700', bg: 'bg-[#0a0a00]', accent: 'text-yellow-400', icon: Zap,
+    description: 'O boogey man. Ninguém escapa de John Wick.',
+    backdrop: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&q=80&fit=crop',
+    logo: undefined, logoMovieId: 245891, tmdbCollectionId: 404609,
+    keywords: ['john wick', 'baba yaga', 'high table', 'keanu reeves'],
+  },
+  {
+    id: 'transformers', name: 'Transformers', color: '#f59e0b', bg: 'bg-[#1a1000]', accent: 'text-yellow-500', icon: Zap,
+    description: 'Autobots, rollout!',
+    backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop',
+    logo: undefined, logoMovieId: 1858, tmdbCollectionId: 8650,
+    keywords: ['transformers', 'autobots', 'decepticons', 'optimus prime', 'megatron', 'bumblebee'],
+  },
+  {
+    id: 'matrix', name: 'Matrix', color: '#00ff41', bg: 'bg-[#000a00]', accent: 'text-green-400', icon: Sparkles,
+    description: 'Bem-vindo ao deserto do real.',
+    backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop',
+    logo: undefined, logoMovieId: 603, tmdbCollectionId: 2344,
+    keywords: ['matrix', 'neo', 'morpheus', 'trinity', 'agente smith', 'the one', 'o escolhido', 'ressurreições'],
+  },
+  {
+    id: 'pirates', name: 'Piratas do Caribe', color: '#8b6914', bg: 'bg-[#0a0800]', accent: 'text-yellow-700', icon: Map,
+    description: 'Por quê é o rum que acaba sempre?',
+    backdrop: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=90&fit=crop',
+    logo: undefined, logoMovieId: 22, tmdbCollectionId: 295,
+    keywords: ['piratas do caribe', 'pirates of the caribbean', 'jack sparrow', 'davy jones', 'black pearl'],
+  },
+  {
+    id: 'indiana-jones', name: 'Indiana Jones', color: '#d4a017', bg: 'bg-[#1a1000]', accent: 'text-yellow-600', icon: Map,
+    description: 'Aventuras arqueológicas no limite da história.',
+    backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop',
+    logo: undefined, logoMovieId: 89, tmdbCollectionId: 84,
+    keywords: ['indiana jones', 'indy', 'dr. jones', 'raiders of the lost ark', 'em busca da arca perdida', 'templo da perdição', 'última cruzada'],
+  },
+  {
+    id: 'disney', name: 'Disney Clássicos', color: '#009dff', bg: 'bg-[#000a1a]', accent: 'text-blue-300', icon: Sparkles,
+    description: 'Onde os sonhos se tornam realidade. Clássicos atemporais que moldaram gerações.',
+    backdrop: 'https://images.unsplash.com/photo-1605487903301-a1e109c44e53?w=1920&q=90&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', logoMovieId: 109445,
+    keywords: [
+      'rei leão', 'lion king', 'simba', 'mufasa',
+      'aladdin', 'genio',
+      'pequena sereia', 'little mermaid', 'ariel',
+      'bela e a fera', 'beauty and the beast', 'belle',
+      'cinderela', 'cinderella',
+      'branca de neve', 'snow white',
+      'pinóquio', 'pinocchio',
+      'frozen', 'elsa', 'anna', 'olaf',
+      'moana', 'vaiana',
+      'encanto',
+      'raya', 'luca',
+      'bambi', 'dumbo',
+      'mulan', 'hua mulan',
+      'pocahontas',
+      'hercules', 'hércules',
+      'tarzan',
+      'fantasia',
+      'alice no país', 'alice in wonderland',
+      'peter pan',
+      'a bela adormecida', 'sleeping beauty',
+    ],
+  },
+  {
+    id: 'pixar', name: 'Pixar', color: '#00aae4', bg: 'bg-[#00121a]', accent: 'text-blue-400', icon: Sparkles,
+    description: 'Imaginação sem limites em cada frame. Histórias que tocam o coração.',
+    backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Pixar_logo.svg', logoMovieId: 862,
+    keywords: [
+      'toy story', 'woody', 'buzz lightyear',
+      'procurando nemo', 'finding nemo', 'procurando dory', 'finding dory',
+      'monstros s.a', 'monstros sa', 'monsters inc', 'monsters university',
+      'carros', 'cars', 'mcqueen', 'lightning mcqueen',
+      'divertida mente', 'inside out',
+      'coco', 'viva a vida',
+      'up: altas aventuras', 'up altas', 'carl e russell',
+      'wall-e', 'wall·e', 'eve',
+      'ratatouille', 'remy',
+      'valente', 'brave', 'merida',
+      'os incríveis', 'the incredibles', 'família parr',
+      'soul', 'joe gardner',
+      'luca',
+      'turning red', 'eu me transformo em panda', 'virada vermelha',
+      'lightyear',
+      'elemental',
+    ],
+  },
+  {
+    id: 'dreamworks', name: 'DreamWorks', color: '#a3c9f7', bg: 'bg-[#00091a]', accent: 'text-blue-200', icon: Sparkles,
+    description: 'Animações para todas as idades.',
+    backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop',
+    logo: undefined, logoMovieId: 809,
+    keywords: [
+      'shrek', 'fiona', 'burro', 'donkey', 'puss in boots', 'gato de botas',
+      'kung fu panda', 'po',
+      'como treinar seu dragão', 'how to train your dragon', 'soluço',
+      'madagascar', 'alex o leão',
+      'bee movie', 'megamente', 'megamind',
+      'a origem dos guardiões', 'rise of the guardians',
+      'abominável', 'abominable',
+      'bad guys',
+    ],
+  },
+  {
+    id: 'horror', name: 'Terror & Horror', color: '#ff0000', bg: 'bg-[#050000]', accent: 'text-red-600', icon: Ghost,
+    description: 'Enfrente seus maiores medos.',
+    backdrop: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?w=1920&q=90&fit=crop', logoMovieId: 436270,
+    keywords: [
+      'halloween', 'pânico', 'scream',
+      'invocação do mal', 'conjuring', 'annabelle', 'nun', 'irmã',
+      'it a coisa', 'it: a coisa', 'pennywise',
+      'sexta-feira 13', 'friday the 13th', 'jason',
+      'terror', 'horror', 'sobrenatural', 'supernatural',
+      'saw', 'jogos mortais',
+      'sinister', 'oculus',
+      'paranormal activity', 'atividade paranormal',
+      'insidious', 'insidiosa',
+      'the ring', 'o chamado',
+      'freddy krueger', 'nightmare',
+      'chucky', 'brinquedo assassino',
+    ],
+  },
+  {
+    id: 'anime', name: 'Anime & Mangá', color: '#ff6600', bg: 'bg-[#1a0f00]', accent: 'text-orange-500', icon: Zap,
+    description: 'A arte e a cultura japonesa em sua forma mais vibrante.',
+    backdrop: 'https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=1920&q=90&fit=crop',
+    keywords: [
+      'dragon ball', 'goku', 'vegeta', 'super sayajin',
+      'naruto', 'sasuke', 'kakashi', 'hokage', 'boruto',
+      'one piece', 'luffy', 'pirata', 'chapéu de palha',
+      'bleach', 'ichigo', 'shinigami',
+      'attack on titan', 'ataque dos titãs',
+      'demon slayer', 'kimetsu no yaiba', 'caçador de demônios',
+      'fullmetal alchemist', 'alquimista de aço',
+      'death note',
+      'my hero academia', 'boku no hero',
+      'jujutsu kaisen',
+      'sword art online', 'sao',
+      'evangelion', 'neon genesis',
+      'hunter x hunter',
+      'fairy tail',
+      'black clover',
+      'anime', 'mangá', 'manga',
+    ],
+  },
+  {
+    id: 'national', name: 'National Geographic', color: '#ffcc00', bg: 'bg-[#1a1600]', accent: 'text-yellow-500', icon: Sparkles,
+    description: 'Explorando nosso mundo misterioso e as maravilhas da natureza.',
+    backdrop: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1920&q=90&fit=crop',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/National_Geographic_logo_text.svg',
+    keywords: ['cosmos', 'natureza', 'ocean', 'oceano', 'planeta', 'national geographic', 'vida selvagem', 'wildlife'],
+  },
+  {
+    id: 'adventure', name: 'Aventura', color: '#22c55e', bg: 'bg-[#061a0f]', accent: 'text-green-500', icon: Map,
+    description: 'Grandes jornadas em terras desconhecidas.',
+    backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop', logoMovieId: 89,
+    keywords: ['aventura', 'adventure', 'exploração', 'expedition', 'journey', 'jumanji', 'zathura'],
+  },
 ];
 
 // Theme Context for immersive provider experience
@@ -3124,17 +3413,28 @@ export default function App() {
 
   const dynamicFranchises = useMemo(() => {
     const list: any[] = [];
+    const coveredMovieIds = new Set<number>();
     
-    // First, always add the defined FRANCHISES so their IDs ('marvel', 'star-wars', etc.) are guaranteed to exist
+    // Matcha filmes de uma franquia usando título, nome, overview, gêneros e atores
+    const matchesFranchise = (m: Movie, keywords: string[]) => {
+      const fields = [
+        (m.title || '').toLowerCase(),
+        ((m as any).name || '').toLowerCase(),
+        (m.overview || '').toLowerCase(),
+        (m.genres || '').toLowerCase(),
+        (m.actors || '').toLowerCase(),
+        (m.collection_name || '').toLowerCase(),
+      ];
+      return keywords.some(k => fields.some(f => f.includes(k)));
+    };
+
+    // 1. Franquias definidas (Marvel, DC, Disney, etc.)
     FRANCHISES.forEach(f => {
-      const movies = myMovies.filter(m => {
-        const t = (m.title || '').toLowerCase();
-        const o = (m.overview || '').toLowerCase();
-        return f.keywords.some(k => t.includes(k) || o.includes(k));
-      });
+      const movies = myMovies.filter(m => matchesFranchise(m, f.keywords));
       
       if (movies.length > 0) {
         const logoFromMovie = movies.find(m => m.logo_path)?.logo_path;
+        movies.forEach(m => coveredMovieIds.add(m.id));
         list.push({
           ...f,
           movies: movies.sort((a, b) => (a.release_year || 0) - (b.release_year || 0)),
@@ -3145,44 +3445,97 @@ export default function App() {
       }
     });
 
-    // Then, add specific TMDB collections if they aren't part of a major franchise
+    // 2. Coleções TMDB (belongs_to_collection) para filmes não cobertos pelas franquias acima
     const collectionsById: Record<number, Movie[]> = {};
     myMovies.forEach(m => {
-      if (m.collection_id) {
+      if (m.collection_id && !coveredMovieIds.has(m.id)) {
         if (!collectionsById[m.collection_id]) collectionsById[m.collection_id] = [];
         collectionsById[m.collection_id].push(m);
       }
     });
 
     Object.entries(collectionsById).forEach(([id, movies]) => {
+      if (movies.length < 2) return; // só mostrar coleções com ao menos 2 filmes
       const collectionName = movies[0].collection_name || 'Coleção';
-      
-      // Check if this collection is already covered by a major franchise
-      const isCoveredByFranchise = FRANCHISES.some(f => 
-        f.keywords.some(k => collectionName.toLowerCase().includes(k))
-      );
 
-      if (!isCoveredByFranchise) {
-        list.push({
-          id: `tmdb-${id}`,
-          name: collectionName,
-          keywords: [collectionName.toLowerCase()],
-          color: '#ffffff',
-          bg: 'bg-[#121212]',
-          accent: 'text-gray-400',
-          icon: List,
-          description: `Coleção oficial do TMDb: ${collectionName}.`,
-          movies: movies.sort((a, b) => (a.release_year || 0) - (b.release_year || 0)),
-          poster: movies[0].collection_poster_path || movies[0].poster_path,
-          backdrop: movies[0].collection_backdrop_path || movies[0].backdrop_path,
-          logo: movies[0].collection_logo_path,
-          tmdb_collection_id: parseInt(id)
-        });
-      }
+      list.push({
+        id: `tmdb-${id}`,
+        name: collectionName,
+        keywords: [collectionName.toLowerCase()],
+        color: '#ffffff',
+        bg: 'bg-[#121212]',
+        accent: 'text-gray-400',
+        icon: List,
+        description: `Coleção: ${collectionName}.`,
+        movies: movies.sort((a, b) => (a.release_year || 0) - (b.release_year || 0)),
+        poster: movies[0].collection_poster_path || movies[0].poster_path,
+        backdrop: movies[0].collection_backdrop_path || movies[0].backdrop_path,
+        logo: movies[0].collection_logo_path,
+        tmdb_collection_id: parseInt(id)
+      });
     });
 
     return list;
   }, [myMovies]);
+
+  // Enriquece filmes sem collection_id consultando o TMDB em background
+  const enrichCollectionsInBackground = React.useCallback(async (movies: Movie[]) => {
+    if (!hasSupabase) return;
+    const toEnrich = movies.filter(m => 
+      !m.collection_id && 
+      m.type !== 'series' && 
+      (m.title || '').trim().length > 0
+    ).slice(0, 60); // Processa até 60 filmes por vez
+
+    if (toEnrich.length === 0) return;
+
+    const CONCURRENCY = 4;
+    for (let i = 0; i < toEnrich.length; i += CONCURRENCY) {
+      const batch = toEnrich.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(async (movie) => {
+        try {
+          const q = encodeURIComponent(movie.title || '');
+          const yr = (movie as any).release_year || '';
+          const searchRes = await fetch(`/api/tmdb/search/movie?query=${q}${yr ? `&year=${yr}` : ''}&language=pt-BR`);
+          if (!searchRes.ok) return;
+          const searchData = await searchRes.json();
+          const tmdbId = searchData.results?.[0]?.id;
+          if (!tmdbId) return;
+
+          const detailRes = await fetch(`/api/tmdb/movie/${tmdbId}?language=pt-BR`);
+          if (!detailRes.ok) return;
+          const details = await detailRes.json();
+          const col = details.belongs_to_collection;
+          if (!col?.id) return;
+
+          const posterPath = col.poster_path ? `https://image.tmdb.org/t/p/w500${col.poster_path}` : null;
+          const backdropPath = col.backdrop_path ? `https://image.tmdb.org/t/p/w780${col.backdrop_path}` : null;
+
+          await supabase.from('movies').update({
+            collection_id: col.id,
+            collection_name: col.name,
+            ...(posterPath ? { collection_poster_path: posterPath } : {}),
+            ...(backdropPath ? { collection_backdrop_path: backdropPath } : {}),
+          }).eq('id', movie.id);
+        } catch {
+          // silencioso
+        }
+      }));
+      await new Promise(r => setTimeout(r, 300)); // respeita rate limit
+    }
+    // Re-carrega filmes após enriquecimento
+    fetchMyMovies();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSupabase]);
+
+  // Dispara enriquecimento uma vez por sessão quando os filmes carregam
+  const enrichedRef = React.useRef(false);
+  useEffect(() => {
+    if (myMovies.length > 0 && !enrichedRef.current) {
+      enrichedRef.current = true;
+      enrichCollectionsInBackground(myMovies);
+    }
+  }, [myMovies, enrichCollectionsInBackground]);
 
   const getTop10 = (movieList: Movie[]) => {
     return [...movieList]
