@@ -217,19 +217,41 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
 
   useEffect(() => {
     if (!videoUrlToPlay || !videoRef.current) return;
+    const video = videoRef.current;
     let hls: Hls | null = null;
+
+    const tryPlay = () => {
+      video.muted = false;
+      video.volume = 1;
+      video.play().catch(() => {
+        // Se o navegador bloquear autoplay, ao menos garante não mudo
+        video.muted = false;
+      });
+    };
+
     if (videoUrlToPlay.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        hls = new Hls();
+        hls = new Hls({ enableWorker: true });
         hls.loadSource(videoUrlToPlay);
-        hls.attachMedia(videoRef.current);
-      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.current.src = videoUrlToPlay;
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          tryPlay();
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = videoUrlToPlay;
+        video.addEventListener('loadedmetadata', tryPlay, { once: true });
       }
     } else {
-      videoRef.current.src = videoUrlToPlay;
+      video.src = videoUrlToPlay;
+      video.load();
+      video.addEventListener('canplay', tryPlay, { once: true });
     }
-    return () => { if (hls) hls.destroy(); };
+
+    return () => {
+      if (hls) hls.destroy();
+      video.removeEventListener('loadedmetadata', tryPlay);
+      video.removeEventListener('canplay', tryPlay);
+    };
   }, [videoUrlToPlay]);
 
   const handleScanFolder = async () => {
@@ -1287,7 +1309,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
               <Video size={16} className="text-violet-400" />
               <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">Preview do Vídeo {testSelectedQuality && <span className="text-violet-400 ml-2">— {testSelectedQuality}</span>}</span>
             </div>
-            <video ref={videoRef} controls className="w-full aspect-video outline-none" autoPlay />
+            <video ref={videoRef} controls className="w-full aspect-video outline-none" playsInline />
           </div>
         )}
         {testResult && (
