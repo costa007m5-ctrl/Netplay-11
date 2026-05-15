@@ -25,7 +25,7 @@ import { isDynamicRef } from './services/terabox';
 import { getSelectedServer, convertTeraboxToApi } from './components/SmartPlayerSelector';
 import tmdb, { requests, getMovieLogo } from './services/tmdb';
 import { notificationService } from './services/notificationService';
-import { Movie, Profile, WatchHistory, ScannerState, ReScannerState, CollectionScannerState, MyList, AppSettings, Episode, StreamingProvider } from './types';
+import { Movie, Profile, WatchHistory, ScannerState, ReScannerState, CollectionScannerState, LogoScannerState, LogoScanScope, LogoScanMode, MyList, AppSettings, Episode, StreamingProvider } from './types';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'motion/react';
@@ -3323,6 +3323,9 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
+  const [logoScannerState, setLogoScannerState] = useState<LogoScannerState | null>(null);
+  const logoScannerCancelRef = useRef(false);
+
   const hasTmdbKey = true;
   const hasSupabase = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -4617,6 +4620,114 @@ export default function App() {
 
     setCollectionAutomationState(prev => prev ? { ...prev, isScanning: false, status: 'Identidades Sincronizadas!' } : null);
     setTimeout(() => setCollectionAutomationState(null), 3000);
+  };
+
+  const handleLogoScan = async (scope: LogoScanScope, mode: LogoScanMode) => {
+    // Cancela qualquer scan em andamento
+    if (logoScannerCancelRef.current) return;
+    logoScannerCancelRef.current = false;
+
+    type ScanItem = { id: number; label: string; mediaType: 'movie' | 'tv' } | { id: string; label: string; mediaType: 'collection'; collectionId: number; movieIds: number[] };
+
+    const items: ScanItem[] = [];
+
+    const hasMissingLogo = (m: Movie) => !m.logo_path || m.logo_path === '' || m.logo_path.includes('placeholder');
+
+    // Filmes
+    if (scope === 'movies' || scope === 'all') {
+      const pool = myMovies.filter(m => m.type !== 'series');
+      const toAdd = mode === 'missing' ? pool.filter(hasMissingLogo) : pool;
+      for (const m of toAdd) items.push({ id: m.id, label: m.title || m.name || `#${m.id}`, mediaType: 'movie' });
+    }
+
+    // Séries
+    if (scope === 'series' || scope === 'all') {
+      const pool = myMovies.filter(m => m.type === 'series');
+      const toAdd = mode === 'missing' ? pool.filter(hasMissingLogo) : pool;
+      for (const m of toAdd) items.push({ id: m.id, label: m.title || m.name || `#${m.id}`, mediaType: 'tv' });
+    }
+
+    // Coleções
+    if (scope === 'collections' || scope === 'all') {
+      const collMap = new Map<number, { name: string; movieIds: number[]; hasLogo: boolean }>();
+      for (const m of myMovies) {
+        if (!m.collection_id) continue;
+        if (!collMap.has(m.collection_id)) {
+          collMap.set(m.collection_id, { name: m.collection_name || `Coleção ${m.collection_id}`, movieIds: [], hasLogo: false });
+        }
+        const entry = collMap.get(m.collection_id)!;
+        entry.movieIds.push(m.id);
+        if (m.collection_logo_path) entry.hasLogo = true;
+      }
+      for (const [collId, info] of collMap.entries()) {
+        if (mode === 'missing' && info.hasLogo) continue;
+        items.push({ id: `coll-${collId}`, label: info.name, mediaType: 'collection', collectionId: collId, movieIds: info.movieIds });
+      }
+    }
+
+    if (items.length === 0) {
+      setLogoScannerState({ isScanning: false, scope, mode, current: 0, total: 0, status: 'Nenhum item para processar!', updated: 0, skipped: 0, done: true });
+      setTimeout(() => setLogoScannerState(null), 4000);
+      return;
+    }
+
+    setLogoScannerState({ isScanning: true, scope, mode, current: 0, total: items.length, status: 'Iniciando scanner de logos...', updated: 0, skipped: 0, done: false });
+
+    let updated = 0;
+    let skipped = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      if (logoScannerCancelRef.current) break;
+      const item = items[i];
+
+      setLogoScannerState(prev => prev ? { ...prev, current: i + 1, status: `Buscando: ${item.label}`, updated, skipped } : null);
+
+      try {
+        if (item.mediaType === 'collection') {
+          const res = await tmdb.get(`/collection/${(item as any).collectionId}/images`, { params: { include_image_language: 'pt,en,null' } });
+          const logos: any[] = res.data.logos || [];
+          const best = logos.find((l: any) => l.iso_639_1 === 'pt') || logos.find((l: any) => l.iso_639_1 === 'en') || logos[0];
+          if (best) {
+            const logoUrl = `https://image.tmdb.org/t/p/w500${best.file_path}`;
+            await supabase.from('movies').update({ collection_logo_path: logoUrl }).eq('collection_id', (item as any).collectionId);
+            setMyMovies(prev => prev.map(m => m.collection_id === (item as any).collectionId ? { ...m, collection_logo_path: logoUrl } : m));
+            updated++;
+          } else {
+            skipped++;
+          }
+        } else {
+          const logo = await getMovieLogo(item.id as number, item.mediaType as 'movie' | 'tv');
+          if (logo) {
+            await supabase.from('movies').update({ logo_path: logo }).eq('id', item.id);
+            setMyMovies(prev => prev.map(m => m.id === item.id ? { ...m, logo_path: logo } : m));
+            updated++;
+          } else {
+            skipped++;
+          }
+        }
+      } catch (err) {
+        console.error(`[LogoScan] Erro em ${item.label}:`, err);
+        skipped++;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    const cancelled = logoScannerCancelRef.current;
+    logoScannerCancelRef.current = false;
+    setLogoScannerState(prev => prev ? {
+      ...prev,
+      isScanning: false,
+      status: cancelled ? 'Scanner cancelado.' : `Concluído! ${updated} logo(s) atualizado(s), ${skipped} sem logo.`,
+      updated,
+      skipped,
+      done: true,
+    } : null);
+    setTimeout(() => setLogoScannerState(null), 6000);
+  };
+
+  const handleCancelLogoScan = () => {
+    logoScannerCancelRef.current = true;
   };
 
   const handleSyncMissingMovieLogos = async () => {
@@ -5930,6 +6041,9 @@ export default function App() {
         onStartCollectionAutomation={startCollectionAutomation}
         onUpdateCollectionInfo={handleUpdateCollectionLogos}
         onSyncMissingLogos={handleSyncMissingMovieLogos}
+        onStartLogoScan={handleLogoScan}
+        onCancelLogoScan={handleCancelLogoScan}
+        logoScannerState={logoScannerState}
         collectionAutomationState={collectionAutomationState}
         scannerState={scannerState}
         reScannerState={reScannerState}

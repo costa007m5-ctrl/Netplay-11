@@ -7,9 +7,9 @@ import {
   ArrowUpDown, Download, Settings, Database, Plus, Upload,
   Sparkles, Calendar, Shield, Copy, Star, Send, Image as ImageIcon,
   Activity, Users, Heart, DollarSign, Server, Bell, RefreshCw,
-  Loader2, Zap
+  Loader2, Zap, Film, Tv, BookOpen, Layers, StopCircle
 } from 'lucide-react';
-import { Movie, ScannerState, ReScannerState, StreamingProvider } from '../../types';
+import { Movie, ScannerState, ReScannerState, StreamingProvider, LogoScannerState, LogoScanScope, LogoScanMode } from '../../types';
 import { supabase } from '../../lib/supabase';
 import tmdb, { requests, getMovieLogo } from '../../services/tmdb';
 import { makeDynamicRef, isDynamicRef } from '../../services/terabox';
@@ -45,6 +45,9 @@ interface AdminPanelProps {
   onStartCollectionAutomation: (movies: Movie[]) => void;
   onUpdateCollectionInfo?: (specificCollectionId?: number) => Promise<void>;
   onSyncMissingLogos?: () => Promise<void>;
+  onStartLogoScan?: (scope: LogoScanScope, mode: LogoScanMode) => void;
+  onCancelLogoScan?: () => void;
+  logoScannerState?: LogoScannerState | null;
   collectionAutomationState: any;
   categories?: any[];
   onRefreshCategoryImages?: (categoryId?: number) => Promise<void>;
@@ -72,12 +75,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   onStartCollectionAutomation,
   onUpdateCollectionInfo,
   onSyncMissingLogos,
+  onStartLogoScan,
+  onCancelLogoScan,
+  logoScannerState,
   collectionAutomationState,
   categories,
   onRefreshCategoryImages,
   onUpdateCategoryImage
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('all');
+  const [logoScope, setLogoScope] = useState<LogoScanScope>('all');
+  const [logoMode, setLogoMode] = useState<LogoScanMode>('missing');
   const [editingCategory, setEditingCategory] = useState<number | null>(null);
   const [categoryUrl, setCategoryUrl] = useState('');
   const [isRefreshingCategories, setIsRefreshingCategories] = useState(false);
@@ -2116,6 +2124,140 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* ─── Scanner de Logos ─── */}
+                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/5 blur-[80px] rounded-full pointer-events-none" />
+                  <h3 className="text-white font-black italic uppercase mb-2 flex items-center gap-3 relative z-10">
+                    <ImageIcon className="text-violet-400" size={20} />
+                    Scanner de Logos
+                  </h3>
+                  <p className="text-gray-500 text-xs font-medium mb-6 relative z-10">
+                    Busca logos no TMDB e salva no banco. Roda em segundo plano — você pode continuar usando o app.
+                  </p>
+
+                  {/* Escopo */}
+                  <div className="mb-4 relative z-10">
+                    <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-2">O que escanear</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {([
+                        { value: 'movies', label: 'Filmes', icon: Film },
+                        { value: 'series', label: 'Séries', icon: Tv },
+                        { value: 'collections', label: 'Coleções', icon: Layers },
+                        { value: 'all', label: 'Tudo', icon: Sparkles },
+                      ] as { value: LogoScanScope; label: string; icon: any }[]).map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          onClick={() => setLogoScope(value)}
+                          disabled={logoScannerState?.isScanning}
+                          className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black italic uppercase transition-all border ${
+                            logoScope === value
+                              ? 'bg-violet-600 border-violet-500 text-white shadow-lg shadow-violet-900/40'
+                              : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          <Icon size={14} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Modo */}
+                  <div className="mb-6 relative z-10">
+                    <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-2">Modo</p>
+                    <div className="flex gap-2">
+                      {([
+                        { value: 'missing', label: 'Apenas sem logo' },
+                        { value: 'all', label: 'Todos (sobrescrever)' },
+                      ] as { value: LogoScanMode; label: string }[]).map(({ value, label }) => (
+                        <button
+                          key={value}
+                          onClick={() => setLogoMode(value)}
+                          disabled={logoScannerState?.isScanning}
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-black italic uppercase transition-all border ${
+                            logoMode === value
+                              ? 'bg-emerald-600/80 border-emerald-500 text-white'
+                              : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Progresso */}
+                  {logoScannerState && (
+                    <div className="mb-5 bg-black/30 rounded-2xl p-4 border border-white/5 relative z-10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-gray-300 font-medium truncate flex-1 mr-2">{logoScannerState.status}</span>
+                        {logoScannerState.isScanning && (
+                          <Loader2 size={14} className="text-violet-400 animate-spin shrink-0" />
+                        )}
+                        {logoScannerState.done && !logoScannerState.isScanning && (
+                          <Check size={14} className="text-emerald-400 shrink-0" />
+                        )}
+                      </div>
+                      {logoScannerState.total > 0 && (
+                        <>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-2">
+                            <motion.div
+                              className="h-full bg-violet-500 rounded-full"
+                              animate={{ width: `${(logoScannerState.current / logoScannerState.total) * 100}%` }}
+                              transition={{ type: 'spring', stiffness: 60 }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-gray-500 font-bold">
+                            <span>{logoScannerState.current} / {logoScannerState.total}</span>
+                            <span className="flex gap-3">
+                              <span className="text-emerald-400">{logoScannerState.updated} atualizados</span>
+                              <span className="text-gray-600">{logoScannerState.skipped} sem logo</span>
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Ações */}
+                  <div className="flex gap-3 relative z-10">
+                    <button
+                      onClick={() => onStartLogoScan?.(logoScope, logoMode)}
+                      disabled={logoScannerState?.isScanning || !onStartLogoScan}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black italic uppercase bg-violet-600 hover:bg-violet-500 text-white transition-all shadow-lg shadow-violet-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {logoScannerState?.isScanning ? (
+                        <><Loader2 size={14} className="animate-spin" /> Escaneando...</>
+                      ) : (
+                        <><Zap size={14} /> Iniciar Scanner</>
+                      )}
+                    </button>
+                    {logoScannerState?.isScanning && (
+                      <button
+                        onClick={() => onCancelLogoScan?.()}
+                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-black italic uppercase bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-600/30 transition-all"
+                      >
+                        <StopCircle size={14} /> Parar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Contadores rápidos */}
+                  <div className="mt-5 grid grid-cols-3 gap-3 relative z-10">
+                    {[
+                      { label: 'Filmes sem logo', count: movies.filter(m => m.type !== 'series' && (!m.logo_path || m.logo_path === '')).length, color: 'text-blue-400' },
+                      { label: 'Séries sem logo', count: movies.filter(m => m.type === 'series' && (!m.logo_path || m.logo_path === '')).length, color: 'text-pink-400' },
+                      { label: 'Coleções sem logo', count: (() => { const s = new Set<number>(); movies.forEach(m => { if (m.collection_id && !m.collection_logo_path) s.add(m.collection_id); }); return s.size; })(), color: 'text-amber-400' },
+                    ].map(({ label, count, color }) => (
+                      <div key={label} className="bg-black/30 rounded-xl p-3 border border-white/5 text-center">
+                        <span className={`block text-xl font-black italic ${color}`}>{count}</span>
+                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wide leading-tight block mt-0.5">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             ) : activeTab === 'users' ? (
               <AdminUsersTab />

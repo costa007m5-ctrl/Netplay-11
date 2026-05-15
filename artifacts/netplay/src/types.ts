@@ -100,6 +100,21 @@ export interface CollectionScannerState {
   pendingMovies?: Movie[];
 }
 
+export type LogoScanScope = 'movies' | 'series' | 'collections' | 'all';
+export type LogoScanMode = 'missing' | 'all';
+
+export interface LogoScannerState {
+  isScanning: boolean;
+  scope: LogoScanScope;
+  mode: LogoScanMode;
+  current: number;
+  total: number;
+  status: string;
+  updated: number;
+  skipped: number;
+  done: boolean;
+}
+
 export interface Profile {
   id: string;
   user_id: string;
