@@ -26,7 +26,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
   const [seriesSearchResults, setSeriesSearchResults] = useState<any[]>([]);
   const [seriesSearching, setSeriesSearching] = useState(false);
   const [selectedSeries, setSelectedSeries] = useState<any>(null);
-  const [seasonFolders, setSeasonFolders] = useState<{ season: number; folderUrl: string }[]>([{ season: 1, folderUrl: '' }]);
+  const [seasonFolders, setSeasonFolders] = useState<{ season: number; folderUrls: string[] }[]>([{ season: 1, folderUrls: [''] }]);
   const [seasonScanResults, setSeasonScanResults] = useState<Record<number, any[]>>({});
   const [seasonScanning, setSeasonScanning] = useState(false);
   const [seasonSaveLoading, setSeasonSaveLoading] = useState(false);
@@ -229,7 +229,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
 
   const handleScanAllSeasons = async () => {
     if (!selectedSeries) return alert('Selecione uma série primeiro.');
-    const validFolders = seasonFolders.filter(sf => sf.folderUrl.trim());
+    const validFolders = seasonFolders.filter(sf => sf.folderUrls.some(u => u.trim()));
     if (!validFolders.length) return alert('Adicione pelo menos um link de pasta de temporada.');
 
     setSeasonScanning(true);
@@ -237,62 +237,62 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     const results: Record<number, any[]> = {};
 
     const endpoint = seasonApiVersion === 'v2' ? '/api/terabox-v2' : '/api/terabox-pro';
-    const MAX_PAGES = 20; // safety cap (~ thousands of files)
+    const MAX_PAGES = 20;
     for (const sf of validFolders) {
       try {
-        const allItems: any[] = [];
+        const activeUrls = sf.folderUrls.filter(u => u.trim());
+        const allSeasonItems: any[] = [];
         const seenNames = new Set<string>();
-        let page = 1;
-        let totalExpected: number | null = null;
 
-        while (page <= MAX_PAGES) {
-          setSeasonScanStatus(`Escaneando T${sf.season} (${seasonApiVersion.toUpperCase()}) — página ${page}, ${allItems.length} arquivos...`);
-          const pageUrl = `${endpoint}?url=${encodeURIComponent(sf.folderUrl)}${seasonApiVersion === 'v2' ? `&page=${page}` : ''}`;
-          const res = await fetch(pageUrl);
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || `Falha página ${page}`);
-          const list: any[] = data.list || [];
-          if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
+        for (let urlIdx = 0; urlIdx < activeUrls.length; urlIdx++) {
+          const folderUrl = activeUrls[urlIdx];
+          let page = 1;
+          let totalExpected: number | null = null;
 
-          let newCount = 0;
-          for (const item of list) {
-            const name = item.filename || item.name;
-            if (!name || seenNames.has(name)) continue;
-            seenNames.add(name);
-            allItems.push(item);
-            newCount++;
+          while (page <= MAX_PAGES) {
+            setSeasonScanStatus(`T${sf.season} — pasta ${urlIdx + 1}/${activeUrls.length} (${seasonApiVersion.toUpperCase()}) pág. ${page}, ${allSeasonItems.length} arqs...`);
+            const pageUrl = `${endpoint}?url=${encodeURIComponent(folderUrl)}${seasonApiVersion === 'v2' ? `&page=${page}` : ''}`;
+            const res = await fetch(pageUrl);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `Falha página ${page}`);
+            const list: any[] = data.list || [];
+            if (typeof data.total_files === 'number' && totalExpected == null) totalExpected = data.total_files;
+
+            let newCount = 0;
+            for (const item of list) {
+              const name = item.filename || item.name;
+              if (!name || seenNames.has(name)) continue;
+              seenNames.add(name);
+              allSeasonItems.push({ ...item, _folderUrl: folderUrl });
+              newCount++;
+            }
+
+            if (seasonApiVersion === 'v1') break;
+            if (newCount === 0) break;
+            if (totalExpected != null && allSeasonItems.length >= totalExpected) break;
+            if (list.length < 5) break;
+            page++;
           }
-
-          // V1 doesn't paginate — stop after 1 page
-          if (seasonApiVersion === 'v1') break;
-          // No new items → stop
-          if (newCount === 0) break;
-          // Reached known total → stop
-          if (totalExpected != null && allItems.length >= totalExpected) break;
-          // Page returned less than ~5 → likely last page
-          if (list.length < 5) break;
-
-          page++;
         }
 
-        // Sort naturally so episode numbering is consistent
-        allItems.sort((a, b) => {
+        allSeasonItems.sort((a, b) => {
           const an = (a.filename || a.name || '').toLowerCase();
           const bn = (b.filename || b.name || '').toLowerCase();
           return an.localeCompare(bn, undefined, { numeric: true, sensitivity: 'base' });
         });
 
-        results[sf.season] = allItems.map((item: any, idx: number) => ({
+        results[sf.season] = allSeasonItems.map((item: any, idx: number) => ({
           filename: item.filename || item.name || `arquivo_${idx + 1}`,
           season: sf.season,
           episode: idx + 1,
-          folderUrl: sf.folderUrl,
+          folderUrl: item._folderUrl || activeUrls[0],
           selected: true,
           apiVersion: seasonApiVersion,
           availableQualities: item.fast_stream_url && typeof item.fast_stream_url === 'object'
             ? Object.keys(item.fast_stream_url).filter((k: string) => /^\d+p$/.test(k))
             : [],
         }));
+        setSeasonScanStatus(`T${sf.season}: ${allSeasonItems.length} episódio(s) de ${activeUrls.length} pasta(s).`);
       } catch (e: any) {
         setSeasonScanStatus(`Erro na Temporada ${sf.season}: ${e.message}`);
         results[sf.season] = [];
@@ -729,7 +729,7 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
       }
 
       setSelectedSeries(null);
-      setSeasonFolders([{ season: 1, folderUrl: '' }]);
+      setSeasonFolders([{ season: 1, folderUrls: [''] }]);
       setSeasonScanResults({});
       setSeriesSearchResults([]);
       setSeriesSearchTitle('');
@@ -1081,34 +1081,76 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-gray-300">Pastas por Temporada</span>
             <button
-              onClick={() => setSeasonFolders(prev => [...prev, { season: prev.length + 1, folderUrl: '' }])}
+              onClick={() => setSeasonFolders(prev => [...prev, { season: prev.length + 1, folderUrls: [''] }])}
               className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg flex items-center gap-1 transition-all"
             >
               <Plus size={12} /> Adicionar Temporada
             </button>
           </div>
           {seasonFolders.map((sf, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <div className="bg-purple-600/20 border border-purple-500/30 rounded-lg px-3 py-2 text-purple-300 font-bold text-xs min-w-[80px] text-center">
-                T{sf.season}
+            <div key={idx} className="border border-white/5 rounded-xl p-3 bg-white/[0.02] space-y-2">
+              {/* Season header row */}
+              <div className="flex items-center gap-2">
+                <div className="bg-purple-600/20 border border-purple-500/30 rounded-lg px-2.5 py-1.5 text-purple-300 font-black text-xs min-w-[32px] text-center">
+                  T
+                </div>
+                <input
+                  type="number"
+                  value={sf.season}
+                  min={0}
+                  onChange={e => {
+                    const copy = [...seasonFolders];
+                    copy[idx].season = Number(e.target.value);
+                    setSeasonFolders(copy);
+                  }}
+                  className="w-14 bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-bold"
+                />
+                <span className="text-gray-500 text-xs flex-1">Temporada {sf.season} — {sf.folderUrls.filter(u => u.trim()).length} pasta(s)</span>
+                {seasonFolders.length > 1 && (
+                  <button
+                    onClick={() => setSeasonFolders(prev => prev.filter((_, i) => i !== idx))}
+                    className="text-gray-600 hover:text-red-400 transition-colors text-xs font-bold px-2"
+                  >✕ Remover</button>
+                )}
               </div>
-              <input
-                type="text"
-                value={sf.folderUrl}
-                onChange={e => {
+              {/* URL inputs for this season */}
+              {sf.folderUrls.map((url, urlIdx) => (
+                <div key={urlIdx} className="flex items-center gap-2 pl-2">
+                  <span className="text-[10px] text-gray-600 font-bold w-4 shrink-0">{urlIdx + 1}</span>
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={e => {
+                      const copy = [...seasonFolders];
+                      copy[idx].folderUrls[urlIdx] = e.target.value;
+                      setSeasonFolders(copy);
+                    }}
+                    placeholder={`Pasta ${urlIdx + 1} — Link Terabox da T${sf.season}...`}
+                    className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                  />
+                  {sf.folderUrls.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const copy = [...seasonFolders];
+                        copy[idx].folderUrls = copy[idx].folderUrls.filter((_, j) => j !== urlIdx);
+                        setSeasonFolders(copy);
+                      }}
+                      className="text-gray-600 hover:text-red-400 transition-colors text-xs px-1"
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+              {/* Add folder button */}
+              <button
+                onClick={() => {
                   const copy = [...seasonFolders];
-                  copy[idx].folderUrl = e.target.value;
+                  copy[idx].folderUrls = [...copy[idx].folderUrls, ''];
                   setSeasonFolders(copy);
                 }}
-                placeholder={`Link da pasta da Temporada ${sf.season}...`}
-                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
-              />
-              {seasonFolders.length > 1 && (
-                <button
-                  onClick={() => setSeasonFolders(prev => prev.filter((_, i) => i !== idx))}
-                  className="text-gray-600 hover:text-red-400 transition-colors px-2"
-                >✕</button>
-              )}
+                className="ml-6 text-xs text-purple-400 hover:text-purple-300 font-bold flex items-center gap-1"
+              >
+                <Plus size={11} /> Adicionar pasta
+              </button>
             </div>
           ))}
         </div>

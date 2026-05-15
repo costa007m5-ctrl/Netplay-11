@@ -108,7 +108,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
   const [seriesSearchResults, setSeriesSearchResults] = useState<any[]>([]);
   const [seriesSearching, setSeriesSearching] = useState(false);
   const [selectedSeries, setSelectedSeries] = useState<any>(null);
-  const [seasonFolders, setSeasonFolders] = useState<{ season: number; folderUrl: string }[]>([{ season: 1, folderUrl: '' }]);
+  const [seasonFolders, setSeasonFolders] = useState<{ season: number; folderUrls: string[] }[]>([{ season: 1, folderUrls: [''] }]);
   const [seasonScanResults, setSeasonScanResults] = useState<Record<number, any[]>>({});
   const [seasonScanning, setSeasonScanning] = useState(false);
   const [seasonSaveLoading, setSeasonSaveLoading] = useState(false);
@@ -393,34 +393,48 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
 
   const handleScanAllSeasons = async () => {
     if (!selectedSeries) return alert('Selecione uma série primeiro.');
-    const validFolders = seasonFolders.filter(sf => sf.folderUrl.trim());
+    const validFolders = seasonFolders.filter(sf => sf.folderUrls.some(u => u.trim()));
     if (!validFolders.length) return alert('Adicione pelo menos um link de pasta de temporada.');
     setSeasonScanning(true);
     setSeasonScanResults({});
     const results: Record<number, any[]> = {};
     for (const sf of validFolders) {
       try {
-        setSeasonScanStatus(`Iniciando varredura recursiva da T${sf.season}...`);
-        const allItems = await scanFolderRecursive(
-          sf.folderUrl, '', 0,
-          (msg) => setSeasonScanStatus(`T${sf.season}: ${msg}`)
-        );
-        allItems.sort((a, b) => {
+        const activeUrls = sf.folderUrls.filter(u => u.trim());
+        const allSeasonItems: any[] = [];
+        const seenNames = new Set<string>();
+
+        for (let urlIdx = 0; urlIdx < activeUrls.length; urlIdx++) {
+          const folderUrl = activeUrls[urlIdx];
+          setSeasonScanStatus(`T${sf.season} — pasta ${urlIdx + 1}/${activeUrls.length}: iniciando varredura...`);
+          const items = await scanFolderRecursive(
+            folderUrl, '', 0,
+            (msg) => setSeasonScanStatus(`T${sf.season} pasta ${urlIdx + 1}/${activeUrls.length}: ${msg}`)
+          );
+          for (const item of items) {
+            const name = item.filename || item.server_filename || item.name;
+            if (!name || seenNames.has(name)) continue;
+            seenNames.add(name);
+            allSeasonItems.push({ ...item, _folderUrl: folderUrl });
+          }
+        }
+
+        allSeasonItems.sort((a, b) => {
           const an = (a.filename || a.server_filename || a.name || '').toLowerCase();
           const bn = (b.filename || b.server_filename || b.name || '').toLowerCase();
           return an.localeCompare(bn, undefined, { numeric: true, sensitivity: 'base' });
         });
-        results[sf.season] = allItems.map((item: any, idx: number) => ({
+        results[sf.season] = allSeasonItems.map((item: any, idx: number) => ({
           filename: item.filename || item.server_filename || item.name || `arquivo_${idx + 1}`,
           season: sf.season,
           episode: idx + 1,
-          folderUrl: sf.folderUrl,
+          folderUrl: item._folderUrl || activeUrls[0],
           selected: true,
           availableQualities: [],
           preferredQuality: globalSeriesQuality,
           preferredAudioLanguage: globalSeriesAudio,
         }));
-        setSeasonScanStatus(`T${sf.season}: ${allItems.length} episódio(s) encontrado(s).`);
+        setSeasonScanStatus(`T${sf.season}: ${allSeasonItems.length} episódio(s) de ${activeUrls.length} pasta(s).`);
       } catch (e: any) {
         setSeasonScanStatus(`Erro na Temporada ${sf.season}: ${e.message}`);
         results[sf.season] = [];
@@ -764,7 +778,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
         alert(`Série adicionada com ${allEpisodes.length} episódios via Terabox 3.0!`);
       }
       setSelectedSeries(null);
-      setSeasonFolders([{ season: 1, folderUrl: '' }]);
+      setSeasonFolders([{ season: 1, folderUrls: [''] }]);
       setSeasonScanResults({});
       setSeriesSearchResults([]);
       setSeriesSearchTitle('');
@@ -869,29 +883,52 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
 
         <div className="space-y-2 mb-4">
           {seasonFolders.map((sf, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-xs text-violet-400 font-bold w-6">T{sf.season}</span>
-              <input
-                type="number"
-                value={sf.season}
-                min={0}
-                onChange={e => { const c = [...seasonFolders]; c[i].season = Number(e.target.value); setSeasonFolders(c); }}
-                className="w-14 bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs"
-              />
-              <input
-                type="text"
-                value={sf.folderUrl}
-                onChange={e => { const c = [...seasonFolders]; c[i].folderUrl = e.target.value; setSeasonFolders(c); }}
-                placeholder="Link da pasta Terabox..."
-                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
-              />
-              {seasonFolders.length > 1 && (
-                <button onClick={() => setSeasonFolders(seasonFolders.filter((_, j) => j !== i))} className="text-red-500 hover:text-red-400 text-xs font-bold px-2">✕</button>
-              )}
+            <div key={i} className="border border-violet-500/10 rounded-xl p-3 bg-violet-500/[0.03] space-y-2">
+              {/* Season header */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-violet-400 font-black w-4">T</span>
+                <input
+                  type="number"
+                  value={sf.season}
+                  min={0}
+                  onChange={e => { const c = [...seasonFolders]; c[i].season = Number(e.target.value); setSeasonFolders(c); }}
+                  className="w-14 bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-bold"
+                />
+                <span className="text-gray-500 text-xs flex-1">Temporada {sf.season} — {sf.folderUrls.filter(u => u.trim()).length} pasta(s)</span>
+                {seasonFolders.length > 1 && (
+                  <button onClick={() => setSeasonFolders(seasonFolders.filter((_, j) => j !== i))} className="text-gray-600 hover:text-red-400 text-xs font-bold px-2">✕ Remover</button>
+                )}
+              </div>
+              {/* URL inputs */}
+              {sf.folderUrls.map((url, urlIdx) => (
+                <div key={urlIdx} className="flex items-center gap-2 pl-2">
+                  <span className="text-[10px] text-gray-600 font-bold w-4 shrink-0">{urlIdx + 1}</span>
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={e => { const c = [...seasonFolders]; c[i].folderUrls[urlIdx] = e.target.value; setSeasonFolders(c); }}
+                    placeholder={`Pasta ${urlIdx + 1} — Link Terabox da T${sf.season}...`}
+                    className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                  />
+                  {sf.folderUrls.length > 1 && (
+                    <button
+                      onClick={() => { const c = [...seasonFolders]; c[i].folderUrls = c[i].folderUrls.filter((_, j) => j !== urlIdx); setSeasonFolders(c); }}
+                      className="text-gray-600 hover:text-red-400 text-xs px-1"
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+              {/* Add folder */}
+              <button
+                onClick={() => { const c = [...seasonFolders]; c[i].folderUrls = [...c[i].folderUrls, '']; setSeasonFolders(c); }}
+                className="ml-6 text-xs text-violet-400 hover:text-violet-300 font-bold flex items-center gap-1"
+              >
+                + Adicionar pasta
+              </button>
             </div>
           ))}
           <button
-            onClick={() => setSeasonFolders([...seasonFolders, { season: seasonFolders.length + 1, folderUrl: '' }])}
+            onClick={() => setSeasonFolders([...seasonFolders, { season: seasonFolders.length + 1, folderUrls: [''] }])}
             className="text-xs text-violet-400 hover:text-violet-300 font-bold flex items-center gap-1 mt-1"
           >
             + Adicionar temporada
