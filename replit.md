@@ -1,45 +1,70 @@
-# [Project name]
+# NetPlay
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Netflix-style streaming platform that aggregates and streams content from Terabox, with movie/series discovery powered by TMDB metadata, watch parties, user profiles, and subscription management.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/netplay run dev` — run the frontend (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
+- pnpm workspaces, Node.js 20, TypeScript 5.9
+- Frontend: React 19, Vite, Tailwind CSS 4, Framer Motion, Radix UI
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Validation: Zod, drizzle-zod
+- Build: esbuild (CJS bundle for API server)
+- Auth: Supabase Auth
+- Video: hls.js for HLS/M3U8 playback
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/netplay/` — React frontend app
+- `artifacts/api-server/` — Express backend (proxy, Terabox, TMDB, AI routes)
+- `artifacts/mockup-sandbox/` — UI component development sandbox
+- `lib/db/` — Drizzle schema and database client
+- `lib/api-spec/` — OpenAPI spec and Orval codegen config
+- `lib/api-zod/` — Shared Zod schemas
+- `lib/api-client-react/` — Generated React hooks
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- API server proxies all external calls (TMDB, Terabox) — no API keys exposed to the browser via VITE_ vars for server-side only keys
+- Frontend proxies `/api/*` to `localhost:8080` via Vite dev server proxy
+- Terabox keep-warm service runs on an interval to keep streams accessible
+- hls.js loaded as a separate chunk (`vendor-hls`) to avoid blocking initial load
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Browse and search movies/series with TMDB metadata (posters, synopses, ratings)
+- Stream content via Terabox integration with HLS playback
+- Admin panel for mass-scanning Terabox folders and auto-detecting season/episode structure
+- Watch parties with real-time sync (Socket.IO)
+- User profiles and subscription management (Mercado Pago)
+- Push notifications via OneSignal
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Portuguese (Brazilian) is the primary language for comments and UI strings
+- pnpm only — yarn and npm are blocked via preinstall hook
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- API server must start before the frontend (frontend proxies `/api` to port 8080)
+- `PORT` env var is required for the API server (set to 8080 in workflows)
+- Run `pnpm approve-builds` after fresh installs if firebase/genai build scripts are blocked
+- VITE_ prefixed secrets are available at runtime via Replit's secret store and picked up by Vite dev server automatically
 
-## Pointers
+## Secrets required
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` — Supabase auth and database
+- `VITE_TMDB_API_KEY` — The Movie Database API
+- `VITE_GEMINI_API_KEY` — Google Gemini AI (synopsis translation)
+- `TERABOX_PRO_API_KEY`, `TERABOX_V2_API_KEY`, `TERABOX_V3_API_KEY`, `TERABOX_V3_API_SECRET` — Terabox stream resolvers
+- `VITE_ONESIGNAL_APP_ID` — Push notifications (optional)
+- `VITE_MERCADO_PAGO_PUBLIC_KEY` — Payment checkout (optional)
