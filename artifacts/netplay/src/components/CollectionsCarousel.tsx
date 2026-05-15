@@ -65,6 +65,7 @@ const CollectionsCarousel: React.FC<CollectionsCarouselProps> = ({ franchises })
                className="w-full h-full object-cover grayscale opacity-40 group-hover/card:grayscale-0 group-hover/card:opacity-100 transition-all duration-1000 scale-110 group-hover/card:scale-100" 
                referrerPolicy="no-referrer"
                alt={f.name}
+               onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1280&q=80&fit=crop'; }}
             />
             
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent flex flex-col justify-end p-8 md:p-16">

@@ -78,6 +78,7 @@ const CircleCollectionsRow: React.FC<CircleCollectionsRowProps> = ({ franchises 
                     className="w-full h-full object-cover grayscale-0 opacity-80 group-hover/circle:opacity-100 group-hover/circle:scale-105 transition-all duration-700 active:grayscale"
                     alt={f.name}
                     referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&q=80&fit=crop'; }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70 group-hover/circle:from-transparent transition-all duration-500" />
                   
