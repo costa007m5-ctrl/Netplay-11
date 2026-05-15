@@ -2425,7 +2425,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const hasTmdbKey = !!import.meta.env.VITE_TMDB_API_KEY;
+  const hasTmdbKey = true;
   const hasSupabase = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const handleLogout = async () => {

@@ -25,7 +25,7 @@ const AppInfo: React.FC<AppInfoProps> = ({ onContinue, movies }) => {
   useEffect(() => {
     const fetchTrending = async () => {
       try {
-        const res = await fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${import.meta.env.VITE_TMDB_API_KEY}&language=pt-BR`);
+        const res = await fetch(`/api/tmdb/trending/all/day?language=pt-BR`);
         const data = await res.json();
         if (data && data.results && data.results.length > 0) {
           // Shuffle and get enough movies for the wall

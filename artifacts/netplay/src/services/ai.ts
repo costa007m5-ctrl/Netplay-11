@@ -1,25 +1,15 @@
-import { GoogleGenAI } from "@google/genai";
-
-let ai: GoogleGenAI | null = null;
-try {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (apiKey) {
-    ai = new GoogleGenAI({ apiKey });
-  }
-} catch (e) {
-  console.warn("Gemini API key not found. Translation will not be available.");
-}
-
 export const translateToPortuguese = async (text: string): Promise<string> => {
   if (!text) return text;
-  if (!ai) return text;
   
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Translate the following movie/series text strictly to Brazilian Portuguese (pt-BR). Just return the translation, no extra text: "${text}"`,
+    const response = await fetch('/api/ai/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
     });
-    return response.text?.trim() || text;
+    if (!response.ok) return text;
+    const data = await response.json();
+    return data.translated || text;
   } catch (error) {
     console.error("Translation error:", error);
     return text;

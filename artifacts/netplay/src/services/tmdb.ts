@@ -1,39 +1,18 @@
 import axios from 'axios';
 
-const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
-const BASE_URL = 'https://api.themoviedb.org/3';
-
 const tmdb = axios.create({
-  baseURL: BASE_URL,
+  baseURL: '/api/tmdb',
   params: {
-    api_key: API_KEY,
     language: 'pt-BR',
   },
 });
 
-// Interceptor para previnir que "Network Error" quebre a visualização do app e providenciar um fallback
 tmdb.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Se foi Network Error (geralmente problema de CORS ou adblock)
     if (error.message === 'Network Error' || !error.response) {
-      console.warn("TMDB Network Error - tentando fallback...");
-      try {
-        const originalRequest = error.config;
-        if (!originalRequest._retry) {
-           originalRequest._retry = true;
-           // Constrói a URL completa com parâmetros e passa pro corsproxy
-           const fullUri = tmdb.getUri(originalRequest);
-           const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(fullUri);
-           const fallbackResponse = await axios.get(proxyUrl);
-           return fallbackResponse;
-        }
-      } catch (retryError) {
-         console.warn("Fallback do TMDB falhou também.");
-      }
+      console.warn("TMDB Network Error - request failed");
     }
-    
-    // Apenas logamos silenciosamente em vez de re-jogar na cara do React App
     console.warn("TMDB fetch falhou, retornando dados vazios:", error?.message);
     return Promise.resolve({ data: { results: [], cast: [], logos: [], flatrate: [], buy: [] }, status: 200 });
   }
@@ -75,7 +54,6 @@ export const getMovieLogo = async (id: number, type: 'movie' | 'tv' = 'movie'): 
     const logos = data.logos || [];
     if (logos.length === 0) return null;
 
-    // Prioritize PT, then EN, then FIRST
     const logo = logos.find((l: any) => l.iso_639_1 === 'pt') || 
                  logos.find((l: any) => l.iso_639_1 === 'en') || 
                  logos[0];
@@ -103,14 +81,12 @@ export const fetchSeasonDetailsWithFallback = async (tvId: number, seasonNumber:
       const fallbackEnOverview = enEpisodes[idx]?.overview || '';
       const fallbackEnTitle = enEpisodes[idx]?.name || '';
       
-      // If pt-BR overview is empty, OR if pt-BR overview identically matches the en-US overview (meaning TMDB fell back to English), let's translate it!
       if (!finalOverview || finalOverview === '' || (finalOverview === fallbackEnOverview && fallbackEnOverview !== '')) {
          if (fallbackEnOverview) {
            finalOverview = await translateToPortuguese(fallbackEnOverview);
          }
       }
       
-      // Same logic for the tile
       if (!finalName || finalName.startsWith('Episódio') || finalName === `Episode ${ep.episode_number}` || (finalName === fallbackEnTitle && fallbackEnTitle !== '')) {
           if (fallbackEnTitle && !fallbackEnTitle.startsWith('Episode ') && !fallbackEnTitle.startsWith('Episódio')) {
               try {

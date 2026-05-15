@@ -6,6 +6,8 @@ import teraboxV3Router from "./terabox-v3";
 import proxyStreamRouter from "./proxy-stream";
 import keepwarmRouter from "./keepwarm";
 import probeStreamsRouter from "./probe-streams";
+import tmdbRouter from "./tmdb";
+import aiRouter from "./ai";
 
 const router: IRouter = Router();
 
@@ -16,5 +18,7 @@ router.use(teraboxV3Router);
 router.use(proxyStreamRouter);
 router.use(keepwarmRouter);
 router.use(probeStreamsRouter);
+router.use(tmdbRouter);
+router.use(aiRouter);
 
 export default router;
