@@ -5,9 +5,6 @@ import Banner from './components/Banner';
 import Row from './components/Row';
 import Login from './components/Login';
 import ProfileSelection from './components/ProfileSelection';
-import StreamingHub from './components/StreamingHub';
-import CollectionsCarousel from './components/CollectionsCarousel';
-
 // Lazy-load heavy components only when actually needed (huge initial bundle savings)
 const VideoPlayer = React.lazy(() => import('./components/VideoPlayer'));
 const CustomUrlModal = React.lazy(() => import('./components/CustomUrlModal'));
@@ -15,6 +12,14 @@ const MovieDetailsModal = React.lazy(() => import('./components/MovieDetailsModa
 const WatchPartyModal = React.lazy(() => import('./components/WatchPartyModal'));
 const SettingsModal = React.lazy(() => import('./components/SettingsModal'));
 const IntroVignette = React.lazy(() => import('./components/IntroVignette'));
+const StreamingHub = React.lazy(() => import('./components/StreamingHub'));
+const CollectionsCarousel = React.lazy(() => import('./components/CollectionsCarousel'));
+const ContinueWatchingRow = React.lazy(() => import('./components/ContinueWatchingRow'));
+const NewReleasesRow = React.lazy(() => import('./components/NewReleasesRow'));
+const CinemaRow = React.lazy(() => import('./components/CinemaRow'));
+const Top10Row = React.lazy(() => import('./components/Top10Row'));
+const AppInfo = React.lazy(() => import('./components/AppInfo'));
+const UniverseView = React.lazy(() => import('./components/UniverseView'));
 import { CATEGORIES } from './constants';
 import { isDynamicRef } from './services/terabox';
 import { getSelectedServer, convertTeraboxToApi } from './components/SmartPlayerSelector';
@@ -24,12 +29,6 @@ import { Movie, Profile, WatchHistory, ScannerState, ReScannerState, CollectionS
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'motion/react';
-import ContinueWatchingRow from './components/ContinueWatchingRow';
-import NewReleasesRow from './components/NewReleasesRow';
-import CinemaRow from './components/CinemaRow';
-import Top10Row from './components/Top10Row';
-import AppInfo from './components/AppInfo';
-const UniverseView = React.lazy(() => import('./components/UniverseView'));
 
 const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
 const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'));
