@@ -4635,14 +4635,14 @@ export default function App() {
     if (scope === 'movies' || scope === 'all') {
       const pool = myMovies.filter(m => m.type !== 'series');
       const toAdd = mode === 'missing' ? pool.filter(hasMissingLogo) : pool;
-      for (const m of toAdd) items.push({ id: m.id, label: m.title || m.name || `#${m.id}`, mediaType: 'movie' });
+      for (const m of toAdd) items.push({ id: m.id, label: m.title || m.name || `#${m.id}`, mediaType: m.name ? 'tv' : 'movie' });
     }
 
     // Séries
     if (scope === 'series' || scope === 'all') {
       const pool = myMovies.filter(m => m.type === 'series');
       const toAdd = mode === 'missing' ? pool.filter(hasMissingLogo) : pool;
-      for (const m of toAdd) items.push({ id: m.id, label: m.title || m.name || `#${m.id}`, mediaType: 'tv' });
+      for (const m of toAdd) items.push({ id: m.id, label: m.title || m.name || `#${m.id}`, mediaType: m.name ? 'tv' : 'movie' });
     }
 
     // Coleções
@@ -4694,7 +4694,10 @@ export default function App() {
             skipped++;
           }
         } else {
-          const logo = await getMovieLogo(item.id as number, item.mediaType as 'movie' | 'tv');
+          const primaryType = item.mediaType as 'movie' | 'tv';
+          const fallbackType: 'movie' | 'tv' = primaryType === 'tv' ? 'movie' : 'tv';
+          let logo = await getMovieLogo(item.id as number, primaryType);
+          if (!logo) logo = await getMovieLogo(item.id as number, fallbackType);
           if (logo) {
             await supabase.from('movies').update({ logo_path: logo }).eq('id', item.id);
             setMyMovies(prev => prev.map(m => m.id === item.id ? { ...m, logo_path: logo } : m));
