@@ -415,10 +415,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               }
             }
           }
-          // Fallback 1: use initialEpisodeIndex in the sorted list (deterministic, avoids random file)
-          if (!file && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
-            file = sortedList[initialEpisodeIndex];
-            console.log(`[VideoPlayer] dyn-ref: filename não encontrado, usando índice ${initialEpisodeIndex} na lista ordenada (${(file?.filename || file?.name) ?? '?'})`);
+          // Fallback 1: use episode number from movie.episodes[initialEpisodeIndex] to find the right file
+          // (avoids mismatch when movie.episodes is stored out of order vs sortedList which is always sorted)
+          if (!file && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0) {
+            const epForIdx = movie.episodes ? movie.episodes[initialEpisodeIndex] : null;
+            const epNum = (epForIdx as any)?.episode;
+            if (epNum && epNum > 0 && epNum <= sortedList.length) {
+              file = sortedList[epNum - 1];
+              console.log(`[VideoPlayer] dyn-ref: usando ep.episode=${epNum} → sortedList[${epNum - 1}] (${(file?.filename || file?.name) ?? '?'})`);
+            } else if (initialEpisodeIndex < sortedList.length) {
+              file = sortedList[initialEpisodeIndex];
+              console.log(`[VideoPlayer] dyn-ref: usando índice ${initialEpisodeIndex} na lista ordenada (${(file?.filename || file?.name) ?? '?'})`);
+            }
           }
           // Fallback 2: first sorted file
           if (!file) file = sortedList[0] || list[0];
@@ -587,9 +595,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                 (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
               ) || null;
             }
-            // Prioridade 3: usar initialEpisodeIndex como posição na lista ordenada
-            if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedList.length) {
-              vid = sortedList[initialEpisodeIndex];
+            // Prioridade 3: usar número do episódio (ep.episode) para localizar o arquivo correto
+            // Evita mismatch quando movie.episodes está fora de ordem vs sortedList (sempre ordenada)
+            if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0) {
+              const epForIdx = movie.episodes ? movie.episodes[initialEpisodeIndex] : null;
+              const epNum = (epForIdx as any)?.episode;
+              if (epNum && epNum > 0 && epNum <= sortedList.length) {
+                vid = sortedList[epNum - 1];
+              } else if (initialEpisodeIndex < sortedList.length) {
+                vid = sortedList[initialEpisodeIndex];
+              }
             }
             if (!vid && urlMatchEp && (urlMatchEp as any).episode > 0) {
               const epNum = (urlMatchEp as any).episode - 1;
