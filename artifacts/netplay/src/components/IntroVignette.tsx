@@ -30,6 +30,48 @@ const DEFAULT_MOVIES = [
   { poster_path: 'https://image.tmdb.org/t/p/w500/A7uByuyGKE69uYv7SFF9vI9Ym96.jpg' },
 ];
 
+// Som cinematográfico gerado via Web Audio API (sem arquivos externos)
+function playIntroSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const note = (
+      freq: number, start: number, end: number,
+      peakGain: number, freqEnd?: number,
+      type: OscillatorType = 'sine'
+    ) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, start);
+      if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, end);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(peakGain, start + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, end);
+      osc.start(start);
+      osc.stop(end + 0.05);
+    };
+
+    // "TU" — impacto metálico alto
+    note(880, now, now + 0.25, 0.25, 440, 'sawtooth');
+    note(660, now, now + 0.30, 0.15, 330, 'sine');
+
+    // "DUM" — bass cinematográfico profundo, começa junto com o zoom do logo
+    note(90,  now + 0.18, now + 2.2, 0.6, 38, 'sine');
+    note(45,  now + 0.22, now + 2.8, 0.4, 20, 'sine');
+
+    // Brilho tonal final (sparkle)
+    note(1320, now + 0.05, now + 0.5, 0.08, 660, 'sine');
+  } catch {
+    // Autoplay pode ser bloqueado — falha silenciosa
+  }
+}
+
 const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = false, movies = [] }) => {
   const [step, setStep] = useState(0); 
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -38,6 +80,9 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
   const displayMovies = movies.length > 10 ? movies : [...movies, ...DEFAULT_MOVIES, ...DEFAULT_MOVIES, ...DEFAULT_MOVIES];
 
   useEffect(() => {
+    // Toca som na entrada — sincronizado com o pulso do logo (step 1 → 400ms)
+    const soundTimer = setTimeout(playIntroSound, 400);
+
     const timers = [
       setTimeout(() => setStep(1), 400),  // Logo Pulse
       setTimeout(() => setStep(2), 1000), // Text Reveal
@@ -52,6 +97,7 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
     }, 1200);
 
     return () => {
+      clearTimeout(soundTimer);
       timers.forEach(clearTimeout);
       clearInterval(phraseInterval);
     };

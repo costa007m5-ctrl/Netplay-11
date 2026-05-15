@@ -3225,7 +3225,10 @@ export default function App() {
     }
   }, []);
 
-  const [showIntro, setShowIntro] = useState(true);
+  // Mostra a vinheta apenas na primeira entrada da sessão — reloads de página não reapresentam
+  const [showIntro, setShowIntro] = useState(() => {
+    try { return !sessionStorage.getItem('netplay_intro_shown'); } catch { return true; }
+  });
   const [showAppInfo, setShowAppInfo] = useState(true);
   const [initialLoginMode, setInitialLoginMode] = useState<'login' | 'signup'>('login');
   const [user, setUser] = useState<User | null>(null);
@@ -5971,7 +5974,10 @@ export default function App() {
       <Suspense fallback={<div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
         <IntroVignette 
           isLoading={loading} 
-          onComplete={() => setShowIntro(false)} 
+          onComplete={() => {
+            try { sessionStorage.setItem('netplay_intro_shown', '1'); } catch {}
+            setShowIntro(false);
+          }} 
           movies={myMovies}
         />
       </Suspense>
