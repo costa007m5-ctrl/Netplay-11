@@ -96,6 +96,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const failedSourcesRef = useRef<Set<string>>(new Set());
   const cascadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cascadeSucceededRef = useRef(false);
+  const autoQualityCascadeRef = useRef(autoQualityCascade);
+  const videoUrlOptionsRef = useRef(videoUrlOptions);
   const [cascadeDelaySecs, setCascadeDelaySecs] = useState(cascadeDelaySecsProp);
   
   const parsedUrls = useMemo(() => {
@@ -273,6 +275,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       startedHlsRef.current = false;
     }
   }, [activeSrc]);
+
+  // Manter refs atualizados para uso dentro de closures HLS (evita stale state)
+  useEffect(() => { autoQualityCascadeRef.current = autoQualityCascade; });
+  useEffect(() => { videoUrlOptionsRef.current = videoUrlOptions; });
 
   // Sincroniza o label de qualidade atual com videoUrlOptions
   useEffect(() => {
@@ -847,7 +853,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   }, [isLoading, error]);
 
   useEffect(() => {
-    if (error && (src.includes('kingx.dev') || src.includes('terabox') || src.includes('teradl'))) {
+    // When cascade is active, let it handle quality fallback — don't jump straight to iframe
+    if (error && !autoQualityCascadeRef.current && (src.includes('kingx.dev') || src.includes('terabox') || src.includes('teradl'))) {
        console.log("Auto-switching to Iframe mode due to playback error on KingX/Terabox link");
        setForcedIframeMode(true);
        setError(null);
@@ -1078,6 +1085,28 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                      }
                    }, retryDelay);
                    return;
+                 }
+
+                 // Se cascade está ativo, tenta próxima qualidade imediatamente em vez de ir pro iframe
+                 const cascadeOpts = videoUrlOptionsRef.current;
+                 if (autoQualityCascadeRef.current && cascadeOpts && cascadeOpts.length > 1) {
+                   failedSourcesRef.current.add(activeSrc);
+                   if (cascadeTimerRef.current) { clearTimeout(cascadeTimerRef.current); cascadeTimerRef.current = null; }
+                   const curIdx = cascadeOpts.findIndex(o => o.url === activeSrc);
+                   const nextOpt = cascadeOpts.find((o, i) => i > curIdx && !failedSourcesRef.current.has(o.url));
+                   if (nextOpt) {
+                     console.warn(`[NetflixPlayer] HLS fatal — cascade imediato para ${nextOpt.label}`);
+                     setQualityToast(`⏩ Tentando ${nextOpt.label}...`);
+                     setTimeout(() => setQualityToast(null), 2500);
+                     try { hls.destroy(); } catch {}
+                     hlsRef.current = null;
+                     retryCountRef.current = 0;
+                     setActiveSrc(nextOpt.url);
+                     setCurrentQuality(nextOpt.label);
+                     return;
+                   }
+                   // Todas as qualidades falharam — deixa o cascade effect lidar com o fallback v3
+                   console.warn('[NetflixPlayer] HLS fatal — todas as qualidades falharam, cascade vai tentar v3');
                  }
 
                  // Esgotou retries OU erro não recuperável (ex: manifest parse) → cai pro iframe

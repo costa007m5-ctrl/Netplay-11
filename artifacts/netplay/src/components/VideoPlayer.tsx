@@ -372,18 +372,31 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           // local do servidor (links Terabox às vezes ficam "presos" no cache enquanto o CDN
           // ainda não liberou o arquivo). Backoff curto entre tentativas.
           const fetchWithRetry = async () => {
-            const tryOnce = async (nocache: boolean) => {
+            const tryOnce = async (ep: string, nocache: boolean) => {
               const qs = nocache ? `&nocache=1&_t=${Date.now()}` : '';
-              const r = await fetch(`${endpoint}?url=${encodeURIComponent(folderUrl)}${qs}`);
+              const r = await fetch(`${ep}?url=${encodeURIComponent(folderUrl)}${qs}`);
               const d = await r.json().catch(() => ({}));
               return { r, d };
             };
-            let { r, d } = await tryOnce(false);
+            let { r, d } = await tryOnce(endpoint, false);
             const isEmpty = r.ok && (!Array.isArray(d.list) || d.list.length === 0);
             if (!r.ok || isEmpty) {
               console.warn(`[VideoPlayer] dyn-ref tentativa 1 falhou (status=${r.status}, vazio=${isEmpty}) — retry com nocache em 500ms`);
               await new Promise(res => setTimeout(res, 500));
-              ({ r, d } = await tryOnce(true));
+              ({ r, d } = await tryOnce(endpoint, true));
+            }
+            // Se for endpoint v1 sem chave (503) ou sem resultados, tenta v3 como fallback
+            const isMissingKey = r.status === 503;
+            const isStillEmpty = r.ok && (!Array.isArray(d.list) || d.list.length === 0);
+            if ((isMissingKey || isStillEmpty) && endpoint !== '/api/terabox-v3') {
+              console.warn(`[VideoPlayer] dyn-ref ${endpoint} falhou/sem resultados — tentando fallback v3`);
+              ({ r, d } = await tryOnce('/api/terabox-v3', false));
+              if (!r.ok) {
+                ({ r, d } = await tryOnce('/api/terabox-v3', true));
+              }
+              if (r.ok && Array.isArray(d.list) && d.list.length > 0) {
+                (d as any)._source = 'v3-fallback';
+              }
             }
             if (!r.ok) throw new Error(d?.error || `Falha ao resolver Terabox (${r.status})`);
             return d;
