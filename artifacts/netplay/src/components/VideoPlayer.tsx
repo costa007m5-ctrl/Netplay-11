@@ -990,9 +990,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           videoUrlOptions={videoUrlOptions}
           dubbingOptions={dubbingOptions}
           autoQualityCascade={isAutoProCascade}
-          cascadeDelaySecs={(movie as any).qualityCascadeDelay ?? 10}
+          cascadeDelaySecs={movie.qualityCascadeDelay ?? 10}
           teraboxV1Ref={isAutoProCascade ? (movie.videoUrl || undefined) : undefined}
-          cascadeToV3OnPenultimate={(movie as any).cascadeToV3OnPenultimate !== false}
+          cascadeToV3OnPenultimate={movie.cascadeToV3OnPenultimate !== false}
           preferredAudioLanguage={(() => {
             const urlMatchEp = movie.type === 'series' && movie.episodes
               ? movie.episodes.find(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl)

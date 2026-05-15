@@ -54,6 +54,8 @@ export interface Movie {
   savedEpisodeUrl?: string; // URL do episódio salvo (carregado do Supabase watch_history)
   preferredQuality?: PreferredQuality; // Qualidade fixa escolhida no admin (sobrescreve probe)
   preferredAudioLanguage?: PreferredAudioLanguage; // Idioma de áudio preferido
+  qualityCascadeDelay?: number; // Segundos de espera por qualidade no modo cascata
+  cascadeToV3OnPenultimate?: boolean; // Pular p/ API 3.0 na penúltima qualidade
 }
 
 export interface StreamingProvider {

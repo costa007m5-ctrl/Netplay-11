@@ -3690,6 +3690,18 @@ export default function App() {
 
   const handleUpdateMovie = async (movie: Movie, silent: boolean = false) => {
     try {
+      // Salvar configurações de cascata no localStorage (sem necessidade de colunas no banco)
+      if (movie.id && (movie.qualityCascadeDelay !== undefined || movie.cascadeToV3OnPenultimate !== undefined)) {
+        try {
+          const existing = JSON.parse(localStorage.getItem(`netplay_cascade_${movie.id}`) || '{}');
+          localStorage.setItem(`netplay_cascade_${movie.id}`, JSON.stringify({
+            ...existing,
+            qualityCascadeDelay: movie.qualityCascadeDelay ?? existing.qualityCascadeDelay ?? 10,
+            cascadeToV3OnPenultimate: movie.cascadeToV3OnPenultimate !== undefined ? movie.cascadeToV3OnPenultimate : (existing.cascadeToV3OnPenultimate !== undefined ? existing.cascadeToV3OnPenultimate : true),
+          }));
+        } catch {}
+      }
+
       const updateData = {
         title: movie.title || movie.name,
         video_url: movie.videoUrl || (movie as any).video_url,
@@ -3952,21 +3964,30 @@ export default function App() {
       console.log(`Filmes encontrados: ${data?.length || 0}`);
 
       if (data) {
-        const formattedMovies: Movie[] = data.map(m => ({
-          ...m,
-          id: m.id,
-          videoUrl: m.video_url,
-          videoUrl2: m.video_url_2,
-          preferredQuality: m.preferred_quality || undefined,
-          vote_average: m.vote_average || m.rating || 0,
-          rating: m.rating || m.vote_average || 0,
-          release_date: m.release_date || '',
-          release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
-          runtime: m.runtime || 0,
-          actors: m.actors || '',
-          is_hidden: m.is_hidden || false,
-          watch_providers: m.watch_providers || ''
-        }));
+        const formattedMovies: Movie[] = data.map(m => {
+          // Mesclar configurações de cascata salvas no localStorage
+          let cascadeSettings: { qualityCascadeDelay?: number; cascadeToV3OnPenultimate?: boolean } = {};
+          try {
+            const raw = localStorage.getItem(`netplay_cascade_${m.id}`);
+            if (raw) cascadeSettings = JSON.parse(raw);
+          } catch {}
+          return {
+            ...m,
+            id: m.id,
+            videoUrl: m.video_url,
+            videoUrl2: m.video_url_2,
+            preferredQuality: m.preferred_quality || undefined,
+            vote_average: m.vote_average || m.rating || 0,
+            rating: m.rating || m.vote_average || 0,
+            release_date: m.release_date || '',
+            release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
+            runtime: m.runtime || 0,
+            actors: m.actors || '',
+            is_hidden: m.is_hidden || false,
+            watch_providers: m.watch_providers || '',
+            ...cascadeSettings,
+          };
+        });
 
         setMyMovies(formattedMovies);
         localStorage.setItem('cached_my_movies', JSON.stringify(formattedMovies));
