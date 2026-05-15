@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import screenfull from 'screenfull';
 import NetflixPlayer from './NetflixPlayer';
 import { Movie, RoomEvent, AppSettings } from '../types';
@@ -85,6 +85,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const currentTimeRef = useRef<number>(0);
   const durationRef = useRef<number>(0);
 
+  // Episódios ordenados por temporada→número — usado em TODOS os lookups por índice.
+  // initialEpisodeIndex passado pelo modal já usa essa mesma ordem.
+  const sortedEpisodes = useMemo(() => {
+    if (!movie.episodes || movie.episodes.length === 0) return [];
+    return [...movie.episodes].sort((a: any, b: any) => {
+      const sa = (a.season || 1) - (b.season || 1);
+      return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+    });
+  }, [movie.episodes]);
+
   const driveApiKey = import.meta.env.VITE_GOOGLE_DRIVE_API_KEY;
 
   const [movieLogo, setMovieLogo] = useState<string | null>(movie.logo_path || null);
@@ -117,13 +127,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         if (isFinished && isMovie) {
            supabase.from('watch_history').delete().match({ profile_id: profileId, movie_id: movie.id }).then(() => {});
         } else if (isFinished && !isMovie) {
-           const currentIndex = movie.episodes ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl) : -1;
-           const isLastEpisode = movie.episodes && currentIndex !== -1 && currentIndex === movie.episodes.length - 1;
+           const currentIndex = sortedEpisodes.findIndex(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl);
+           const isLastEpisode = sortedEpisodes.length > 0 && currentIndex !== -1 && currentIndex === sortedEpisodes.length - 1;
            
            if (isLastEpisode) {
               supabase.from('watch_history').delete().match({ profile_id: profileId, movie_id: movie.id }).then(() => {});
            } else {
-              const nextEp = movie.episodes && currentIndex !== -1 ? movie.episodes[currentIndex + 1] : null;
+              const nextEp = sortedEpisodes.length > 0 && currentIndex !== -1 ? sortedEpisodes[currentIndex + 1] : null;
               if (nextEp) {
                  localStorage.setItem(`netplay_progress_url_${movie.id}`, nextEp.videoUrl || nextEp.videoUrl2 || '');
               }
@@ -640,18 +650,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
           });
 
-          // Find episode index by URL match (may be wrong when all share same URL)
-          const urlMatchIndex = movie.type === 'series' && movie.episodes
-            ? movie.episodes.findIndex(ep => ep.videoUrl === u || ep.videoUrl2 === u)
+          // Find episode index by URL match using sorted episodes for consistent indexing
+          const urlMatchIndex = movie.type === 'series' && sortedEpisodes.length > 0
+            ? sortedEpisodes.findIndex(ep => ep.videoUrl === u || ep.videoUrl2 === u)
             : -1;
-          const urlMatchEp = urlMatchIndex !== -1 && movie.episodes ? movie.episodes[urlMatchIndex] : null;
+          const urlMatchEp = urlMatchIndex !== -1 ? sortedEpisodes[urlMatchIndex] : null;
 
           let vid: any = null;
 
           if (sortedList.length > 0) {
-            // Prioridade 1: usar o episódio pelo índice exato selecionado (mais confiável quando vários eps compartilham a mesma URL de pasta)
-            const indexedEp = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && movie.episodes && initialEpisodeIndex < movie.episodes.length)
-              ? movie.episodes[initialEpisodeIndex]
+            // Prioridade 1: usar o episódio pelo índice exato selecionado usando sortedEpisodes
+            const indexedEp = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedEpisodes.length)
+              ? sortedEpisodes[initialEpisodeIndex]
               : null;
             const indexedFileName = (indexedEp as any)?.file_name;
             // Prioridade 2: episódio encontrado por URL match (fallback)
@@ -665,14 +675,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                 (f.filename || f.name || '').toLowerCase() === fileNameToMatch.toLowerCase()
               ) || null;
             }
-            // Prioridade 3: usar número do episódio (ep.episode) para localizar o arquivo correto
-            // Evita mismatch quando movie.episodes está fora de ordem vs sortedList (sempre ordenada)
+            // Prioridade 3: usar índice ordenado da lista de arquivos (sortedList e sortedEpisodes usam mesma ordem)
             if (!vid && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0) {
-              const epForIdx = movie.episodes ? movie.episodes[initialEpisodeIndex] : null;
-              const epNum = (epForIdx as any)?.episode;
-              if (epNum && epNum > 0 && epNum <= sortedList.length) {
-                vid = sortedList[epNum - 1];
-              } else if (initialEpisodeIndex < sortedList.length) {
+              if (initialEpisodeIndex < sortedList.length) {
                 vid = sortedList[initialEpisodeIndex];
               }
             }
@@ -988,8 +993,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   // NetflixPlayer é o único player — todos os links são roteados aqui
   {
     // Prioridade: usar initialEpisodeIndex quando disponível (evita ambiguidade quando múltiplos eps têm a mesma URL)
-    const currentIndexByUrl = movie.type === 'series' && movie.episodes
-      ? movie.episodes.findIndex(ep => {
+    // Usa sortedEpisodes para que o índice seja consistente com initialEpisodeIndex (também sorted)
+    const currentIndexByUrl = movie.type === 'series' && sortedEpisodes.length > 0
+      ? sortedEpisodes.findIndex(ep => {
           const mv = movie.videoUrl || '';
           if (ep.videoUrl === mv || ep.videoUrl2 === mv) return true;
           if (isDynamicRef(mv) && ep.videoUrl && isDynamicRef(ep.videoUrl)) {
@@ -1002,15 +1008,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           return false;
         })
       : -1;
-    const currentIndex = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && movie.episodes && initialEpisodeIndex < movie.episodes.length)
+    const currentIndex = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0 && initialEpisodeIndex < sortedEpisodes.length)
       ? initialEpisodeIndex
       : currentIndexByUrl;
-    const currentEpisode = currentIndex !== -1 && movie.episodes ? movie.episodes[currentIndex] : null;
+    const currentEpisode = currentIndex !== -1 ? sortedEpisodes[currentIndex] || null : null;
     const episodeTitle = currentEpisode ? (currentEpisode.title || `Episódio ${currentEpisode.episode}`) : "";
     const displayTitle = movie.type === 'series' && episodeTitle 
        ? `${movie.title || movie.name} - ${episodeTitle}` 
        : (movie.title || movie.name || "");
-    const hasNextEpisode = currentIndex !== -1 && movie.episodes && currentIndex < movie.episodes.length - 1;
+    const hasNextEpisode = currentIndex !== -1 && sortedEpisodes.length > 0 && currentIndex < sortedEpisodes.length - 1;
 
     const videoUrlOptions: { id: string; label: string; url: string }[] = [];
     // Se Terabox extraiu múltiplas qualidades, expor todas (1080p, 720p, 480p, 360p, ...)
@@ -1049,10 +1055,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           subtitleUrl={extractedSubtitleUrl || undefined}
           title={displayTitle}
           seriesTitle={movie.type === 'series' ? (movie.title || movie.name || "") : undefined}
-          episodes={movie.episodes}
+          episodes={sortedEpisodes.length > 0 ? sortedEpisodes : movie.episodes}
           currentEpisodeIndex={currentIndex >= 0 ? currentIndex : undefined}
           onSelectEpisode={(ep) => {
-            const epIdx = movie.episodes ? movie.episodes.findIndex(e => e.id === ep.id || (e.videoUrl === ep.videoUrl && e.episode === ep.episode && e.season === ep.season)) : -1;
+            const epIdx = sortedEpisodes.findIndex(e => e.id === ep.id || (e.videoUrl === ep.videoUrl && e.episode === ep.episode && e.season === ep.season));
             if (onPlayNext) onPlayNext(movie, ep.videoUrl || ep.videoUrl2 || "", epIdx >= 0 ? epIdx : undefined);
           }}
           backdropUrl={movie.backdrop_path}
@@ -1067,9 +1073,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             if (onPlayNext) onPlayNext(rec, defaultRecUrl || "");
           }}
           onNextEpisode={() => {
-            if (hasNextEpisode && movie.episodes && onPlayNext) {
+            if (hasNextEpisode && sortedEpisodes.length > 0 && onPlayNext) {
               const nextIdx = currentIndex + 1;
-              onPlayNext(movie, movie.episodes[nextIdx].videoUrl, nextIdx);
+              onPlayNext(movie, sortedEpisodes[nextIdx].videoUrl || sortedEpisodes[nextIdx].videoUrl2 || "", nextIdx);
             }
           }}
           videoUrlOptions={videoUrlOptions}
@@ -1090,7 +1096,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
           autoNextOffset={
             movie.type === 'series' && currentIndex !== -1 
-              ? movie.episodes?.[currentIndex]?.credits_time 
+              ? sortedEpisodes[currentIndex]?.credits_time 
               : (movie as any).credits_time ?? undefined
           }
           recsOverlayOffset={appSettings?.recs_overlay_offset ?? 120}
@@ -1112,21 +1118,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             if (profileId && movie.id && appSettings?.subscription_plan !== 'hub') {
               const finalDuration = duration !== undefined ? duration : durationRef.current;
               const isMovie = movie.type !== 'series';
-              const seriesCreditsTime = currentIndex !== -1 && movie.episodes?.[currentIndex]?.credits_time !== undefined 
-                  ? movie.episodes[currentIndex].credits_time 
+              const seriesCreditsTime = currentIndex !== -1 && sortedEpisodes[currentIndex]?.credits_time !== undefined 
+                  ? sortedEpisodes[currentIndex].credits_time 
                   : 30;
               const isFinished = finalDuration > 0 && (isMovie ? (finalDuration - time <= 450) : (finalDuration - time <= seriesCreditsTime!));
 
               if (isFinished && isMovie) {
                   await supabase.from('watch_history').delete().match({ profile_id: profileId, movie_id: movie.id });
               } else if (isFinished && !isMovie) {
-                  const currentIndex = movie.episodes ? movie.episodes.findIndex(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl) : -1;
-                  const isLastEpisode = movie.episodes && currentIndex !== -1 && currentIndex === movie.episodes.length - 1;
+                  const currentIndex = sortedEpisodes.findIndex(ep => ep.videoUrl === movie.videoUrl || ep.videoUrl2 === movie.videoUrl);
+                  const isLastEpisode = sortedEpisodes.length > 0 && currentIndex !== -1 && currentIndex === sortedEpisodes.length - 1;
                   
                   if (isLastEpisode) {
                      await supabase.from('watch_history').delete().match({ profile_id: profileId, movie_id: movie.id });
                   } else {
-                     const nextEp = movie.episodes && currentIndex !== -1 ? movie.episodes[currentIndex + 1] : null;
+                     const nextEp = sortedEpisodes.length > 0 && currentIndex !== -1 ? sortedEpisodes[currentIndex + 1] : null;
                      if (nextEp) {
                         localStorage.setItem(`netplay_progress_url_${movie.id}`, nextEp.videoUrl || nextEp.videoUrl2 || '');
                      }
