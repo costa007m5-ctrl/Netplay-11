@@ -142,21 +142,49 @@ async function warmTeraboxApi(url: string, source: Source): Promise<boolean> {
 }
 
 async function warmKingX(url: string): Promise<boolean> {
-  // Extrai o m3u8 interno e faz HEAD
+  // Extract the inner m3u8 URL from the KingX player hash
+  let m3u8Url: string | null = null;
   try {
     if (url.includes("#")) {
       const hash = url.split("#")[1] || "";
       const params = new URLSearchParams(hash);
       const v = params.get("video_url");
-      if (v) return headOnly(v, 5000);
+      if (v) m3u8Url = v;
     }
-    if (url.includes("teradl.kingx.dev") && url.includes(".m3u8")) {
-      return headOnly(url, 5000);
+    if (!m3u8Url && url.includes("teradl.kingx.dev") && url.includes(".m3u8")) {
+      m3u8Url = url;
     }
   } catch {
     // ignore
   }
-  return false;
+
+  if (!m3u8Url) return false;
+
+  try {
+    // Fetch the m3u8 manifest (not just HEAD) to actually warm the CDN pipeline
+    const resp = await axios.get(m3u8Url, {
+      timeout: 8000,
+      validateStatus: () => true,
+      responseType: "text",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; NetPlay/1.0)" },
+    });
+
+    if (resp.status >= 500) return false;
+    if (typeof resp.data !== "string") return resp.status < 400;
+
+    // Parse segment URLs from the manifest and HEAD the first few to warm CDN edges
+    const lines = resp.data.split("\n").map((l: string) => l.trim()).filter((l: string) => l && !l.startsWith("#"));
+    const base = m3u8Url.substring(0, m3u8Url.lastIndexOf("/") + 1);
+    const segUrls = lines.slice(0, 4).map((seg: string) => seg.startsWith("http") ? seg : base + seg);
+    if (segUrls.length > 0) {
+      await Promise.allSettled(segUrls.map((s) => headOnly(s, 4000)));
+      logger.info({ segments: segUrls.length }, "[keepwarm] KingX m3u8 segments warmed");
+    }
+    return true;
+  } catch {
+    // Fallback to plain HEAD if manifest fetch fails
+    return headOnly(m3u8Url, 5000);
+  }
 }
 
 async function warmDrive(url: string): Promise<boolean> {
@@ -256,11 +284,11 @@ function rescheduleTimer() {
 }
 
 export function startKeepwarm() {
-  // Primeiro ciclo após 60s
+  // First cycle after 5s (reduced from 60s so URLs start warming immediately on server boot)
   setTimeout(() => {
     runKeepwarm().catch((e) => logger.error({ err: e }, "[keepwarm] erro no primeiro ciclo"));
     rescheduleTimer();
-  }, 60_000);
+  }, 5_000);
   logger.info({ intervalMs: config.intervalMs }, "[keepwarm] iniciado");
 }
 

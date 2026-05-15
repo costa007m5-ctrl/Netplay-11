@@ -336,6 +336,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     setFinalVideoUrl(getInitialFinalVideoUrl());
   }, [movie.id, movie.videoUrl]);
 
+  // Pre-warm KingX/direct HLS URLs as soon as they are loaded so CDN edges are hot
+  useEffect(() => {
+    const u = movie.videoUrl || '';
+    const isKingXUrl = u.includes('player.kingx.dev') || u.includes('teradl.kingx.dev');
+    const isDirectHls = /^https?:\/\/.+\.m3u8/i.test(u);
+    if ((isKingXUrl || isDirectHls) && u) {
+      fetch('/api/keepwarm-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: [u], concurrency: 1 }),
+      }).catch(() => {});
+    }
+  }, [movie.id, movie.videoUrl]);
+
   useEffect(() => {
     const runExtraction = async () => {
       const u = movie.videoUrl || '';
@@ -428,15 +442,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               }
             }
           }
-          // Fallback 1: use episode number from movie.episodes[initialEpisodeIndex] to find the right file
-          // (avoids mismatch when movie.episodes is stored out of order vs sortedList which is always sorted)
+          // Fallback 1: match by season+episode code (SxxExx) — works across multi-season folders
           if (!file && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0) {
             const epForIdx = movie.episodes ? movie.episodes[initialEpisodeIndex] : null;
             const epNum = (epForIdx as any)?.episode;
-            if (epNum && epNum > 0 && epNum <= sortedList.length) {
-              file = sortedList[epNum - 1];
-              console.log(`[VideoPlayer] dyn-ref: usando ep.episode=${epNum} → sortedList[${epNum - 1}] (${(file?.filename || file?.name) ?? '?'})`);
-            } else if (initialEpisodeIndex < sortedList.length) {
+            const epSeason = (epForIdx as any)?.season || 1;
+            if (epNum && epNum > 0) {
+              const sePadded = `S${String(epSeason).padStart(2, '0')}E${String(epNum).padStart(2, '0')}`;
+              const seShort = `S${epSeason}E${epNum}`;
+              const byCode = sortedList.find((f: any) => {
+                const fn = (f.filename || f.name || '').toUpperCase();
+                return fn.includes(sePadded.toUpperCase()) || fn.includes(seShort.toUpperCase());
+              }) || null;
+              if (byCode) {
+                file = byCode;
+                console.log(`[VideoPlayer] dyn-ref: match por código ${sePadded} → ${file?.filename || file?.name}`);
+              }
+            }
+            // Fallback: use the raw flat-array index (never use epNum-1, which breaks multi-season folders)
+            if (!file && initialEpisodeIndex < sortedList.length) {
               file = sortedList[initialEpisodeIndex];
               console.log(`[VideoPlayer] dyn-ref: usando índice ${initialEpisodeIndex} na lista ordenada (${(file?.filename || file?.name) ?? '?'})`);
             }
@@ -510,6 +534,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           const subUrl = file.subtitle_url || data.subtitle || data.subtitle_url;
           if (subUrl) setExtractedSubtitleUrl(subUrl);
           console.log(`[VideoPlayer] dyn-ref: ${qualityList.length} qualidades disponíveis (${qualityList.map(q => q.id).join(', ')})`);
+
+          // Pre-warm resolved URLs on the server side so they're cached for next play
+          const urlsToWarm = qualityList.map(q => q.url).filter(Boolean).slice(0, 4);
+          if (urlsToWarm.length > 0) {
+            fetch('/api/keepwarm-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ urls: urlsToWarm, concurrency: 3 }),
+            }).catch(() => {});
+          }
 
           // Extração de dublagem: busca streams das outras APIs em background para oferecer opções de áudio
           (async () => {

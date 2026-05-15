@@ -126,13 +126,23 @@ router.get("/keepwarm/status", (_req, res) => {
   res.json(getKeepwarmStatus());
 });
 
-router.post("/keepwarm/sync", (req, res) => {
+router.post("/keepwarm/sync", async (req, res) => {
   const urls = Array.isArray(req.body?.urls) ? req.body.urls.filter((u: any) => typeof u === "string" && u.length) : [];
   if (urls.length === 0) {
     res.status(400).json({ error: "body.urls (array of strings) required" });
     return;
   }
   const result = syncUrls(urls);
+  // Immediately warm newly added URLs so they're hot right away (don't wait for next cycle)
+  if (result.added > 0) {
+    const newUrls = urls.filter((u: string) => {
+      const src = detectSource(u);
+      return src === "kingx" || src === "direct";
+    }).slice(0, 6);
+    if (newUrls.length > 0) {
+      Promise.allSettled(newUrls.map((u: string) => warmOne(u))).catch(() => {});
+    }
+  }
   res.json(result);
 });
 
