@@ -387,10 +387,18 @@ const MovieDetailsModal = React.memo(({
       button: 'bg-white text-black hover:bg-gray-200 rounded-xl',
       secondaryButton: 'bg-white/10 text-white hover:bg-white/20 rounded-xl',
       font: 'font-sans'
+    },
+    'Paramount+': {
+      bg: 'bg-[#00001a]',
+      accent: 'text-[#0064ff]',
+      button: 'bg-white text-[#00001a] hover:bg-gray-100 rounded-full',
+      secondaryButton: 'bg-[#0064ff]/20 text-white hover:bg-[#0064ff]/30 rounded-full border border-[#0064ff]/30',
+      font: 'font-sans'
     }
   };
 
   const theme = modalThemes[provider.name] || modalThemes['Netflix'];
+  const isParamount = provider.name === 'Paramount+';
 
   const isYouTube = movie.videoUrl?.includes('youtube.com') || movie.videoUrl?.includes('youtu.be');
   const isKingX = movie.videoUrl?.includes('player.kingx.dev');
@@ -472,7 +480,7 @@ const MovieDetailsModal = React.memo(({
         </button>
         
         {/* Hero Section do Modal */}
-        <div className="relative h-[40vh] md:h-[85vh] bg-black">
+        <div className={`relative ${isParamount ? 'h-[48vh]' : 'h-[40vh] md:h-[85vh]'} bg-black`}>
           <AnimatePresence>
             {showVideo && movie.videoUrl ? (
               <div 
@@ -535,9 +543,38 @@ const MovieDetailsModal = React.memo(({
           <div className="absolute inset-0 bg-gradient-to-r from-[#111] via-transparent to-transparent z-10 pointer-events-none" />
           <div className="absolute inset-0 bg-black/20 z-[5] pointer-events-none" />
           
-          {/* Provider Logo removed as requested */}
+          {/* Paramount+ — botão de play centralizado sobre o backdrop */}
+          {isParamount && !showVideo && (
+            <button
+              className="absolute inset-0 z-[15] flex items-center justify-center"
+              onClick={() => {
+                if (isLocked) { document.dispatchEvent(new CustomEvent('open-plans')); return; }
+                if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                  const ep = movie.episodes[0];
+                  const urlToPlay = savedUrl || ep.videoUrl || ep.videoUrl2 || '';
+                  triggerSmartPlay(urlToPlay, savedProgress, 'netflix');
+                } else {
+                  const movieUrl = movie.videoUrl || '';
+                  if (isDynamicRef(movieUrl)) {
+                    triggerSmartPlay(movieUrl, savedProgress, 'netflix');
+                  } else {
+                    setShowVideo(true); setIsPlayingFullscreen(true);
+                  }
+                }
+              }}
+            >
+              <motion.div
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="w-[60px] h-[60px] rounded-full bg-white/25 backdrop-blur-md border-2 border-white/60 flex items-center justify-center shadow-2xl shadow-black/40"
+              >
+                <Play fill="white" size={22} className="ml-1" />
+              </motion.div>
+            </button>
+          )}
 
-          <div className="absolute bottom-0 left-0 p-6 md:p-16 w-full z-20 space-y-4 md:space-y-10">
+          {/* Conteúdo inferior do hero — ocultado no Paramount+ (info vai abaixo) */}
+          {!isParamount && <div className="absolute bottom-0 left-0 p-6 md:p-16 w-full z-20 space-y-4 md:space-y-10">
             <motion.div
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
@@ -762,8 +799,104 @@ const MovieDetailsModal = React.memo(({
                 </motion.button>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
+
+        {/* ===== PARAMOUNT+ INFO BLOCK ===== */}
+        {isParamount && (
+          <div className="bg-[#00001a] px-5 pt-5 pb-6 space-y-4 border-b border-white/5">
+            {/* Título */}
+            <div>
+              <h2 className="text-[1.65rem] font-black text-white uppercase tracking-tight leading-tight">
+                {movie.title || movie.name}
+              </h2>
+              {savedEpisodeInfo && (
+                <p className="text-white/55 text-sm mt-1 font-medium">{savedEpisodeInfo}</p>
+              )}
+            </div>
+
+            {/* Badge de temporada ou disponibilidade */}
+            {movie.type === 'series' && seasons.length > 0 ? (
+              <p className="text-green-400 text-xs font-bold uppercase tracking-[0.15em]">
+                {seasons.length}ª TEMPORADA COMPLETA DISPONÍVEL
+              </p>
+            ) : (
+              <p className="text-green-400 text-xs font-bold uppercase tracking-[0.15em]">
+                DISPONÍVEL AGORA
+              </p>
+            )}
+
+            {/* Elenco */}
+            {(movie as any).cast && (
+              <p className="text-white/50 text-[12px] leading-snug">
+                <span className="text-white/65 font-semibold">Estrelando: </span>
+                {(movie as any).cast}
+              </p>
+            )}
+
+            {/* Botões verticais estilo Paramount+ */}
+            <div className="flex gap-7 pt-1">
+              <button
+                onClick={() => onToggleMyList(movie)}
+                className="flex flex-col items-center gap-1.5 group"
+              >
+                <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all ${isAddedToMyList ? 'bg-white text-black border-white' : 'border-white/50 text-white/70 group-hover:border-white group-hover:text-white'}`}>
+                  <Plus size={16} className={`transition-transform duration-500 ${isAddedToMyList ? 'rotate-45' : ''}`} />
+                </div>
+                <span className="text-[9px] text-white/50 uppercase tracking-widest group-hover:text-white/70 transition-colors">
+                  {isAddedToMyList ? 'Na lista' : 'Minha lista'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/movie/${movie.id}`;
+                  if (navigator.share) {
+                    navigator.share({ title: movie.title || movie.name, url }).catch(console.error);
+                  } else {
+                    navigator.clipboard.writeText(url);
+                  }
+                }}
+                className="flex flex-col items-center gap-1.5 group"
+              >
+                <div className="w-9 h-9 rounded-full border-2 border-white/50 text-white/70 flex items-center justify-center group-hover:border-white group-hover:text-white transition-all">
+                  <Share2 size={15} />
+                </div>
+                <span className="text-[9px] text-white/50 uppercase tracking-widest group-hover:text-white/70 transition-colors">
+                  Compartilhar
+                </span>
+              </button>
+
+              {(movie.videoUrl || (movie.type === 'series' && movie.episodes?.length)) && (
+                <button
+                  onClick={() => {
+                    if (isLocked) { document.dispatchEvent(new CustomEvent('open-plans')); return; }
+                    if (movie.type === 'series' && movie.episodes?.length) {
+                      const ep = movie.episodes[0];
+                      const urlToPlay = savedUrl || ep.videoUrl || ep.videoUrl2 || '';
+                      triggerSmartPlay(urlToPlay, savedProgress, 'netflix');
+                    } else {
+                      const movieUrl = movie.videoUrl || '';
+                      if (isDynamicRef(movieUrl)) {
+                        triggerSmartPlay(movieUrl, savedProgress, 'netflix');
+                      } else {
+                        setShowVideo(true); setIsPlayingFullscreen(true);
+                      }
+                    }
+                  }}
+                  className="flex flex-col items-center gap-1.5 group"
+                >
+                  <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all ${isLocked ? 'border-yellow-500/50 text-yellow-500/70' : 'border-white/50 text-white/70 group-hover:border-white group-hover:text-white'}`}>
+                    <Play fill="currentColor" size={13} className="ml-0.5" />
+                  </div>
+                  <span className="text-[9px] text-white/50 uppercase tracking-widest group-hover:text-white/70 transition-colors">
+                    {isLocked ? 'Upgrade' : savedProgress > 5 ? 'Continuar' : 'Assistir'}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Informações Detalhadas */}
         <div className="p-6 md:p-12 space-y-8 md:space-y-12">
