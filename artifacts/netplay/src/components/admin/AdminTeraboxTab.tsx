@@ -4,6 +4,7 @@ import Hls from 'hls.js';
 import { Movie } from '../../types';
 import tmdb, { fetchSeasonDetailsWithFallback } from '../../services/tmdb';
 import { makeDynamicRef, makeDynamicRefV2, isDynamicRef } from '../../services/terabox';
+import { parseSeasonEpisode, parseEpisodeName, QUALITY_RE, stripGroupTags } from '../../utils/episodeParser';
 
 export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: { movies: Movie[], onUpdateMovie: Function, onAddMovie: Function }) {
   const [testUrl, setTestUrl] = useState('');
@@ -303,81 +304,8 @@ export default function AdminTeraboxTab({ movies, onUpdateMovie, onAddMovie }: {
     setSeasonScanning(false);
   };
 
-  // Detecta temporada e episódio a partir do nome do arquivo. Suporta:
-  //  - 1x03, 01x03, 1×03, 01×03 (× ou x, com ou sem zero)
-  //  - S01E03, s1e3, S01.E03, S01-E03
-  //  - Temporada 1 Episodio 3, T1E3, T01E03
-  //  - Season 1 Episode 3
-  //  - 1.03, 01.03 (raro, só se rodeado por separadores)
-  // Retorna {season, episode} ou null. Pega a PRIMEIRA correspondência válida.
-  const parseSeasonEpisode = (filename: string): { season: number; episode: number } | null => {
-    if (!filename) return null;
-    // Remove extensão pra evitar números do encoder no fim
-    const name = filename.replace(/\.(mkv|mp4|avi|mov|webm|m4v|wmv|flv|ts|m3u8)$/i, '');
-
-    const patterns: RegExp[] = [
-      // S01E03, s1e3, S01.E03, S01-E03, S01_E03
-      /[Ss](\d{1,2})[\s._-]*[Ee](\d{1,3})/,
-      // 01x03, 1x3, 01×03, 1×3
-      /(?:^|[^\dA-Za-z])(\d{1,2})\s*[x×X]\s*(\d{1,3})(?=[^\d]|$)/,
-      // T01E03, T1E3, t01e03
-      /[Tt](\d{1,2})[\s._-]*[Ee](\d{1,3})/,
-      // Temporada 1 Episodio 3, Temp 1 Ep 3
-      /[Tt]emp(?:orada)?[\s._-]*(\d{1,2})[\s._-]+(?:[Ee]p(?:is[oó]dio)?|EP)[\s._-]*(\d{1,3})/i,
-      // Season 1 Episode 3
-      /[Ss]eason[\s._-]*(\d{1,2})[\s._-]+[Ee]pisode[\s._-]*(\d{1,3})/i,
-      // 1.03 ou 01.03 (com separadores antes/depois — evita confundir com versão)
-      /(?:^|[\s\-_\[(])(\d{1,2})\.(\d{2,3})(?=[\s\-_\])])/,
-    ];
-
-    for (const re of patterns) {
-      const m = name.match(re);
-      if (m) {
-        const s = parseInt(m[1], 10);
-        const e = parseInt(m[2], 10);
-        if (s >= 0 && s <= 50 && e >= 1 && e <= 999) {
-          return { season: s || 1, episode: e };
-        }
-      }
-    }
-    return null;
-  };
-
-  // Remove tags de grupo de lançamento do início/fim do filename
-  // Ex: "(AnimesTotais) Series.S01E65..." → "Series.S01E65..."
-  //     "[SubGrupo] Series.S01E65..."  → "Series.S01E65..."
-  const stripGroupTags = (filename: string): string =>
-    filename
-      // Remove tags entre parênteses ou colchetes no início (ex: "(AnimesTotais)", "[HorribleSubs]")
-      .replace(/^[\s._-]*[\(\[][^\)\]]{1,40}[\)\]][\s._-]*/g, '')
-      // Remove tags entre parênteses ou colchetes no final (ex: "(PT-BR)", "[1080p]")
-      .replace(/[\s._-]*[\(\[][^\)\]]{1,40}[\)\]][\s._-]*$/g, '')
-      .trim();
-
-  // Regex de qualidade/codec compartilhado
-  const QUALITY_RE = /[\s._-]*(4K|2160p|1080p|720p|480p|360p|240p|UHD|FHD|HDR10?|SDR|HMAX|DSNP|AMZN|PCOK|NF|ATVP|WEB[-.]?DL|WEBRip|BluRay|Blu[-.]?Ray|HDTV|PDTV|DVDRip|BDRip|BRRip|WEB|DD[\d.]+|DDP[\d.]+|AAC[\d.]*|AC3|MP3|DTS[-\w]*|TrueHD|FLAC|x26[45]|H\.?26[45]|HEVC|AVC|REMUX|REPACK|PROPER|DUAL|MULTI|EXTENDED|DIRECTORS|UNRATED|REMASTERED|INTERNAL|RETAIL|LIMITED|COMPLETE|HYBRID).*/i;
-
-  // Extrai o nome do episódio do filename
-  // Caso 1 (tem SxxExx): extrai o texto APÓS o padrão → "Star Warners"
-  // Caso 2 (sem SxxExx): usa o filename completo limpo → candidato para busca por nome no TMDB
-  const parseEpisodeName = (filename: string): string | null => {
-    if (!filename) return null;
-    let name = filename.replace(/\.(mkv|mp4|avi|mov|webm|m4v|wmv|flv|ts|m3u8|m2ts|vob|mpg|mpeg)$/i, '');
-    name = stripGroupTags(name);
-
-    // Caso 1: tem padrão SxxExx — extrai nome APÓS ele
-    const seMatch = name.match(/[SsTt]\d{1,2}[\s._-]*[Ee]\d{1,3}[\s._-]+(.*)/);
-    if (seMatch) {
-      const afterSE = seMatch[1].replace(QUALITY_RE, '');
-      const cleaned = afterSE.replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (cleaned.length >= 2) return cleaned;
-    }
-
-    // Caso 2: sem SxxExx — limpa qualidade/codec do final e usa o nome completo
-    // O TMDB fuzzy matching vai encontrar o episódio certo por sobreposição de palavras
-    const fullCleaned = name.replace(QUALITY_RE, '').replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
-    return fullCleaned.length >= 2 ? fullCleaned : null;
-  };
+  // Parsing de S/E importado do utilitário compartilhado (ver utils/episodeParser.ts)
+  // Inclui suporte a: S01E03, 1x03, T01E03, Temporada/Episodio, ABC.002 (código+ep), EP03, etc.
 
   // Normaliza nome de episódio para comparação
   const normalizeEpName = (s: string): string =>
