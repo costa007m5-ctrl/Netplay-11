@@ -36,7 +36,7 @@ const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
 const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSelector'));
 
-import { Loader2, Play, Pause, Square, RefreshCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info } from 'lucide-react';
+import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info, Trophy } from 'lucide-react';
 
 // Basic title cleaner to replace AI cleaning
 const cleanTitle = (fileName: string) => {
@@ -1495,39 +1495,47 @@ const UniverseTabView = React.memo(({
 
 const TrendingView = React.memo(({ top10Movies, top10Series, handleSelectMovie, toggleMyList, toggleFavorite, myListIds, favoriteIds, continueWatching, myMovies, franchises }: any) => {
   const [activeRange, setActiveRange] = useState<'daily' | 'weekly' | 'vital'>('daily');
-  const [filter, setFilter] = useState('All Genres');
+  const [filter, setFilter] = useState('Todos os Gêneros');
+  const [activeGenre, setActiveGenre] = useState('Anime');
   const navigate = useNavigate();
 
   const filteredMovies = useMemo(() => {
     let list = [...top10Movies];
-    
     if (activeRange === 'vital') {
       list = [...continueWatching].slice(0, 15);
-      if (list.length < 5) {
-         list = [...myMovies].sort((a,b) => (b.vote_average || 0) - (a.vote_average || 0)).slice(0, 15);
-      }
+      if (list.length < 5) list = [...myMovies].sort((a,b) => (b.vote_average || 0) - (a.vote_average || 0)).slice(0, 15);
     } else if (activeRange === 'weekly') {
       const now = new Date().getTime();
-      list = [...myMovies]
-        .filter(m => m.created_at && (now - new Date(m.created_at).getTime()) < (7 * 24 * 60 * 60 * 1000))
-        .sort((a,b) => (b.vote_average || 0) - (a.vote_average || 0))
-        .slice(0, 15);
+      list = [...myMovies].filter(m => m.created_at && (now - new Date(m.created_at).getTime()) < (7*24*60*60*1000)).sort((a,b) => (b.vote_average||0)-(a.vote_average||0)).slice(0,15);
     } else {
       const now = new Date().getTime();
-      const daily = [...myMovies]
-        .filter(m => m.created_at && (now - new Date(m.created_at).getTime()) < (24 * 60 * 60 * 1000));
-      list = daily.length >= 5 ? daily.slice(0, 15) : [...top10Movies];
+      const daily = [...myMovies].filter(m => m.created_at && (now - new Date(m.created_at).getTime()) < (24*60*60*1000));
+      list = daily.length >= 5 ? daily.slice(0,15) : [...top10Movies];
     }
-
-    if (filter !== 'All Genres') {
-       list = list.filter(m => m.genres?.toLowerCase().includes(filter.toLowerCase()));
-    }
-
+    if (filter !== 'Todos os Gêneros') list = list.filter(m => m.genres?.toLowerCase().includes(filter.toLowerCase()));
     return list;
   }, [activeRange, top10Movies, myMovies, continueWatching, filter]);
 
   const featured = filteredMovies[0] || top10Movies[0];
-  const genres = ['Ação', 'Drama', 'Comédia', 'Ficção', 'Terror'];
+  const editorialCards = top10Movies.slice(1, 3);
+  const fanArtPosters = myMovies.slice(0, 4);
+  const rangeTabs = [
+    { id: 'daily', label: 'Hoje' },
+    { id: 'weekly', label: 'Semanal' },
+    { id: 'vital', label: 'Vital' },
+  ];
+  const genreTabs = [
+    { id: 'Todos os Gêneros', label: 'Todos os Gêneros' },
+    { id: 'Ação', label: 'Ação' },
+    { id: 'Drama', label: 'Drama' },
+    { id: 'Comédia', label: 'Comédia' },
+  ];
+  const subGenreTabs = ['Anime', 'Infantil', 'Clássicos'];
+  const quizCards = [
+    { label: 'QUIZ', bg: '#c53030', type: 'text' },
+    { label: '🤔', bg: '#2d3748', type: 'emoji' },
+    { label: 'STAGE 4', bg: '#553c9a', type: 'text' },
+  ];
 
   return (
     <motion.div
@@ -1535,260 +1543,316 @@ const TrendingView = React.memo(({ top10Movies, top10Series, handleSelectMovie, 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-[#050505] pb-40 overflow-x-hidden font-space"
+      className="min-h-screen bg-[#0d0d0d] pb-24 overflow-x-hidden"
     >
-      {/* MAGAZINE STYLE HERO BANNER */}
+      {/* ── HERO BANNER ── */}
       {featured && (
-        <div className="relative h-[85vh] md:h-[95vh] w-full overflow-hidden bg-black">
-           <div className="absolute inset-0">
-              <motion.img 
-                key={featured.id}
-                initial={{ scale: 1.15, opacity: 0 }}
-                animate={{ scale: 1, opacity: 0.6 }}
-                transition={{ duration: 1.5 }}
-                src={featured.backdrop_path?.startsWith('http') ? featured.backdrop_path : `https://image.tmdb.org/t/p/original/${featured.backdrop_path}`}
-                className="w-full h-full object-cover"
-                alt="Featured"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent" />
-              <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/60 via-transparent to-transparent" />
-              <div className="absolute inset-y-0 left-0 w-full md:w-3/4 bg-gradient-to-r from-[#050505] via-[#050505]/50 to-transparent" />
-           </div>
+        <div className="relative w-full overflow-hidden" style={{ height: 'clamp(280px, 45vw, 420px)' }}>
+          <motion.img
+            key={featured.id}
+            initial={{ scale: 1.08, opacity: 0 }}
+            animate={{ scale: 1, opacity: 0.72 }}
+            transition={{ duration: 1.2 }}
+            src={featured.backdrop_path?.startsWith('http') ? featured.backdrop_path : `https://image.tmdb.org/t/p/original/${featured.backdrop_path}`}
+            className="absolute inset-0 w-full h-full object-cover"
+            alt="Featured"
+          />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #0d0d0d 0%, rgba(13,13,13,0.55) 55%, rgba(13,13,13,0.25) 100%)' }} />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, rgba(13,13,13,0.9) 0%, transparent 65%)' }} />
 
-           <div className="relative h-full flex flex-col justify-end px-5 md:px-20 pb-32 max-w-[1920px] mx-auto z-10">
-              <motion.div
-                initial={{ opacity: 0, x: -30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8 }}
-                className="max-w-4xl"
-              >
-                 <div className="flex items-center gap-2 md:gap-4 mb-6 md:mb-10">
-                    <span className="bg-red-600 text-[8px] md:text-[10px] font-black text-white px-3 py-1 md:py-1.5 uppercase tracking-widest rounded-sm">Hot Release</span>
-                    <span className="text-white/40 text-[8px] md:text-[10px] font-bold uppercase tracking-[0.3em]">Issue 24.04</span>
-                 </div>
-
-                 <h2 className="text-5xl md:text-[12rem] font-bold text-white uppercase tracking-tighter leading-[0.8] mb-8 md:mb-12 italic border-l-4 md:border-l-8 border-red-600 pl-4 md:pl-10">
-                    {featured.title || featured.name}
-                 </h2>
-
-                 <div className="flex flex-wrap items-center gap-4 md:gap-8 mb-10 md:mb-16">
-                    <div className="flex flex-col">
-                       <span className="text-gray-500 text-[8px] uppercase font-black tracking-widest mb-1">Score</span>
-                       <span className="text-white font-bold text-xl md:text-3xl">{featured.vote_average?.toFixed(1)}/10</span>
-                    </div>
-                    <div className="w-[1px] h-8 bg-white/10" />
-                    <div className="flex flex-col">
-                       <span className="text-gray-500 text-[8px] uppercase font-black tracking-widest mb-1">Duration</span>
-                       <span className="text-white font-bold text-xl md:text-3xl">{featured.runtime || '98'}m</span>
-                    </div>
-                    <div className="w-[1px] h-8 bg-white/10" />
-                    <div className="flex flex-col">
-                       <span className="text-gray-500 text-[8px] uppercase font-black tracking-widest mb-1">Year</span>
-                       <span className="text-white font-bold text-xl md:text-3xl">{featured.release_date?.split('-')[0] || '2024'}</span>
-                    </div>
-                 </div>
-
-                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                    <button 
-                      onClick={() => handleSelectMovie(featured)}
-                      className="px-10 md:px-16 py-5 md:py-7 bg-white text-black font-black uppercase tracking-widest text-[10px] md:text-xs hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-4 shadow-2xl"
-                    >
-                      <Play size={20} fill="currentColor" /> Play Production
-                    </button>
-                    <button 
-                      onClick={() => toggleMyList(featured)}
-                      className="px-8 md:px-12 py-5 md:py-7 bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-[10px] md:text-xs hover:bg-white/10 transition-all flex items-center justify-center gap-4"
-                    >
-                      {myListIds.has(featured.id) ? <Check size={20} /> : <Plus size={20} />} Add to Queue
-                    </button>
-                 </div>
-              </motion.div>
-           </div>
-           
-           {/* DECORATIVE OFFSET TEXT */}
-           <div className="absolute top-1/2 -right-20 -translate-y-1/2 rotate-90 hidden lg:block opacity-10 select-none pointer-events-none">
-              <span className="text-[15rem] font-black text-white uppercase tracking-tighter whitespace-nowrap">PREMIUM GALLERY</span>
-           </div>
+          <div className="relative h-full flex flex-col justify-end px-4 md:px-10 pb-5 md:pb-8 z-10">
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7 }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-white text-[9px] md:text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-sm" style={{ background: '#e53e3e', borderLeft: '3px solid #fc8181' }}>
+                  Lançamento Quente
+                </span>
+                <span className="text-white/40 text-[9px] md:text-[10px] font-bold uppercase tracking-widest">
+                  : {featured.genres?.split(',')[0] || 'Em Destaque'}
+                </span>
+              </div>
+              <h2 className="font-black text-white uppercase tracking-tighter leading-none mb-3 md:mb-4" style={{ fontSize: 'clamp(26px, 7vw, 56px)', borderLeft: '4px solid #e53e3e', paddingLeft: '10px' }}>
+                {featured.title || featured.name}
+              </h2>
+              <div className="flex items-center gap-3 md:gap-5">
+                <span className="flex items-center gap-1 text-[11px] md:text-sm font-bold text-white/80">
+                  🎯 <span>{featured.vote_average?.toFixed(1) || '—'}/10</span>
+                </span>
+                <span className="text-white/20 text-xs">|</span>
+                <span className="flex items-center gap-1 text-[10px] md:text-xs font-bold text-white/50 uppercase tracking-widest">
+                  Duration ⏱ <span className="text-white/80">{featured.runtime || '—'}m</span>
+                </span>
+                <span className="text-white/20 text-xs">|</span>
+                <span className="flex items-center gap-1 text-[10px] md:text-xs font-bold text-white/50 uppercase tracking-widest">
+                  Year 💎 <span className="text-white/80">{featured.release_date?.split('-')[0] || '—'}</span>
+                </span>
+              </div>
+            </motion.div>
+          </div>
         </div>
       )}
 
-      {/* FLOATING NAVIGATION (CENTERED & COMPACT) */}
-      <div className="sticky top-16 z-50 px-4 flex justify-center mt-[-30px] md:mt-[-50px]">
-         <div className="bg-[#111]/80 backdrop-blur-2xl border border-white/5 p-2 rounded-2xl md:rounded-[2rem] shadow-2xl flex items-center gap-2 max-w-full overflow-x-auto no-scrollbar">
-            <div className="flex gap-1 bg-black/40 p-1 rounded-xl md:rounded-2xl">
-               {[
-                 { id: 'daily', label: 'Hoje' },
-                 { id: 'weekly', label: 'Semanal' },
-                 { id: 'vital', label: 'Vital' },
-               ].map(tab => (
-                 <button
-                   key={tab.id}
-                   onClick={() => setActiveRange(tab.id as any)}
-                   className={`px-5 md:px-10 py-3 md:py-4 rounded-lg md:rounded-xl font-bold uppercase tracking-widest text-[8px] md:text-[10px] transition-all whitespace-nowrap ${activeRange === tab.id ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
-                 >
-                   {tab.label}
-                 </button>
-               ))}
-            </div>
-            <div className="w-[1px] h-6 bg-white/10 mx-1 md:mx-3" />
-            <div className="flex gap-2">
-               {['All Genres', ...genres].map(g => (
-                 <button 
-                   key={g} 
-                   className={`px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl font-bold text-[8px] md:text-[10px] uppercase tracking-widest whitespace-nowrap transition-all border ${filter === g ? 'bg-white text-black border-white' : 'bg-transparent border-white/5 text-gray-400 hover:text-white hover:border-white/20'}`}
-                   onClick={() => setFilter(g)}
-                 >
-                   {g}
-                 </button>
-               ))}
-            </div>
-         </div>
+      {/* ── CURADORIA EXCLUSIVA ── */}
+      {editorialCards.length > 0 && (
+        <div className="px-4 md:px-10 mt-4">
+          <h3 className="text-[11px] md:text-xs font-black uppercase tracking-widest text-white/90 mb-3">Curadoria Exclusiva</h3>
+          <div className="flex gap-2 md:gap-3">
+            {editorialCards.map((card: any, i: number) => (
+              <div
+                key={card.id}
+                className="flex-1 relative rounded-xl overflow-hidden cursor-pointer group"
+                style={{ height: 'clamp(100px, 25vw, 140px)', border: '1px solid rgba(255,255,255,0.06)' }}
+                onClick={() => handleSelectMovie(card)}
+              >
+                <img
+                  src={card.backdrop_path?.startsWith('http') ? card.backdrop_path : `https://image.tmdb.org/t/p/w500/${card.backdrop_path || card.poster_path}`}
+                  alt={card.title}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  style={{ opacity: 0.58 }}
+                />
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 55%)' }} />
+                <div className="absolute inset-0 p-2.5 md:p-3 flex flex-col justify-end">
+                  {i === 0 && <span className="text-[8px] font-black uppercase tracking-widest mb-0.5" style={{ color: '#e53e3e' }}>Em Alta</span>}
+                  <p className="text-white text-[10px] md:text-xs font-bold leading-tight line-clamp-2">{card.title || card.name}</p>
+                  {card.overview && <p className="text-white/40 text-[8px] mt-0.5 leading-tight line-clamp-1 hidden md:block">{card.overview}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── ACTION BUTTONS ── */}
+      {featured && (
+        <div className="px-4 md:px-10 mt-4 flex gap-2">
+          <button
+            onClick={() => handleSelectMovie(featured)}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest py-2.5 md:py-3 transition-all hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+          >
+            <Zap size={11} fill="currentColor" /> Imersão Imediata
+          </button>
+          <button
+            onClick={() => toggleMyList(featured)}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest py-2.5 md:py-3 transition-all hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+          >
+            {myListIds?.has(featured.id) ? <Check size={11} /> : <Plus size={11} />} Minha Lista
+          </button>
+        </div>
+      )}
+
+      {/* ── FEATURE CARDS (biblioteca + quiz) ── */}
+      <div className="px-4 md:px-10 mt-4 flex gap-2 md:gap-3">
+        {/* Biblioteca de Saber */}
+        <div
+          className="flex-1 relative rounded-xl overflow-hidden cursor-pointer"
+          style={{ height: 'clamp(80px, 20vw, 110px)', background: '#161616', border: '1px solid rgba(255,255,255,0.06)' }}
+          onClick={() => navigate('/discover')}
+        >
+          <div className="absolute top-2.5 left-2.5 flex -space-x-2">
+            {(fanArtPosters.length > 0 ? fanArtPosters : editorialCards).slice(0, 4).map((m: any, i: number) => (
+              <div key={m.id} className="w-7 h-7 md:w-8 md:h-8 rounded-full overflow-hidden" style={{ border: '1.5px solid #0d0d0d', zIndex: 4 - i }}>
+                <img src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w92/${m.poster_path}`} className="w-full h-full object-cover" alt="" />
+              </div>
+            ))}
+          </div>
+          <div className="absolute bottom-2.5 left-2.5 right-2.5">
+            <p className="text-white text-[9px] md:text-[10px] font-black uppercase leading-tight">
+              Biblioteca de Saber<br />
+              <span style={{ color: 'rgba(255,255,255,0.4)' }}>Galeria de Fan-Art</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Desafios de Quem Sabe */}
+        <div
+          className="flex-1 relative rounded-xl overflow-hidden cursor-pointer"
+          style={{ height: 'clamp(80px, 20vw, 110px)', background: '#161616', border: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          <div className="absolute top-2.5 right-2.5">
+            <Trophy size={16} style={{ color: '#e53e3e' }} />
+          </div>
+          <div className="absolute bottom-2.5 left-2.5 right-2.5">
+            <p className="text-[8px] font-black uppercase tracking-widest mb-0.5" style={{ color: '#e53e3e' }}>Quiz</p>
+            <p className="text-white text-[9px] md:text-[10px] font-black uppercase leading-tight">Desafios de<br/>Quem Sabe</p>
+          </div>
+        </div>
       </div>
 
-      {/* CONTENT FLOW */}
-      <div className="mt-20 md:mt-40 space-y-32 md:space-y-48">
-         {/* TOP 10 CAROUSEL - MODERN CARDS */}
-         <section className="pl-5 md:pl-20 max-w-[2000px] mx-auto overflow-hidden">
-            <div className="flex items-end justify-between pr-5 md:pr-20 mb-10 md:mb-16">
-               <div>
-                  <h3 className="text-4xl md:text-8xl font-black text-white italic tracking-tighter uppercase leading-[0.8] font-space">The Global Top 10</h3>
-                  <p className="text-gray-500 font-bold mt-4 uppercase tracking-[0.4em] text-[8px] md:text-xs font-space">Curated by our neural algorithms</p>
-               </div>
-            </div>
+      {/* ── FILTER TABS ── */}
+      <div className="mt-5 px-4 md:px-10">
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          {rangeTabs.map(tab => {
+            const isActive = activeRange === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveRange(tab.id as any)}
+                className="flex-none flex items-center gap-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest px-3 py-1.5 whitespace-nowrap transition-all"
+                style={{ background: isActive ? 'rgba(229,62,62,0.18)' : 'rgba(255,255,255,0.05)', color: isActive ? '#fc8181' : 'rgba(255,255,255,0.45)', border: isActive ? '1px solid rgba(229,62,62,0.35)' : '1px solid rgba(255,255,255,0.07)' }}
+              >
+                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />}
+                {tab.label}
+              </button>
+            );
+          })}
+          <div className="w-px h-5 bg-white/10 self-center mx-0.5 flex-shrink-0" />
+          {genreTabs.map(tab => {
+            const isActive = filter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setFilter(tab.id)}
+                className="flex-none rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest px-3 py-1.5 whitespace-nowrap transition-all"
+                style={{ background: isActive ? '#fff' : 'rgba(255,255,255,0.05)', color: isActive ? '#000' : 'rgba(255,255,255,0.45)', border: isActive ? 'none' : '1px solid rgba(255,255,255,0.07)' }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
-            <div className="flex overflow-x-auto no-scrollbar gap-6 md:gap-12 pb-10 scroll-smooth">
-               {filteredMovies.slice(0, 10).map((movie: any, idx: number) => (
-                 <motion.div 
-                   key={movie.id}
-                   whileHover={{ y: -15 }}
-                   className="relative flex-none group cursor-pointer"
-                   onClick={() => handleSelectMovie(movie)}
-                 >
-                   {/* CARD UNIQUE DESIGN */}
-                   <div className="w-[200px] md:w-[320px] aspect-[2/3] relative rounded-2xl md:rounded-[3rem] overflow-hidden border border-white/5 transition-all duration-700 shadow-2xl flex flex-col grayscale group-hover:grayscale-0">
-                      <img 
-                        src={movie.poster_path?.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w500/${movie.poster_path}`} 
-                        className="w-full h-full object-cover" 
-                        alt={movie.title} 
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
-                      
-                      {/* OVERLAY CONTENT */}
-                      <div className="absolute inset-0 flex flex-col justify-between p-6 md:p-10 opacity-0 group-hover:opacity-100 transition-opacity bg-red-600/20 backdrop-blur-[2px]">
-                         <div className="flex justify-between items-start">
-                            <span className="text-3xl md:text-5xl font-black text-white italic leading-none">{idx + 1}</span>
-                            <div className="w-10 h-10 md:w-16 h-16 bg-white rounded-full flex items-center justify-center text-black">
-                               <Play size={20} fill="currentColor" />
-                            </div>
-                         </div>
-                         <div>
-                            <h4 className="text-white font-black text-xl md:text-3xl uppercase tracking-tighter italic leading-none mb-3 md:mb-5">{movie.title || movie.name}</h4>
-                            <div className="flex flex-wrap gap-2">
-                               {movie.genres?.split(',').slice(0, 2).map((g: string) => (
-                                 <span key={g} className="px-3 py-1 bg-white/10 text-white font-bold text-[8px] uppercase tracking-widest rounded-sm">{g}</span>
-                               ))}
-                            </div>
-                         </div>
-                      </div>
-                   </div>
-                   
-                   {/* BACKGROUND NUMBER (OFFSET STYLE) */}
-                   <div className="absolute -left-5 -bottom-5 z-[-1] opacity-5 group-hover:opacity-10 transition-opacity">
-                      <span className="text-[12rem] md:text-[20rem] font-black text-white italic leading-none">{idx + 1}</span>
-                   </div>
-                 </motion.div>
-               ))}
-            </div>
-         </section>
+        {/* sub-genre pills */}
+        <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar pb-1">
+          {subGenreTabs.map(g => {
+            const isActive = activeGenre === g;
+            return (
+              <button
+                key={g}
+                onClick={() => setActiveGenre(g)}
+                className="flex-none rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest px-3 py-1.5 whitespace-nowrap transition-all"
+                style={{ background: isActive ? 'rgba(229,62,62,0.14)' : 'rgba(255,255,255,0.04)', color: isActive ? '#e53e3e' : 'rgba(255,255,255,0.35)', border: isActive ? '1px solid rgba(229,62,62,0.28)' : '1px solid rgba(255,255,255,0.05)' }}
+              >
+                {g}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-         {/* GENRE PULSE CAROUSEL (NEW) */}
-         <section className="pl-5 md:pl-20 max-w-[2000px] mx-auto overflow-hidden">
-            <div className="mb-10 md:mb-16">
-               <h3 className="text-3xl md:text-6xl font-black text-white italic tracking-tighter uppercase leading-[0.8] mb-4 font-space">Genre Pulse</h3>
-               <p className="text-gray-500 font-bold uppercase tracking-[0.4em] text-[8px] md:text-xs font-space">Global engagement spikes by category</p>
-            </div>
-
-            <div className="flex overflow-x-auto no-scrollbar gap-4 md:gap-8 pb-10">
-               {genres.map((g) => {
-                 const genreMovies = myMovies.filter((m: any) => m.genres?.includes(g)).slice(0, 8);
-                 if (genreMovies.length === 0) return null;
-                 return (
-                   <div key={g} className="flex-none w-[280px] md:w-[450px] bg-white/5 rounded-3xl p-6 border border-white/5 group hover:bg-white/10 transition-all">
-                      <div className="flex justify-between items-center mb-6">
-                         <span className="text-white font-black uppercase text-xs md:text-lg tracking-widest">{g}</span>
-                         <span className="text-red-500 font-black text-[8px] md:text-[10px] uppercase tracking-widest">+12% Trending</span>
-                      </div>
-                      <div className="flex -space-x-8 md:-space-x-12">
-                         {genreMovies.slice(0, 4).map((m: any, i: number) => (
-                           <div key={m.id} className="w-20 h-28 md:w-32 md:h-44 rounded-xl overflow-hidden border-4 border-[#050505] shadow-2xl relative" style={{ zIndex: 10 - i }}>
-                              <img src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w200/${m.poster_path}`} className="w-full h-full object-cover" />
-                           </div>
-                         ))}
-                      </div>
-                      <button 
-                        onClick={() => navigate(`/genre/${g}`)}
-                        className="mt-8 w-full py-4 border border-white/10 rounded-xl text-[8px] md:text-[10px] text-gray-400 font-black uppercase tracking-widest group-hover:bg-white group-hover:text-black transition-all"
-                      >
-                        Explore Category
-                      </button>
-                   </div>
-                 );
-               })}
-            </div>
-         </section>
-
-         {/* COLLECTIONS CAROUSEL */}
-         <CollectionsCarousel franchises={franchises} />
-
-         {/* SERIES CAROUSEL */}
-         <section className="pl-5 md:pl-20 max-w-[2000px] mx-auto">
-            <div className="mb-10 md:mb-16">
-               <h3 className="text-4xl md:text-8xl font-black text-white italic tracking-tighter uppercase leading-[0.8] mb-4">Prime Series</h3>
-               <p className="text-gray-500 font-bold uppercase tracking-widest text-[8px] md:text-xs">Award-winning binge-worthy productions</p>
-            </div>
-
-            <div className="flex overflow-x-auto no-scrollbar gap-6 md:gap-10 pb-10">
-               {top10Series.map((s: any) => (
-                 <div 
-                   key={s.id} 
-                   className="relative flex-none cursor-pointer group"
-                   onClick={() => handleSelectMovie(s)}
-                 >
-                    <div className="w-[160px] md:w-[240px] aspect-[2/3] rounded-xl md:rounded-3xl overflow-hidden border border-white/5 grayscale group-hover:grayscale-0 transition-all group-hover:scale-105 duration-500">
-                       <img src={s.poster_path?.startsWith('http') ? s.poster_path : `https://image.tmdb.org/t/p/w500/${s.poster_path}`} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="mt-6">
-                       <p className="text-white font-black uppercase text-[10px] md:text-xs tracking-tighter line-clamp-1">{s.name}</p>
-                       <p className="text-gray-500 text-[8px] font-bold uppercase tracking-widest mt-1 group-hover:text-red-500 transition-colors">Season 1 Active</p>
-                    </div>
-                 </div>
-               ))}
-            </div>
-         </section>
-
-         {/* STATISTICS BENTO (MOBILE OPTIMIZED) */}
-         <section className="px-5 md:px-20 max-w-[2000px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10 pb-20">
-            <div className="bg-white/5 p-8 md:p-16 rounded-[2rem] md:rounded-[4rem] border border-white/5 flex flex-col justify-between h-[300px] md:h-[500px]">
-               <Activity className="text-red-600 mb-8" size={32} />
-               <div>
-                  <h4 className="text-white font-black text-4xl md:text-6xl uppercase italic tracking-tighter mb-4 leading-none">Global Pulse</h4>
-                  <p className="text-gray-500 font-bold uppercase tracking-[0.2em] text-[10px] md:text-xs leading-relaxed">System-wide monitoring shows 98% engagement on new thriller releases today.</p>
-               </div>
-            </div>
-            
-            <div className="md:col-span-2 bg-gradient-to-br from-red-900/40 to-[#050505] p-8 md:p-16 rounded-[2rem] md:rounded-[4rem] border border-red-900/20 flex flex-col md:flex-row gap-10">
-               <div className="flex-1 flex flex-col justify-center">
-                  <h4 className="text-white font-black text-4xl md:text-7xl uppercase italic tracking-tighter mb-6 leading-[0.8]">Curadoria Premium</h4>
-                  <p className="text-white/60 font-bold text-xs md:text-lg mb-10 max-w-md">Nossa equipe editorial selecionou os melhores títulos de suspense europeu para você este final de semana.</p>
-                  <button className="w-fit px-10 py-4 bg-white text-black font-black uppercase tracking-widest text-[10px] shadow-2xl">Ver Coleção</button>
-               </div>
-               <div className="shrink-0 flex items-center justify-center">
-                  <div className="w-32 h-32 md:w-64 md:h-64 rounded-full border border-white/10 flex flex-col items-center justify-center bg-black/40 backdrop-blur-3xl">
-                     <span className="text-white font-black text-2xl md:text-4xl uppercase italic tracking-tighter">PRIME</span>
+      {/* ── MAIN CONTENT LIST ── */}
+      {filteredMovies.length > 0 && (
+        <div className="px-4 md:px-10 mt-5">
+          <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2">
+            {filteredMovies.slice(0, 10).map((movie: any, idx: number) => (
+              <motion.div
+                key={movie.id}
+                whileHover={{ scale: 1.04 }}
+                className="flex-none cursor-pointer relative group"
+                style={{ width: 'clamp(110px, 28vw, 160px)' }}
+                onClick={() => handleSelectMovie(movie)}
+              >
+                <div className="aspect-[2/3] rounded-xl overflow-hidden relative" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <img
+                    src={movie.poster_path?.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w342/${movie.poster_path}`}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    alt={movie.title}
+                  />
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)' }} />
+                  <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+                    <span className="text-white font-black text-[8px]">{idx + 1}</span>
                   </div>
-               </div>
+                  <div className="absolute bottom-0 inset-x-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                      <Play size={12} fill="#000" className="text-black ml-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-white/70 text-[9px] font-bold mt-1.5 line-clamp-1 uppercase tracking-tight">{movie.title || movie.name}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── DESAFIOS DE QUEM SABE ── */}
+      <div className="px-4 md:px-10 mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Trophy size={14} style={{ color: '#e53e3e' }} />
+            <div>
+              <p className="text-white text-[11px] md:text-xs font-black uppercase tracking-widest">Desafios de Quem Sabe</p>
+              <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Quiz</p>
             </div>
-         </section>
+          </div>
+          <button className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <RotateCcw size={11} className="text-white/40" />
+          </button>
+        </div>
+        <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+          {quizCards.map((card, i) => (
+            <div
+              key={i}
+              className="flex-none rounded-xl overflow-hidden cursor-pointer flex items-center justify-center"
+              style={{ width: 'clamp(90px, 24vw, 120px)', height: 'clamp(90px, 24vw, 120px)', background: card.bg, border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <span className="font-black text-white text-center px-2" style={{ fontSize: card.type === 'emoji' ? 'clamp(24px,8vw,36px)' : 'clamp(12px,3.5vw,16px)', lineHeight: 1.1 }}>
+                {card.label}
+              </span>
+            </div>
+          ))}
+          {top10Movies.slice(3, 5).map((m: any) => (
+            <div
+              key={m.id}
+              className="flex-none rounded-xl overflow-hidden cursor-pointer relative"
+              style={{ width: 'clamp(90px, 24vw, 120px)', height: 'clamp(90px, 24vw, 120px)' }}
+              onClick={() => handleSelectMovie(m)}
+            >
+              <img src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185/${m.poster_path}`} className="w-full h-full object-cover" alt="" />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── SÉRIE EM DESTAQUE ── */}
+      {top10Series.length > 0 && (
+        <div className="px-4 md:px-10 mt-6">
+          <h3 className="text-[11px] md:text-xs font-black uppercase tracking-widest text-white/70 mb-3">Séries em Alta</h3>
+          <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2">
+            {top10Series.slice(0, 8).map((s: any) => (
+              <div
+                key={s.id}
+                className="flex-none cursor-pointer group"
+                style={{ width: 'clamp(110px, 28vw, 150px)' }}
+                onClick={() => handleSelectMovie(s)}
+              >
+                <div className="aspect-[2/3] rounded-xl overflow-hidden relative" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <img src={s.poster_path?.startsWith('http') ? s.poster_path : `https://image.tmdb.org/t/p/w342/${s.poster_path}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={s.name} />
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 55%)' }} />
+                  <div className="absolute bottom-0 inset-x-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-center">
+                    <div className="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center">
+                      <Play size={10} fill="#000" className="ml-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-white/60 text-[9px] font-bold mt-1 line-clamp-1 uppercase tracking-tight">{s.name}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── COLEÇÕES ── */}
+      <CollectionsCarousel franchises={franchises} />
+
+      {/* ── COMENTÁRIOS SOCIAIS ── */}
+      <div className="px-4 md:px-10 mt-6 space-y-3">
+        {[
+          { user: 'Espectador_A', text: 'O melhor episódio! 🔥', color: '#e53e3e' },
+          { user: 'Espectador_B', text: 'Mestre incrível ❤️', color: '#a78bfa' },
+          { user: 'Espectador_C', text: 'Top 10 confirmado 🏆', color: '#34d399' },
+        ].map((c, i) => (
+          <div key={i} className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full flex-none flex items-center justify-center font-black text-[10px]" style={{ background: c.color + '22', border: `1.5px solid ${c.color}44`, color: c.color }}>
+              {c.user[0]}
+            </div>
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>@{c.user}</span>
+              <span className="text-[10px] font-medium ml-1.5" style={{ color: 'rgba(255,255,255,0.65)' }}>{c.text}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
       <style>{`
