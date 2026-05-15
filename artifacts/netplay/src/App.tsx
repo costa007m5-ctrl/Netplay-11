@@ -1178,22 +1178,44 @@ const UniverseTabView = React.memo(({
   const { franchiseId } = useParams();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activePeriod, setActivePeriod] = useState<'daily'|'weekly'|'vital'>('daily');
+  const [activeGenreFilter, setActiveGenreFilter] = useState('Todos os Gêneros');
+  const [activeSubGenre, setActiveSubGenre] = useState('Anime');
+  const [showQuizDiscover, setShowQuizDiscover] = useState(false);
+  const [featuredIdx, setFeaturedIdx] = useState(0);
 
   const activeFranchise = useMemo(() => {
     if (!franchiseId) return null;
     return franchises.find((f: any) => f.id.toString() === franchiseId);
   }, [franchiseId, franchises]);
 
-  const filteredFranchises = useMemo(() => {
-    return franchises.filter((f: any) => {
-      const matchesSearch = f.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = activeFilter === 'All' || f.keywords?.some((k: string) => k.toLowerCase().includes(activeFilter.toLowerCase()));
-      return matchesSearch && matchesFilter;
-    });
-  }, [franchises, searchTerm, activeFilter]);
+  // Sort franchises by movie count descending for featured display
+  const sortedFranchises = useMemo(() =>
+    [...franchises].sort((a: any, b: any) => (b.movies?.length || 0) - (a.movies?.length || 0)),
+    [franchises]
+  );
 
-  const promotedFranchises = useMemo(() => franchises.slice(0, 3), [franchises]);
+  const filteredFranchises = useMemo(() =>
+    searchTerm
+      ? franchises.filter((f: any) => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      : sortedFranchises,
+    [franchises, sortedFranchises, searchTerm]
+  );
+
+  // Featured franchise (center of hero carousel)
+  const featuredFranchise = sortedFranchises[featuredIdx] || sortedFranchises[0];
+  const allFranchiseMovies = useMemo(() =>
+    franchises.flatMap((f: any) => f.movies || []),
+    [franchises]
+  );
+
+  // Timeline movies for Explorando Origens
+  const timelineMovies = useMemo(() =>
+    [...(featuredFranchise?.movies || [])].sort((a: any, b: any) =>
+      (a.release_date || '').localeCompare(b.release_date || '')
+    ).slice(0, 7),
+    [featuredFranchise]
+  );
 
   return (
     <motion.div
@@ -1201,281 +1223,403 @@ const UniverseTabView = React.memo(({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen relative bg-[#050505] overflow-x-hidden"
+      className="min-h-screen bg-[#0d0d0d] pb-24 overflow-x-hidden"
     >
-      {/* Fast Background */}
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden bg-black">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/10 via-black to-black" />
-      </div>
-
       <AnimatePresence mode="wait">
         {!activeFranchise ? (
           <motion.div
             key="universe-catalog"
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -30 }}
-            className="pt-24 md:pt-40 pb-40"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
-            {/* Cinematic Header */}
-            <div className="px-6 md:px-12 max-w-7xl mx-auto mb-12 md:mb-32">
-              <motion.div 
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                className="flex items-center gap-3 mb-6"
+            {/* ── HERO BANNER ── */}
+            <div className="relative w-full overflow-hidden" style={{ height: 'clamp(200px, 40vw, 340px)' }}>
+              {featuredFranchise && (
+                <motion.img
+                  key={featuredFranchise.id}
+                  initial={{ opacity: 0, scale: 1.08 }}
+                  animate={{ opacity: 0.65, scale: 1 }}
+                  transition={{ duration: 1 }}
+                  src={featuredFranchise.backdrop || featuredFranchise.poster}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  alt=""
+                />
+              )}
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #0d0d0d 0%, rgba(13,13,13,0.45) 60%, rgba(13,13,13,0.2) 100%)' }} />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, rgba(13,13,13,0.85) 0%, transparent 60%)' }} />
+
+              <div className="relative h-full flex flex-col justify-end px-4 md:px-10 pb-4 z-10">
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+                  <p className="text-[9px] font-black uppercase tracking-[0.35em] mb-0.5" style={{ color: '#e53e3e' }}>Nexus Multiverso</p>
+                  <h1 className="font-black text-white uppercase tracking-tighter leading-none" style={{ fontSize: 'clamp(28px, 8vw, 60px)', borderLeft: '4px solid #e53e3e', paddingLeft: '10px' }}>
+                    Universos
+                  </h1>
+                </motion.div>
+              </div>
+            </div>
+
+            {/* ── SEARCH BAR ── */}
+            <div className="px-4 md:px-10 mt-3">
+              <div className="flex items-center gap-2.5 rounded-full px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                <Search size={13} className="text-white/30 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Buscar"
+                  className="bg-transparent text-white/70 text-xs font-bold placeholder-white/25 outline-none flex-1 uppercase tracking-widest"
+                />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')}>
+                    <X size={12} className="text-white/30" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ── FRANCHISE CAROUSEL (featured + compact) ── */}
+            {filteredFranchises.length > 0 && (
+              <div className="mt-4 px-4 md:px-10">
+                {/* Main featured row */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                  {filteredFranchises.slice(0, 6).map((f: any, i: number) => {
+                    const isFeatured = i === featuredIdx && !searchTerm;
+                    return (
+                      <motion.div
+                        key={f.id}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => { setFeaturedIdx(i); navigate(`/universe/${f.id}`); }}
+                        className="flex-none cursor-pointer relative rounded-xl overflow-hidden"
+                        style={{
+                          width: isFeatured ? 'clamp(130px, 35vw, 180px)' : 'clamp(80px, 22vw, 110px)',
+                          height: isFeatured ? 'clamp(90px, 24vw, 130px)' : 'clamp(80px, 21vw, 115px)',
+                          border: isFeatured ? '2px solid #e53e3e' : '1px solid rgba(255,255,255,0.07)',
+                          transition: 'all 0.3s',
+                        }}
+                      >
+                        <img
+                          src={f.backdrop || f.poster}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          style={{ opacity: isFeatured ? 0.72 : 0.5 }}
+                          referrerPolicy="no-referrer"
+                          alt={f.name}
+                        />
+                        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 55%)' }} />
+                        {isFeatured && <div className="absolute inset-0" style={{ background: 'rgba(229,62,62,0.08)' }} />}
+                        <div className="absolute inset-x-0 bottom-0 p-2">
+                          {f.logo ? (
+                            <img src={f.logo} alt={f.name} className="h-4 object-contain mx-auto mb-0.5 drop-shadow-2xl" referrerPolicy="no-referrer" />
+                          ) : (
+                            <p className="text-white font-black text-[9px] uppercase tracking-tight text-center leading-none mb-0.5">{f.name}</p>
+                          )}
+                          <p className="text-center font-bold uppercase tracking-widest" style={{ fontSize: '7px', color: isFeatured ? '#fc8181' : 'rgba(255,255,255,0.35)' }}>
+                            {isFeatured ? 'Saga Completa' : ''}{isFeatured ? ' · ' : ''}{f.movies?.length || 0} títulos
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+
+                {/* Counter + description */}
+                {featuredFranchise && (
+                  <p className="text-[9px] font-bold mt-2 pb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    <span className="text-white/70 font-black">{featuredFranchise.movies?.length || 0} Títulos</span>
+                    {featuredFranchise.movies?.length > 0 && (
+                      <> | Explore de {featuredFranchise.movies[0]?.title || featuredFranchise.name} a {featuredFranchise.movies[featuredFranchise.movies.length - 1]?.title || ''}</>
+                    )}
+                  </p>
+                )}
+
+                {/* Second row — compact */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 mt-2">
+                  {filteredFranchises.slice(0, 5).map((f: any) => (
+                    <div
+                      key={`compact-${f.id}`}
+                      className="flex-none cursor-pointer relative rounded-xl overflow-hidden"
+                      style={{ width: 'clamp(85px, 23vw, 115px)', height: 'clamp(52px, 14vw, 72px)', border: '1px solid rgba(255,255,255,0.06)' }}
+                      onClick={() => navigate(`/universe/${f.id}`)}
+                    >
+                      <img src={f.backdrop || f.poster} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.48 }} referrerPolicy="no-referrer" alt="" />
+                      <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%)' }} />
+                      <div className="absolute bottom-1.5 left-2 right-2">
+                        {f.logo ? (
+                          <img src={f.logo} alt={f.name} className="h-3 object-contain drop-shadow-2xl" referrerPolicy="no-referrer" />
+                        ) : (
+                          <p className="text-white font-black text-[8px] uppercase leading-none">{f.name}</p>
+                        )}
+                        <p className="font-bold uppercase" style={{ fontSize: '6px', color: 'rgba(255,255,255,0.3)', marginTop: '1px' }}>{f.movies?.length || 0} Títulos</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── ACTION BUTTONS ── */}
+            <div className="px-4 md:px-10 mt-4 flex gap-2">
+              <button
+                onClick={() => featuredFranchise?.movies?.[0] && handleSelectMovie(featuredFranchise.movies[0])}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-full text-[10px] font-black uppercase tracking-widest py-2.5 transition-all hover:opacity-80"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
               >
-                <div className="h-px w-8 bg-red-600" />
-                <span className="text-red-500 font-black uppercase tracking-[0.4em] text-[8px] md:text-[10px] italic">Nexus Multiverso</span>
-              </motion.div>
-              
-              <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 md:gap-12">
-                <div>
-                  <h2 className="text-4xl md:text-[10rem] font-black text-white uppercase tracking-tighter leading-[0.8] italic mb-6">Universos</h2>
-                  <p className="text-gray-500 font-bold text-xs md:text-2xl italic max-w-2xl border-l-2 md:border-l-4 border-red-600/30 pl-4 md:pl-8">
-                    Explore dimensões infinitas. Navegue por sagas completas com curadoria de alta fidelidade.
+                <Plus size={11} /> Imersão Imediata
+              </button>
+              <button
+                onClick={() => featuredFranchise?.movies?.[0] && toggleMyList(featuredFranchise.movies[0])}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-full text-[10px] font-black uppercase tracking-widest py-2.5 transition-all hover:opacity-80"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+              >
+                <Plus size={11} /> Minha Lista
+              </button>
+            </div>
+
+            {/* ── FEATURE CARDS (biblioteca + quiz) ── */}
+            <div className="px-4 md:px-10 mt-4 flex gap-2 md:gap-3">
+              {/* Biblioteca de Saber */}
+              <div
+                className="flex-1 relative rounded-xl overflow-hidden cursor-pointer"
+                style={{ height: 'clamp(76px, 19vw, 105px)', background: '#161616', border: '1px solid rgba(255,255,255,0.06)' }}
+                onClick={() => navigate('/search')}
+              >
+                <div className="absolute top-2.5 left-2.5 flex -space-x-2">
+                  {allFranchiseMovies.slice(0, 4).map((m: any, i: number) => (
+                    <div key={m.id || i} className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0" style={{ border: '1.5px solid #161616', zIndex: 4 - i }}>
+                      <img src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w92/${m.poster_path}`} className="w-full h-full object-cover" alt="" />
+                    </div>
+                  ))}
+                </div>
+                <div className="absolute bottom-2 left-2.5 right-2">
+                  <p className="text-white text-[9px] font-black uppercase leading-tight">
+                    Biblioteca de Saber<br />
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>Galeria de Fan-Art</span>
                   </p>
                 </div>
-                
-                <div className="flex flex-col gap-4 md:gap-6">
-                   <div className="flex items-center bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[1.5rem] md:rounded-[2rem] px-6 md:px-8 py-3 md:py-4 focus-within:border-red-600 transition-all shadow-2xl">
-                      <Search size={18} className="text-gray-500 mr-3 md:mr-4" />
-                      <input 
-                        type="text" 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Buscar..." 
-                        className="bg-transparent text-[10px] md:text-sm font-black italic text-white outline-none w-full md:w-64 placeholder-gray-700 uppercase"
-                      />
-                   </div>
-                   <div className="flex flex-wrap gap-2">
-                      {['All', 'Marvel', 'DC', 'Star Wars', 'Animation'].map(f => (
-                        <button 
-                          key={f}
-                          onClick={() => setActiveFilter(f)}
-                          className={`px-4 md:px-6 py-1.5 md:py-2 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeFilter === f ? 'bg-red-600 text-white' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`}
-                        >
-                          {f}
-                        </button>
-                      ))}
-                   </div>
+              </div>
+              {/* Quiz */}
+              <div
+                className="flex-1 relative rounded-xl overflow-hidden cursor-pointer active:scale-95 transition-transform"
+                style={{ height: 'clamp(76px, 19vw, 105px)', background: '#161616', border: '1px solid rgba(255,255,255,0.06)' }}
+                onClick={() => setShowQuizDiscover(true)}
+              >
+                <div className="absolute top-2.5 right-2.5">
+                  <Trophy size={15} style={{ color: '#e53e3e' }} />
+                </div>
+                <div className="absolute bottom-2 left-2.5 right-2">
+                  <p className="text-[7px] font-black uppercase tracking-widest mb-0.5" style={{ color: '#e53e3e' }}>Quiz</p>
+                  <p className="text-white text-[9px] font-black uppercase leading-tight">Desafios de<br/>Quem Sabe</p>
                 </div>
               </div>
             </div>
 
-            {searchTerm === '' && (
-              <div className="px-6 md:px-12 max-w-7xl mx-auto mb-12">
-                 <p className="text-gray-500 font-bold italic tracking-widest text-[10px] uppercase">Selecione uma saga para explorar</p>
+            {/* ── FILTER TABS ── */}
+            <div className="mt-4 px-4 md:px-10">
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                {(['daily','weekly','vital'] as const).map((id, i) => {
+                  const label = ['Hoje','Semanal','Vital'][i];
+                  const isActive = activePeriod === id;
+                  return (
+                    <button key={id} onClick={() => setActivePeriod(id)}
+                      className="flex-none flex items-center gap-1 rounded-full text-[9px] font-black uppercase tracking-widest px-3 py-1.5 whitespace-nowrap transition-all"
+                      style={{ background: isActive ? 'rgba(229,62,62,0.18)' : 'rgba(255,255,255,0.05)', color: isActive ? '#fc8181' : 'rgba(255,255,255,0.45)', border: isActive ? '1px solid rgba(229,62,62,0.35)' : '1px solid rgba(255,255,255,0.07)' }}
+                    >
+                      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />}
+                      {label}
+                    </button>
+                  );
+                })}
+                <div className="w-px h-5 bg-white/10 self-center mx-0.5 flex-shrink-0" />
+                {['Todos os Gêneros','Ação','Drama'].map(g => {
+                  const isActive = activeGenreFilter === g;
+                  return (
+                    <button key={g} onClick={() => setActiveGenreFilter(g)}
+                      className="flex-none rounded-full text-[9px] font-black uppercase tracking-widest px-3 py-1.5 whitespace-nowrap transition-all"
+                      style={{ background: isActive ? '#fff' : 'rgba(255,255,255,0.05)', color: isActive ? '#000' : 'rgba(255,255,255,0.45)', border: isActive ? 'none' : '1px solid rgba(255,255,255,0.07)' }}
+                    >
+                      {g}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+              <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar pb-1">
+                {['Anime','Infantil','Clássicos'].map(g => {
+                  const isActive = activeSubGenre === g;
+                  return (
+                    <button key={g} onClick={() => setActiveSubGenre(g)}
+                      className="flex-none rounded-full text-[9px] font-black uppercase tracking-widest px-3 py-1.5 whitespace-nowrap transition-all flex items-center gap-1"
+                      style={{ background: isActive ? 'rgba(229,62,62,0.14)' : 'rgba(255,255,255,0.04)', color: isActive ? '#e53e3e' : 'rgba(255,255,255,0.35)', border: isActive ? '1px solid rgba(229,62,62,0.28)' : '1px solid rgba(255,255,255,0.05)' }}
+                    >
+                      {g === 'Anime' && '⚡'} {g === 'Infantil' && '🎠'} {g === 'Clássicos' && '🏛️'} {g}
+                    </button>
+                  );
+                })}
+                <button className="flex-none rounded-full text-[9px] px-2.5 py-1.5 transition-all" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}>
+                  ⊕
+                </button>
+              </div>
+            </div>
 
-            {/* Featured Universe Carousel */}
-            {promotedFranchises.length > 0 && searchTerm === '' && (
-               <div className="px-4 mb-12 md:mb-24 group">
-                  <div className="max-w-7xl mx-auto">
-                    <div className="flex items-center justify-between mb-8 px-4 md:px-8">
-                        <div className="flex items-center gap-3">
-                            <Sparkles className="text-yellow-500" size={16} />
-                            <h3 className="text-white font-black uppercase tracking-[0.2em] text-[9px] md:text-xs italic">Destaques do Multiverso</h3>
+            {/* ── CONEXÕES DO MULTIVERSO: INFOGRÁFICOS EXCLUSIVOS ── */}
+            <div className="px-4 md:px-10 mt-5">
+              {/* Section header */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Star size={13} style={{ color: '#f6c90e' }} />
+                  <div>
+                    <p className="text-white text-[11px] font-black uppercase tracking-widest leading-none">Conexões do Multiverso</p>
+                    <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Infográficos Exclusivos</p>
+                  </div>
+                </div>
+                <button className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <RotateCcw size={11} className="text-white/40" />
+                </button>
+              </div>
+
+              {/* Two infographic cards side by side */}
+              <div className="flex gap-3">
+                {/* Card 1 — Maratona de Saga (Easter Eggs & Segredos) */}
+                <div className="flex-1 rounded-2xl p-3 space-y-2.5" style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <p className="text-white text-[10px] font-black uppercase leading-tight">
+                    {featuredFranchise ? `Maratona: ${featuredFranchise.name}` : 'Easter Eggs & Segredos'}
+                  </p>
+                  <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#e53e3e' }}>
+                    Progresso &amp; Badges
+                  </p>
+
+                  {/* Character circles with progress bars */}
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                    {(featuredFranchise?.movies?.slice(0, 5) || []).map((m: any, i: number) => {
+                      const progressColors = ['#f6c90e','#e53e3e','#38b2ac','#63b3ed','#718096'];
+                      const progressPcts = [88, 65, 42, 28, 10];
+                      return (
+                        <div key={m.id || i} className="flex flex-col items-center flex-shrink-0" style={{ width: 40 }}>
+                          <div className="w-9 h-9 rounded-full overflow-hidden relative" style={{ border: `2px solid ${progressColors[i]}`, padding: '2px' }}>
+                            <div className="w-full h-full rounded-full overflow-hidden">
+                              <img src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w92/${m.poster_path}`} className="w-full h-full object-cover object-top" alt="" />
+                            </div>
+                          </div>
+                          <div className="w-full mt-1 rounded-full overflow-hidden" style={{ height: 3, background: 'rgba(255,255,255,0.1)' }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${progressPcts[i]}%`, background: progressColors[i] }} />
+                          </div>
                         </div>
-                    </div>
-                    
-                    <div className="flex gap-3 md:gap-5 overflow-x-auto pb-4 px-4 md:px-8 no-scrollbar snap-x">
-                        {promotedFranchises.map((franchise: any) => (
-                          <motion.div 
-                            key={`promoted-${franchise.id}`}
-                            whileHover={{ scale: 1.05, y: -4 }}
-                            whileTap={{ scale: 0.98 }}
-                            className="relative flex-none w-[90px] md:w-[140px] aspect-[2/3] rounded-[1rem] md:rounded-[1.5rem] overflow-hidden border border-white/5 cursor-pointer snap-center shadow-2xl group/card bg-[#0a0a0a]"
-                            onClick={() => navigate(`/universe/${franchise.id}`)}
-                          >
-                             <img src={franchise.poster || franchise.backdrop} className="w-full h-full object-cover opacity-60 group-hover/card:opacity-100 transition-all duration-700 group-hover/card:scale-110" referrerPolicy="no-referrer" />
-                             <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/80 to-transparent" />
-                             
-                             <div className="absolute inset-0 flex flex-col justify-end p-2 md:p-3">
-                                {franchise.logo ? (
-                                  <img src={franchise.logo} className="h-4 md:h-8 object-contain mb-1 md:mb-2 drop-shadow-2xl mx-auto" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <h4 className="text-[8px] md:text-xs font-black text-white italic uppercase tracking-tighter mb-1 md:mb-2 text-center leading-tight">{franchise.name}</h4>
-                                )}
-                                <div className="flex items-center justify-center">
-                                   <div className="px-1.5 py-0.5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full">
-                                      <span className="text-[5px] md:text-[6px] font-black text-white/40 uppercase tracking-widest leading-none">{franchise.movies.length} Títulos</span>
-                                   </div>
-                                </div>
-                             </div>
-                          </motion.div>
-                        ))}
+                      );
+                    })}
+                    {!featuredFranchise?.movies?.length && [0,1,2,3,4].map(i => {
+                      const progressColors = ['#f6c90e','#e53e3e','#38b2ac','#63b3ed','#718096'];
+                      const progressPcts = [88, 65, 42, 28, 10];
+                      return (
+                        <div key={i} className="flex flex-col items-center flex-shrink-0" style={{ width: 40 }}>
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg" style={{ border: `2px solid ${progressColors[i]}`, background: 'rgba(255,255,255,0.05)' }}>
+                            {'🦸‍♂️🦸‍♀️🦸🧙‍♂️⚔️'.split('').slice(i*2, i*2+2).join('')}
+                          </div>
+                          <div className="w-full mt-1 rounded-full overflow-hidden" style={{ height: 3, background: 'rgba(255,255,255,0.1)' }}>
+                            <div className="h-full rounded-full" style={{ width: `${progressPcts[i]}%`, background: progressColors[i] }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Easter eggs list */}
+                  <div className="space-y-1">
+                    <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Dinâmica de detônicos séries para:</p>
+                    {(featuredFranchise?.movies?.slice(0, 2) || []).map((m: any, i: number) => (
+                      <p key={i} className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                        {i + 1}. {m.overview?.split('.')[0]?.slice(0, 40) || m.title}
+                      </p>
+                    ))}
+                    {!featuredFranchise?.movies?.length && (
+                      <>
+                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.65)' }}>1. Selecione uma saga acima</p>
+                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.65)' }}>2. Explore os universos</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card 2 — Explorando Origens (Timeline) */}
+                <div className="flex-1 rounded-2xl p-3 space-y-2" style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <p className="text-white text-[10px] font-black uppercase leading-tight">Conecte a Franquia</p>
+                  <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Timeline</p>
+
+                  {/* You are here indicator */}
+                  <div className="flex justify-center">
+                    <span className="text-[7px] font-black uppercase px-2 py-0.5 rounded-full" style={{ background: '#e53e3e', color: '#fff' }}>You are Here</span>
+                  </div>
+
+                  {/* Timeline visualization */}
+                  <div className="relative overflow-x-auto no-scrollbar" style={{ paddingBottom: '4px' }}>
+                    <div className="flex items-center gap-0 min-w-max">
+                      {(timelineMovies.length > 0 ? timelineMovies : [{title:'Início'},{title:'Meio'},{title:'Fim'}]).map((m: any, i: number, arr: any[]) => (
+                        <React.Fragment key={i}>
+                          <div className="flex flex-col items-center" style={{ minWidth: 36 }}>
+                            <p className="text-center font-bold leading-tight mb-1" style={{ fontSize: '6px', color: 'rgba(255,255,255,0.5)', maxWidth: 32, wordBreak: 'break-word' }}>
+                              {(m.title || m.name || '').slice(0, 10)}
+                            </p>
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: i === Math.floor(arr.length/2) ? '#e53e3e' : i % 2 === 0 ? '#63b3ed' : '#a78bfa', border: `1.5px solid ${i === Math.floor(arr.length/2) ? '#fc8181' : 'rgba(255,255,255,0.2)'}` }} />
+                            <p className="text-center font-bold mt-1 leading-tight" style={{ fontSize: '6px', color: 'rgba(255,255,255,0.35)', maxWidth: 32 }}>
+                              {m.release_date?.split('-')[0] || ''}
+                            </p>
+                          </div>
+                          {i < arr.length - 1 && (
+                            <div style={{ height: '1.5px', width: 12, background: 'rgba(255,255,255,0.15)', flexShrink: 0, marginTop: '-6px' }} />
+                          )}
+                        </React.Fragment>
+                      ))}
                     </div>
                   </div>
-               </div>
-            )}
 
-            {/* Category Carousels */}
-            <div className="space-y-16 pb-20">
-              {/* TOP 10 SAGAS (Portrait Row) */}
-              {searchTerm === '' && activeFilter === 'All' && (
-                <div className="pl-6 md:pl-12">
-                   <div className="flex items-center gap-3 mb-6">
-                      <div className="w-1.5 h-6 bg-red-600 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)]" />
-                      <h3 className="text-xl md:text-3xl font-black text-white italic tracking-widest uppercase">Top 10 Sagas do Momento</h3>
-                   </div>
-                   <div className="flex overflow-x-auto no-scrollbar gap-12 md:gap-16 pb-8 snap-x px-8">
-                     {promotedFranchises.slice(0, 10).map((franchise: any, idx: number) => (
-                       <motion.div
-                         key={`top10-saga-${franchise.id}`}
-                         whileHover={{ y: -8 }}
-                         className="relative flex-none w-[110px] md:w-[160px] aspect-[2/3] cursor-pointer group/card snap-center"
-                         onClick={() => navigate(`/universe/${franchise.id}`)}
-                       >
-                          <div className="absolute -left-8 md:-left-12 bottom-0 z-0 pointer-events-none">
-                            <span className="text-[8rem] md:text-[14rem] font-black leading-none italic select-none
-                              bg-gradient-to-t from-gray-800 to-white/20 bg-clip-text text-transparent
-                              transition-all duration-700 group-hover/card:from-red-900 group-hover/card:to-red-500
-                              inline-block"
-                            >
-                              {idx + 1}
-                            </span>
-                          </div>
-                          
-                          <div className="w-full h-full rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden border border-white/10 group-hover/card:border-red-600 transition-all duration-500 shadow-2xl relative z-10 bg-black">
-                            <img 
-                              src={franchise.poster || franchise.backdrop} 
-                              className="w-full h-full object-cover opacity-80 group-hover/card:opacity-100 group-hover/card:scale-105 transition-all duration-700"
-                              alt={franchise.name}
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                            {franchise.logo && (
-                              <img src={franchise.logo} className="absolute bottom-6 left-4 right-4 h-6 md:h-10 mx-auto object-contain z-20 drop-shadow-2xl" referrerPolicy="no-referrer" />
-                            )}
-                          </div>
-                       </motion.div>
-                     ))}
-                   </div>
+                  <p className="text-[8px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    {featuredFranchise?.name || 'Dragon Ball'}
+                  </p>
+                  <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    Inferanos Curatoriais séries: {featuredFranchise?.name || 'Dragon Ball'} + {filteredFranchises[1]?.name || 'Super Z'}
+                  </p>
+                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>+ {Math.max(0, (featuredFranchise?.movies?.length || 3) - 2)} Super movies</p>
                 </div>
-              )}
+              </div>
 
-              {/* ACTION & ANIMATION SPECIALS */}
-              {searchTerm === '' && activeFilter === 'All' && (
-                <div className="pl-6 md:pl-12">
-                   <div className="flex items-center gap-3 mb-6">
-                      <div className="w-1.5 h-6 bg-yellow-500 rounded-full" />
-                      <h3 className="text-xl md:text-3xl font-black text-white italic tracking-widest uppercase">Animações & Infantis</h3>
-                   </div>
-                   <div className="flex overflow-x-auto no-scrollbar gap-6 pb-8 snap-x">
-                     {franchises.filter((f: any) => 
-                        f.id === 'disney' || f.id === 'pixar' || f.name.toLowerCase().includes('anime') || f.name.toLowerCase().includes('animation')
-                     ).map((franchise: any) => (
-                        <motion.div
-                          key={`anim-${franchise.id}`}
-                          whileHover={{ scale: 1.05 }}
-                          className="relative group cursor-pointer flex-none w-[110px] md:w-[160px] snap-center"
-                          onClick={() => navigate(`/universe/${franchise.id}`)}
-                        >
-                          <div className="aspect-[2/3] rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden border border-white/5 relative bg-[#0a0a0a] transition-all group-hover:border-red-600/50 shadow-2xl">
-                            <img src={franchise.poster || franchise.backdrop} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all duration-700" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
-                            <div className="absolute bottom-6 left-4 right-4 text-center">
-                              {franchise.logo ? (
-                                <img src={franchise.logo} className="h-6 md:h-10 mx-auto object-contain mb-2" referrerPolicy="no-referrer" />
-                              ) : (
-                                <h4 className="text-white font-black italic uppercase text-sm md:text-lg leading-none mb-2">{franchise.name}</h4>
-                              )}
-                              <span className="text-white/40 font-bold text-[8px] md:text-[10px] uppercase tracking-widest leading-none">{franchise.movies.length} Filmes</span>
-                            </div>
-                          </div>
-                        </motion.div>
-                     ))}
-                   </div>
-                </div>
-              )}
-
-              {Object.entries(
-                filteredFranchises.reduce((acc: Record<string, any[]>, f: any) => {
-                  let mainCategory = 'Outros';
-                  if (f.movies?.length > 0) {
-                    const genres = f.movies.flatMap((m: any) => m.genres?.split(',').map((g: string) => g.trim()) || []);
-                    if (genres.length > 0) {
-                      const counts = genres.reduce((c: any, g: string) => { c[g] = (c[g] || 0) + 1; return c; }, {});
-                      mainCategory = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
-                    }
-                  }
-                  // Override specific hardcoded clusters if necessary, but this dynamic inference works well.
-                  if (!acc[mainCategory]) acc[mainCategory] = [];
-                  acc[mainCategory].push(f);
-                  return acc;
-                }, {})
-              ).sort((a: any, b: any) => b[1].length - a[1].length).map(([category, categoryFranchises]: [string, any]) => (
-                <div key={category} className="pl-6 md:pl-12">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-1.5 h-6 bg-red-600 rounded-full" />
-                    <h3 className="text-xl md:text-3xl font-black text-white italic tracking-widest uppercase">{category}</h3>
-                  </div>
-                  <div className="flex overflow-x-auto no-scrollbar gap-6 pb-8 snap-x">
-                    {categoryFranchises.map((franchise: any, idx: number) => (
+              {/* All Universes grid when searching */}
+              {searchTerm && (
+                <div className="mt-5">
+                  <div className="flex gap-2.5 flex-wrap">
+                    {filteredFranchises.map((f: any) => (
                       <motion.div
-                        key={franchise.id}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        whileHover={{ scale: 1.05 }}
-                        className="relative group cursor-pointer flex-none w-[110px] md:w-[160px] snap-center"
-                        onClick={() => navigate(`/universe/${franchise.id}`)}
+                        key={f.id}
+                        whileTap={{ scale: 0.97 }}
+                        className="cursor-pointer relative rounded-xl overflow-hidden"
+                        style={{ width: 'clamp(90px, 25vw, 120px)', aspectRatio: '2/3', border: '1px solid rgba(255,255,255,0.07)' }}
+                        onClick={() => navigate(`/universe/${f.id}`)}
                       >
-                        <div className="aspect-[2/3] rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden border border-white/5 relative bg-[#0a0a0a] transition-all group-hover:border-red-600/50 shadow-2xl">
-                          <img 
-                            src={franchise.poster || franchise.backdrop} 
-                            alt={franchise.name} 
-                            className="w-full h-full object-cover transition-all duration-1000 opacity-60 group-hover:opacity-100 group-hover:scale-110"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black via-black/80 to-transparent" />
-                          
-                          <div className="absolute top-4 right-4 p-2 bg-black/40 backdrop-blur-xl rounded-full border border-white/5 opacity-0 group-hover:opacity-100 transition-all z-10">
-                             {franchise.icon && <franchise.icon size={16} className={franchise.accent} />}
-                          </div>
-   
-                          <div className="absolute bottom-6 left-4 right-4 text-center">
-                            {franchise.logo ? (
-                              <img 
-                                src={franchise.logo} 
-                                alt={franchise.name} 
-                                className="h-6 md:h-10 mx-auto object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,0.9)] mb-2 group-hover:scale-105 transition-transform" 
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <h4 className="text-white font-black italic uppercase text-sm md:text-lg leading-none mb-2 drop-shadow-2xl">{franchise.name}</h4>
-                            )}
-                            <div className="flex items-center justify-center gap-4">
-                               <span className="text-white/60 font-bold text-[8px] md:text-[10px] uppercase tracking-widest">{franchise.movies.length} Títulos</span>
-                            </div>
-                          </div>
+                        <img src={f.poster || f.backdrop} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.6 }} referrerPolicy="no-referrer" alt="" />
+                        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }} />
+                        <div className="absolute bottom-2 inset-x-2 text-center">
+                          {f.logo ? <img src={f.logo} className="h-4 object-contain mx-auto mb-0.5" referrerPolicy="no-referrer" alt="" /> : <p className="text-white font-black text-[8px] uppercase">{f.name}</p>}
+                          <p className="font-bold" style={{ fontSize: '7px', color: 'rgba(255,255,255,0.4)' }}>{f.movies?.length || 0} Títulos</p>
                         </div>
                       </motion.div>
                     ))}
                   </div>
-                </div>
-              ))}
-              
-              {filteredFranchises.length === 0 && (
-                <div className="py-40 text-center flex flex-col items-center">
-                  <div className="w-32 h-32 bg-white/5 rounded-[3rem] flex items-center justify-center mb-10 border border-white/10 relative overflow-hidden">
-                     <div className="absolute inset-0 bg-red-600/10 blur-2xl animate-pulse"></div>
-                    <Search size={48} className="text-gray-500 relative z-10" />
-                  </div>
-                  <h3 className="text-4xl font-black text-white uppercase tracking-tighter italic mb-6">Frequência Desconhecida</h3>
-                  <p className="text-gray-500 max-w-md mx-auto font-bold italic text-lg opacity-60">
-                    Não encontramos este universo no banco de dados. Tente outra busca.
-                  </p>
-                  <button 
-                    onClick={() => { setSearchTerm(''); setActiveFilter('All'); }}
-                    className="mt-10 text-red-600 font-black uppercase tracking-[0.3em] text-[10px] italic hover:text-white transition-colors flex items-center gap-4"
-                  >
-                    Reiniciar Matriz <ArrowRight size={16} />
-                  </button>
+                  {filteredFranchises.length === 0 && (
+                    <p className="text-center text-white/30 font-bold text-xs uppercase mt-8">Nenhum universo encontrado</p>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* ── QUIZ MODAL ── */}
+            <AnimatePresence>
+              {showQuizDiscover && (
+                <QuizModal movies={allFranchiseMovies.slice(0, 10)} onClose={() => setShowQuizDiscover(false)} />
+              )}
+            </AnimatePresence>
+
+            <style>{`
+              .no-scrollbar::-webkit-scrollbar { display: none; }
+              .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+            `}</style>
           </motion.div>
         ) : (
           <UniverseView
