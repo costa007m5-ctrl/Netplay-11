@@ -36,6 +36,7 @@ const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
 const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSelector'));
 const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
+const FranchiseCarousels = React.lazy(() => import('./components/FranchiseCarousels'));
 
 import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info, Trophy } from 'lucide-react';
 
@@ -971,13 +972,11 @@ const HomeView = React.memo(({
            </div>
         </section>
 
+        {/* ── Franchise & Collection Carousels ── filmes reais da biblioteca por saga */}
         {franchises && franchises.length > 0 && (
-          <Row 
-            title="Sagas & Coleções"
-            movies={franchiseMovies}
-            onSelectMovie={(f: any) => navigate(`/universe/${f.id}`)}
-            type="circle"
-          />
+          <Suspense fallback={null}>
+            <FranchiseCarousels franchises={franchises} onSelectMovie={handleSelectMovie} />
+          </Suspense>
         )}
 
         {/* 🌟 MEGA UI: LIVE CHANNELS / TRAILER HUB */}

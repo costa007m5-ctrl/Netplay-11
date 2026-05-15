@@ -141,6 +141,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isCollectionSearching, setIsCollectionSearching] = useState(false);
   const [selectedTMDBCollection, setSelectedTMDBCollection] = useState<any | null>(null);
   const [copiedScript, setCopiedScript] = useState<string | null>(null);
+  const [correctingCollectionId, setCorrectingCollectionId] = useState<number | null>(null);
+  const [correctionQuery, setCorrectionQuery] = useState('');
+  const [correctionResults, setCorrectionResults] = useState<any[]>([]);
+  const [isCorrectionSearching, setIsCorrectionSearching] = useState(false);
+  const [isCorrectionApplying, setIsCorrectionApplying] = useState(false);
+  const [correctionProgress, setCorrectionProgress] = useState({ current: 0, total: 0, status: '' });
+  const [expandedCollectionId, setExpandedCollectionId] = useState<number | null>(null);
 
   const [metrics, setMetrics] = useState({
     totalUsers: 0,
@@ -732,6 +739,76 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsManualProcessing(false);
     }
+  };
+
+  const handleSearchForCorrection = async () => {
+    if (!correctionQuery.trim()) return;
+    setIsCorrectionSearching(true);
+    setCorrectionResults([]);
+    try {
+      const res = await tmdb.get(requests.searchCollection, { params: { query: correctionQuery } });
+      setCorrectionResults(res.data.results || []);
+    } catch (e) {
+      console.error('Erro ao buscar coleções:', e);
+    } finally {
+      setIsCorrectionSearching(false);
+    }
+  };
+
+  const handleApplyCorrection = async (oldCollectionId: number, newCollection: any) => {
+    const moviesInColl = movies.filter(m => m.collection_id === oldCollectionId);
+    if (moviesInColl.length === 0) return;
+    setIsCorrectionApplying(true);
+    setCorrectionProgress({ current: 0, total: moviesInColl.length, status: 'Buscando dados no TMDB...' });
+    try {
+      const res = await tmdb.get(requests.fetchCollection(newCollection.id));
+      const collData = res.data;
+
+      let logoPath: string | null = null;
+      try {
+        const imgRes = await tmdb.get(`/collection/${newCollection.id}/images`, { params: { include_image_language: 'pt,en,null' } });
+        const logos = imgRes.data.logos || [];
+        const best = logos.find((l: any) => l.iso_639_1 === 'pt') || logos.find((l: any) => l.iso_639_1 === 'en') || logos[0];
+        if (best) logoPath = `https://image.tmdb.org/t/p/original${best.file_path}`;
+      } catch {}
+
+      const posterPath = collData.poster_path ? `https://image.tmdb.org/t/p/original${collData.poster_path}` : null;
+      const backdropPath = collData.backdrop_path ? `https://image.tmdb.org/t/p/original${collData.backdrop_path}` : posterPath;
+
+      for (let i = 0; i < moviesInColl.length; i++) {
+        const movie = moviesInColl[i];
+        setCorrectionProgress({ current: i + 1, total: moviesInColl.length, status: `Atualizando: ${movie.title}` });
+        await onUpdateMovie({
+          ...movie,
+          collection_id: collData.id,
+          collection_name: collData.name,
+          collection_poster_path: posterPath ?? undefined,
+          collection_backdrop_path: backdropPath ?? undefined,
+          collection_logo_path: logoPath ?? undefined
+        } as Movie);
+      }
+
+      setCorrectingCollectionId(null);
+      setCorrectionResults([]);
+      setCorrectionQuery('');
+    } catch (e) {
+      console.error('Erro ao corrigir coleção:', e);
+      alert('Erro ao corrigir coleção.');
+    } finally {
+      setIsCorrectionApplying(false);
+      setCorrectionProgress({ current: 0, total: 0, status: '' });
+    }
+  };
+
+  const handleRemoveFromCollection = async (movie: Movie) => {
+    await onUpdateMovie({
+      ...movie,
+      collection_id: undefined,
+      collection_name: undefined,
+      collection_poster_path: undefined,
+      collection_backdrop_path: undefined,
+      collection_logo_path: undefined
+    } as Movie);
   };
 
   const handleBulkSync = async () => {
@@ -2536,7 +2613,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                           <p className="text-gray-500 text-xs italic font-medium max-w-xl">Atualize logos, posters e banners de todas as coleções vinculadas. Isso substitui nomes genéricos por artes oficiais.</p>
                         </div>
                         <button
-                          onClick={onUpdateCollectionInfo}
+                          onClick={() => onUpdateCollectionInfo?.()}
                           disabled={collectionAutomationState?.isScanning}
                           className="flex items-center justify-center gap-3 bg-white/10 hover:bg-white/20 text-white font-black italic uppercase text-xs px-8 py-4 rounded-xl transition-all whitespace-nowrap disabled:opacity-50"
                         >
@@ -2549,37 +2626,147 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 pt-4">
-                        {Array.from(new Set(movies.filter(m => m.collection_id).map(m => m.collection_id))).map(id => {
-                          const collectionMovies = movies.filter(m => m.collection_id === id);
-                          const first = collectionMovies[0];
-                          return (
-                            <div key={id} className="group relative bg-[#1a1a1a] rounded-2xl border border-white/5 overflow-hidden aspect-[2/3]">
-                              <img 
-                                src={first.collection_poster_path || first.poster_path} 
-                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
-                                alt=""
-                                referrerPolicy="no-referrer"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
-                              <div className="absolute bottom-0 left-0 right-0 p-3">
-                                <p className="text-[9px] font-black text-white italic uppercase truncate mb-2">{first.collection_name}</p>
-                                <button 
-                                  onClick={() => {
-                                    if (onUpdateCollectionInfo && id) {
-                                       onUpdateCollectionInfo(id);
-                                    }
-                                  }}
-                                  className="w-full py-2 bg-red-600/20 hover:bg-red-600 text-white text-[8px] font-black uppercase rounded-lg transition-all opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0"
-                                >
-                                  Atualizar
-                                </button>
+                      {/* Painel de Correção ativo */}
+                      {correctingCollectionId && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mb-6 p-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 space-y-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-yellow-400 font-black text-xs uppercase tracking-widest italic">Corrigir Coleção</p>
+                              <p className="text-gray-400 font-bold text-[10px] mt-0.5">
+                                Mover {movies.filter(m => m.collection_id === correctingCollectionId).length} filmes para a coleção correta do TMDB
+                              </p>
+                            </div>
+                            <button onClick={() => { setCorrectingCollectionId(null); setCorrectionResults([]); setCorrectionQuery(''); }} className="p-1.5 hover:bg-white/10 rounded-full text-gray-500 hover:text-white transition-all">
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={correctionQuery}
+                              onChange={e => setCorrectionQuery(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleSearchForCorrection()}
+                              placeholder="Nome da coleção correta..."
+                              className="flex-1 bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-yellow-500 transition-all"
+                            />
+                            <button
+                              onClick={handleSearchForCorrection}
+                              disabled={isCorrectionSearching || !correctionQuery.trim()}
+                              className="bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/20 rounded-xl px-4 flex items-center justify-center transition-all disabled:opacity-50"
+                            >
+                              {isCorrectionSearching ? <RefreshCw className="animate-spin text-yellow-400" size={16} /> : <Search className="text-yellow-400" size={16} />}
+                            </button>
+                          </div>
+                          {isCorrectionApplying && (
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-500">
+                                <span>{correctionProgress.status}</span>
+                                <span>{correctionProgress.current}/{correctionProgress.total}</span>
                               </div>
-                              {first.collection_logo_path && (
-                                <div className="absolute top-2 right-2 bg-green-500/80 backdrop-blur-sm p-1 rounded-md">
-                                  <Sparkles size={10} className="text-white" />
+                              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                <motion.div className="h-full bg-yellow-500" animate={{ width: `${correctionProgress.total > 0 ? (correctionProgress.current / correctionProgress.total) * 100 : 0}%` }} />
+                              </div>
+                            </div>
+                          )}
+                          {correctionResults.length > 0 && (
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
+                              {correctionResults.map(r => (
+                                <button
+                                  key={r.id}
+                                  onClick={() => handleApplyCorrection(correctingCollectionId!, r)}
+                                  disabled={isCorrectionApplying}
+                                  className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-left transition-all disabled:opacity-50"
+                                >
+                                  {r.poster_path
+                                    ? <img src={`https://image.tmdb.org/t/p/w92${r.poster_path}`} className="w-8 h-11 rounded-lg object-cover flex-none" alt="" referrerPolicy="no-referrer" />
+                                    : <div className="w-8 h-11 rounded-lg bg-white/5 flex-none" />
+                                  }
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-black text-white italic truncate uppercase">{r.name}</p>
+                                    <p className="text-[8px] text-gray-500 font-bold mt-0.5">Clique para mover os filmes para esta coleção</p>
+                                  </div>
+                                  <Check size={12} className="text-yellow-400 flex-none" />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 pt-4">
+                        {Array.from(new Set(movies.filter(m => m.collection_id).map(m => m.collection_id))).map(collId => {
+                          const collectionMovies = movies.filter(m => m.collection_id === collId);
+                          const first = collectionMovies[0];
+                          const isExpanded = expandedCollectionId === collId;
+                          const isCorrecting = correctingCollectionId === collId;
+                          return (
+                            <div key={collId} className={`group relative bg-[#1a1a1a] rounded-2xl border overflow-hidden transition-all ${isCorrecting ? 'border-yellow-500/40' : 'border-white/5'}`}>
+                              {/* Poster area */}
+                              <div className="relative aspect-[2/3]">
+                                <img
+                                  src={first.collection_poster_path || first.poster_path || ''}
+                                  className="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity"
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                  onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }}
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
+                                {first.collection_logo_path && (
+                                  <div className="absolute top-2 right-2 bg-green-500/80 backdrop-blur-sm p-1 rounded-md">
+                                    <Sparkles size={8} className="text-white" />
+                                  </div>
+                                )}
+                                <div className="absolute bottom-0 left-0 right-0 p-2.5">
+                                  <p className="text-[8px] font-black text-white italic uppercase truncate leading-tight mb-1.5">{first.collection_name}</p>
+                                  <p className="text-[7px] font-bold text-gray-500 mb-2">{collectionMovies.length} {collectionMovies.length === 1 ? 'filme' : 'filmes'}</p>
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all">
+                                    <button
+                                      onClick={() => onUpdateCollectionInfo && collId && onUpdateCollectionInfo(collId as number)}
+                                      title="Atualizar poster/logo/banner via TMDB"
+                                      className="flex-1 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white text-[7px] font-black uppercase rounded-lg transition-all"
+                                    >
+                                      Atualizar
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setCorrectingCollectionId(collId as number);
+                                        setCorrectionQuery(first.collection_name || '');
+                                        setCorrectionResults([]);
+                                        setExpandedCollectionId(null);
+                                      }}
+                                      title="Corrigir coleção errada"
+                                      className="flex-1 py-1.5 bg-yellow-500/80 hover:bg-yellow-500 text-black text-[7px] font-black uppercase rounded-lg transition-all"
+                                    >
+                                      Corrigir
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Filmes expandidos */}
+                              {isExpanded && (
+                                <div className="p-2 space-y-1 border-t border-white/5 max-h-40 overflow-y-auto scrollbar-hide">
+                                  {collectionMovies.map(m => (
+                                    <div key={m.id} className="flex items-center gap-2 py-0.5">
+                                      <img src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w92${m.poster_path}`} className="w-4 h-6 rounded object-cover flex-none" alt="" referrerPolicy="no-referrer" onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }} />
+                                      <span className="text-[7px] font-bold text-gray-400 truncate flex-1 italic">{m.title}</span>
+                                      <button onClick={() => handleRemoveFromCollection(m)} title="Remover da coleção" className="text-red-500/60 hover:text-red-500 flex-none transition-all">
+                                        <X size={8} />
+                                      </button>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
+                              <button
+                                onClick={() => setExpandedCollectionId(isExpanded ? null : collId as number)}
+                                className="w-full py-1.5 text-[7px] font-black uppercase text-gray-600 hover:text-gray-400 tracking-widest transition-colors border-t border-white/5"
+                              >
+                                {isExpanded ? '▲ Ocultar' : `▼ Ver filmes`}
+                              </button>
                             </div>
                           );
                         })}
