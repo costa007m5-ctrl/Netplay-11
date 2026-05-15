@@ -35,6 +35,7 @@ const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'
 const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
 const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSelector'));
+const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
 
 import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info, Trophy } from 'lucide-react';
 
@@ -70,21 +71,23 @@ const FRANCHISES: {
   description: string, 
   poster?: string, 
   backdrop?: string,
-  logo?: string 
+  logo?: string,
+  logoMovieId?: number,
+  tmdbCollectionId?: number,
 }[] = [
-  { id: 'marvel', name: 'Marvel', keywords: ['marvel', 'avengers', 'vingadores', 'spider-man', 'spiderman', 'iron man', 'thor', 'captain america', 'capitão américa', 'black panther', 'pantera negra', 'guardians of the galaxy', 'guardiões da galáxia', 'x-men'], color: '#e62429', bg: 'bg-[#0f0f0f]', accent: 'text-red-600', icon: Zap, description: 'O Universo Cinematográfico mais épico da história. Uma saga interligada de heróis lutando pela sobrevivência da humanidade contra ameaças universais.', backdrop: 'https://image.tmdb.org/t/p/original/mDf935S7qbZOSo9u3YmBAzY6nU2.jpg', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Marvel_Logo.svg' },
-  { id: 'star-wars', name: 'Star Wars', keywords: ['star wars', 'mandalorian', 'obi-wan', 'skywalker', 'jedi', 'sith', 'andor'], color: '#ffe81f', bg: 'bg-black', accent: 'text-yellow-400', icon: Ghost, description: 'Uma galáxia muito, muito distante... Acompanhe a eterna luta entre a Luz e o Lado Sombrio pela liberdade de todos os sistemas estelares.', backdrop: 'https://images.unsplash.com/photo-1506443432602-ac2fcd6f54e0?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6c/Star_Wars_Logo.svg' },
-  { id: 'dc', name: 'DC Comics', keywords: ['dc comics', 'batman', 'superman', 'wonder woman', 'mulher maravilha', 'justice league', 'liga da justiça', 'aquaman', 'the flash', 'joker', 'coringa'], color: '#0476f2', bg: 'bg-[#000d1a]', accent: 'text-blue-500', icon: Shield, description: 'Onde nascem as lendas e os deuses caminham. De Gotham a Metrópolis, os maiores vigilantes do multiverso protegem a justiça.', backdrop: 'https://image.tmdb.org/t/p/original/8Y736u7S99K3NBSmToIdpY2S8uF.jpg', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3d/DC_Comics_logo.svg' },
-  { id: 'harry-potter', name: 'Harry Potter', keywords: ['harry potter', 'pedra filosofal', 'câmara secreta', 'prisioneiro de azkaban', 'cálice de fogo', 'ordem da fênix', 'enigma do príncipe', 'relíquias da morte', 'animais fantásticos'], color: '#ffd700', bg: 'bg-[#0a0a0c]', accent: 'text-yellow-500', icon: Sparkles, description: 'A magia vive aqui. Entre no mundo bruxo e descubra os segredos de Hogwarts na batalha definitiva contra o Lorde das Trevas.', backdrop: 'https://image.tmdb.org/t/p/original/ve9P65Tf0JAs1GgM2Y8V4v5N5Wb.jpg', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Harry_Potter_wordmark.svg' },
-  { id: 'lord-of-the-rings', name: 'Terra Média', keywords: ['senhor dos anéis', 'lord of the rings', 'hobbit', 'sociedade do anel', 'duas torres', 'retorno do rei'], color: '#9d7b3c', bg: 'bg-[#0f0e0d]', accent: 'text-[#d4af37]', icon: History, description: 'A jornada épica de Tolkien pela Terra Média. Três anéis para os Reis-Elfos... e um para o Senhor do Escuro.', backdrop: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/22/The_Lord_of_the_Rings_logo.svg' },
-  { id: 'fast-furious', name: 'Fast & Furious', keywords: ['velozes e furiosos', 'fast & furious', 'toretto'], color: '#d00', bg: 'bg-[#0a0a0a]', accent: 'text-red-700', icon: Zap, description: 'Velocidade, família e adrenalina pura. Acompanhe Dominic Toretto e sua equipe em missões impossíveis ao redor do mundo.', backdrop: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Fast_%26_Furious_logo.png' },
-  { id: 'disney', name: 'Disney Classics', keywords: ['rei leão', 'lion king', 'aladdin', 'pequena sereia', 'bela e a fera', 'cinderela', 'branca de neve', 'pinóquio', 'frozen'], color: '#009dff', bg: 'bg-[#000a1a]', accent: 'text-blue-300', icon: Sparkles, description: 'Onde os sonhos se tornam realidade. Clássicos atemporais que moldaram gerações em contos de fadas e aventuras mágicas.', backdrop: 'https://images.unsplash.com/photo-1605487903301-a1e109c44e53?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg' },
-  { id: 'pixar', name: 'Pixar', keywords: ['toy story', 'procurando nemo', 'finding nemo', 'monstros s.a', 'carro', 'cars', 'divertida mente', 'inside out', 'coco', 'viva a vida'], color: '#00aae4', bg: 'bg-[#00121a]', accent: 'text-blue-400', icon: Sparkles, description: 'Imaginação sem limites em cada frame. Pioneiros na animação digital, contando histórias que tocam o coração de jovens e adultos.', backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Pixar_logo.svg' },
+  { id: 'marvel', name: 'Marvel', keywords: ['marvel', 'avengers', 'vingadores', 'spider-man', 'spiderman', 'iron man', 'thor', 'captain america', 'capitão américa', 'black panther', 'pantera negra', 'guardians of the galaxy', 'guardiões da galáxia', 'x-men'], color: '#e62429', bg: 'bg-[#0f0f0f]', accent: 'text-red-600', icon: Zap, description: 'O Universo Cinematográfico mais épico da história. Uma saga interligada de heróis lutando pela sobrevivência da humanidade contra ameaças universais.', backdrop: 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=1920&q=80&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Marvel_Logo.svg', logoMovieId: 299534 },
+  { id: 'star-wars', name: 'Star Wars', keywords: ['star wars', 'mandalorian', 'obi-wan', 'skywalker', 'jedi', 'sith', 'andor'], color: '#ffe81f', bg: 'bg-black', accent: 'text-yellow-400', icon: Ghost, description: 'Uma galáxia muito, muito distante... Acompanhe a eterna luta entre a Luz e o Lado Sombrio pela liberdade de todos os sistemas estelares.', backdrop: 'https://images.unsplash.com/photo-1506443432602-ac2fcd6f54e0?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6c/Star_Wars_Logo.svg', logoMovieId: 11, tmdbCollectionId: 10 },
+  { id: 'dc', name: 'DC Comics', keywords: ['dc comics', 'batman', 'superman', 'wonder woman', 'mulher maravilha', 'justice league', 'liga da justiça', 'aquaman', 'the flash', 'joker', 'coringa'], color: '#0476f2', bg: 'bg-[#000d1a]', accent: 'text-blue-500', icon: Shield, description: 'Onde nascem as lendas e os deuses caminham. De Gotham a Metrópolis, os maiores vigilantes do multiverso protegem a justiça.', backdrop: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=1920&q=80&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3d/DC_Comics_logo.svg', logoMovieId: 297762 },
+  { id: 'harry-potter', name: 'Harry Potter', keywords: ['harry potter', 'pedra filosofal', 'câmara secreta', 'prisioneiro de azkaban', 'cálice de fogo', 'ordem da fênix', 'enigma do príncipe', 'relíquias da morte', 'animais fantásticos'], color: '#ffd700', bg: 'bg-[#0a0a0c]', accent: 'text-yellow-500', icon: Sparkles, description: 'A magia vive aqui. Entre no mundo bruxo e descubra os segredos de Hogwarts na batalha definitiva contra o Lorde das Trevas.', backdrop: 'https://images.unsplash.com/photo-1481026469463-66327c86e544?w=1920&q=80&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Harry_Potter_wordmark.svg', logoMovieId: 671, tmdbCollectionId: 1241 },
+  { id: 'lord-of-the-rings', name: 'Terra Média', keywords: ['senhor dos anéis', 'lord of the rings', 'hobbit', 'sociedade do anel', 'duas torres', 'retorno do rei'], color: '#9d7b3c', bg: 'bg-[#0f0e0d]', accent: 'text-[#d4af37]', icon: History, description: 'A jornada épica de Tolkien pela Terra Média. Três anéis para os Reis-Elfos... e um para o Senhor do Escuro.', backdrop: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/22/The_Lord_of_the_Rings_logo.svg', logoMovieId: 120, tmdbCollectionId: 119 },
+  { id: 'fast-furious', name: 'Fast & Furious', keywords: ['velozes e furiosos', 'fast & furious', 'toretto'], color: '#d00', bg: 'bg-[#0a0a0a]', accent: 'text-red-700', icon: Zap, description: 'Velocidade, família e adrenalina pura. Acompanhe Dominic Toretto e sua equipe em missões impossíveis ao redor do mundo.', backdrop: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Fast_%26_Furious_logo.png', logoMovieId: 168259, tmdbCollectionId: 9485 },
+  { id: 'disney', name: 'Disney Classics', keywords: ['rei leão', 'lion king', 'aladdin', 'pequena sereia', 'bela e a fera', 'cinderela', 'branca de neve', 'pinóquio', 'frozen'], color: '#009dff', bg: 'bg-[#000a1a]', accent: 'text-blue-300', icon: Sparkles, description: 'Onde os sonhos se tornam realidade. Clássicos atemporais que moldaram gerações em contos de fadas e aventuras mágicas.', backdrop: 'https://images.unsplash.com/photo-1605487903301-a1e109c44e53?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', logoMovieId: 109445 },
+  { id: 'pixar', name: 'Pixar', keywords: ['toy story', 'procurando nemo', 'finding nemo', 'monstros s.a', 'carro', 'cars', 'divertida mente', 'inside out', 'coco', 'viva a vida'], color: '#00aae4', bg: 'bg-[#00121a]', accent: 'text-blue-400', icon: Sparkles, description: 'Imaginação sem limites em cada frame. Pioneiros na animação digital, contando histórias que tocam o coração de jovens e adultos.', backdrop: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/03/Pixar_logo.svg', logoMovieId: 862 },
   { id: 'national', name: 'National Geographic', keywords: ['cosmos', 'natureza', 'terra', 'vida', 'ocean', 'planeta', 'national geographic'], color: '#ffcc00', bg: 'bg-[#1a1600]', accent: 'text-yellow-500', icon: Sparkles, description: 'Explorando nosso mundo misterioso e as maravilhas da natureza.', backdrop: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1920&q=90&fit=crop', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/National_Geographic_logo_text.svg' },
-  { id: 'horror', name: 'Terror & Horror', keywords: ['halloween', 'pânico', 'scream', 'invocação do mal', 'conjuring', 'it a coisa', 'sexta-feira 13', 'friday the 13th', 'terror', 'horror', 'sobrenatural'], color: '#ff0000', bg: 'bg-[#050000]', accent: 'text-red-600', icon: Ghost, description: 'Enfrente seus maiores medos.', backdrop: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?w=1920&q=90&fit=crop' },
-  { id: 'adventure', name: 'Aventura', keywords: ['aventura', 'adventure', 'exploração', 'journey', 'indiana jones', 'jumanji', 'piratas do caribe'], color: '#22c55e', bg: 'bg-[#061a0f]', accent: 'text-green-500', icon: Map, description: 'Grandes jornadas em terras desconhecidas.', backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop' },
-  { id: 'fantasy', name: 'Fantasia', keywords: ['fantasia', 'fantasy', 'magia', 'magic', 'bruxo', 'wizard', 'dragão', 'dragon'], color: '#a855f7', bg: 'bg-[#150a1f]', accent: 'text-purple-500', icon: Sparkles, description: 'Onde o impossível ganha vida.', backdrop: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1920&q=90&fit=crop' },
-  { id: 'action', name: 'Ação', keywords: ['ação', 'action', 'combate', 'explosão', 'tiro', 'gun', 'fight', 'luta'], color: '#ef4444', bg: 'bg-[#1a0505]', accent: 'text-red-500', icon: Zap, description: 'Pura adrenalina e combates épicos.', backdrop: 'https://image.tmdb.org/t/p/original/mDf935S7qbZOSo9u3YmBAzY6nU2.jpg' },
+  { id: 'horror', name: 'Terror & Horror', keywords: ['halloween', 'pânico', 'scream', 'invocação do mal', 'conjuring', 'it a coisa', 'sexta-feira 13', 'friday the 13th', 'terror', 'horror', 'sobrenatural'], color: '#ff0000', bg: 'bg-[#050000]', accent: 'text-red-600', icon: Ghost, description: 'Enfrente seus maiores medos.', backdrop: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?w=1920&q=90&fit=crop', logoMovieId: 436270 },
+  { id: 'adventure', name: 'Aventura', keywords: ['aventura', 'adventure', 'exploração', 'journey', 'indiana jones', 'jumanji', 'piratas do caribe'], color: '#22c55e', bg: 'bg-[#061a0f]', accent: 'text-green-500', icon: Map, description: 'Grandes jornadas em terras desconhecidas.', backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop', logoMovieId: 89 },
+  { id: 'fantasy', name: 'Fantasia', keywords: ['fantasia', 'fantasy', 'magia', 'magic', 'bruxo', 'wizard', 'dragão', 'dragon'], color: '#a855f7', bg: 'bg-[#150a1f]', accent: 'text-purple-500', icon: Sparkles, description: 'Onde o impossível ganha vida.', backdrop: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1920&q=90&fit=crop', logoMovieId: 120 },
+  { id: 'action', name: 'Ação', keywords: ['ação', 'action', 'combate', 'explosão', 'tiro', 'gun', 'fight', 'luta'], color: '#ef4444', bg: 'bg-[#1a0505]', accent: 'text-red-500', icon: Zap, description: 'Pura adrenalina e combates épicos.', backdrop: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&q=80&fit=crop', logoMovieId: 299534 },
   { id: 'anime', name: 'Mundo Anime', keywords: ['dragon ball', 'naruto', 'one piece', 'gibi', 'anime', 'mangá', 'manga'], color: '#ff6600', bg: 'bg-[#1a0f00]', accent: 'text-orange-500', icon: Zap, description: 'A arte e a cultura japonesa em sua forma mais vibrante.', backdrop: 'https://images.unsplash.com/photo-1613376023733-0a73315d9b06?w=1920&q=90&fit=crop' },
 ];
 
@@ -1161,6 +1164,12 @@ const HomeView = React.memo(({
             ))}
           </>
         )}
+
+        {/* ── TMDB Discovery Carousels ── categorias com cache 2h */}
+        <Suspense fallback={null}>
+          <TMDBCategoryCarousels onSelectMovie={handleSelectMovie} />
+        </Suspense>
+
       </div>
       </div>
     </div>
@@ -1235,6 +1244,29 @@ const UniverseTabView = React.memo(({
     return `https://image.tmdb.org/t/p/${size}${path}`;
   };
 
+  // Logos fetched dinamicamente do TMDB por franquia
+  const [franchiseLogos, setFranchiseLogos] = useState<Record<string, string>>({});
+  useEffect(() => {
+    displayFranchises.forEach(async (f: any) => {
+      const key = String(f.id);
+      if (franchiseLogos[key]) return;
+      // Prefere logoMovieId estático; se não tiver, usa o primeiro filme da biblioteca
+      const movieId = f.logoMovieId ?? f.movies?.[0]?.id;
+      if (!movieId) return;
+      const mediaType = f.movies?.[0]?.type === 'series' ? 'tv' : 'movie';
+      const url = await getMovieLogo(movieId, mediaType);
+      if (url) setFranchiseLogos(prev => ({ ...prev, [key]: url }));
+    });
+  }, [displayFranchises]);
+
+  // Retorna a melhor logo disponível para a franquia (TMDB > static > null)
+  const getLogoForFranchise = (f: any): string | null => {
+    const fetched = franchiseLogos[String(f.id)];
+    if (fetched) return fetched;
+    if (f.logo) return imgUrl(f.logo);
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-[#0e0e0e] pb-24 overflow-x-hidden">
       <AnimatePresence mode="wait">
@@ -1292,14 +1324,14 @@ const UniverseTabView = React.memo(({
                     <motion.div
                       whileTap={{ scale: 0.96 }}
                       className="flex-none cursor-pointer relative rounded-2xl overflow-hidden"
-                      style={{ width: '27vw', maxWidth: 108, height: '21vw', maxHeight: 84, border: '1px solid rgba(255,255,255,0.08)' }}
+                      style={{ width: '27vw', maxWidth: 108, height: '21vw', maxHeight: 84, border: '1px solid rgba(255,255,255,0.08)', background: prevFranchise.color ? `${prevFranchise.color}22` : '#111' }}
                       onClick={() => setSelectedIdx((safeIdx - 1 + displayFranchises.length) % displayFranchises.length)}
                     >
-                      <img src={imgUrl(prevFranchise.backdrop || prevFranchise.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.45 }} referrerPolicy="no-referrer" alt="" />
+                      <img src={imgUrl(prevFranchise.backdrop || prevFranchise.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.45 }} referrerPolicy="no-referrer" alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }} />
                       <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 55%)' }} />
                       <div className="absolute inset-x-0 bottom-0 p-2 text-center">
-                        {prevFranchise.logo
-                          ? <img src={imgUrl(prevFranchise.logo)} alt={prevFranchise.name} className="h-4 object-contain mx-auto drop-shadow-2xl" referrerPolicy="no-referrer" />
+                        {getLogoForFranchise(prevFranchise)
+                          ? <img src={getLogoForFranchise(prevFranchise)!} alt={prevFranchise.name} className="h-4 object-contain mx-auto drop-shadow-2xl" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                           : <p className="text-white font-black text-[9px] uppercase leading-none">{prevFranchise.name}</p>
                         }
                         <p className="font-bold mt-0.5" style={{ fontSize: 7, color: 'rgba(255,255,255,0.35)' }}>Saga Completa</p>
@@ -1313,15 +1345,15 @@ const UniverseTabView = React.memo(({
                     <motion.div
                       whileTap={{ scale: 0.97 }}
                       className="relative rounded-2xl overflow-hidden cursor-pointer flex-1"
-                      style={{ height: '29vw', maxHeight: 118, border: '2px solid #e53e3e', boxShadow: '0 0 24px rgba(229,62,62,0.3)' }}
+                      style={{ height: '29vw', maxHeight: 118, border: '2px solid #e53e3e', boxShadow: '0 0 24px rgba(229,62,62,0.3)', background: selectedFranchise.color ? `${selectedFranchise.color}22` : '#111' }}
                       onClick={() => navigate(`/universe/${selectedFranchise.id}`)}
                     >
-                      <img src={imgUrl(selectedFranchise.backdrop || selectedFranchise.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.72 }} referrerPolicy="no-referrer" alt="" />
+                      <img src={imgUrl(selectedFranchise.backdrop || selectedFranchise.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.72 }} referrerPolicy="no-referrer" alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }} />
                       <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 60%, transparent 100%)' }} />
                       <div className="absolute inset-0" style={{ background: 'rgba(229,62,62,0.06)' }} />
                       <div className="absolute inset-x-0 bottom-0 p-2.5 text-center">
-                        {selectedFranchise.logo
-                          ? <img src={imgUrl(selectedFranchise.logo)} alt={selectedFranchise.name} className="h-6 object-contain mx-auto drop-shadow-2xl mb-1" referrerPolicy="no-referrer" />
+                        {getLogoForFranchise(selectedFranchise)
+                          ? <img src={getLogoForFranchise(selectedFranchise)!} alt={selectedFranchise.name} className="h-6 object-contain mx-auto drop-shadow-2xl mb-1" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                           : <p className="text-white font-black uppercase leading-none mb-1" style={{ fontSize: 14, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>{selectedFranchise.name}</p>
                         }
                         <p className="font-bold" style={{ fontSize: 7, color: '#fc8181' }}>Saga Completa</p>
@@ -1335,14 +1367,14 @@ const UniverseTabView = React.memo(({
                     <motion.div
                       whileTap={{ scale: 0.96 }}
                       className="flex-none cursor-pointer relative rounded-2xl overflow-hidden"
-                      style={{ width: '27vw', maxWidth: 108, height: '21vw', maxHeight: 84, border: '1px solid rgba(255,255,255,0.08)' }}
+                      style={{ width: '27vw', maxWidth: 108, height: '21vw', maxHeight: 84, border: '1px solid rgba(255,255,255,0.08)', background: nextFranchise.color ? `${nextFranchise.color}22` : '#111' }}
                       onClick={() => setSelectedIdx((safeIdx + 1) % displayFranchises.length)}
                     >
-                      <img src={imgUrl(nextFranchise.backdrop || nextFranchise.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.45 }} referrerPolicy="no-referrer" alt="" />
+                      <img src={imgUrl(nextFranchise.backdrop || nextFranchise.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.45 }} referrerPolicy="no-referrer" alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }} />
                       <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 55%)' }} />
                       <div className="absolute inset-x-0 bottom-0 p-2 text-center">
-                        {nextFranchise.logo
-                          ? <img src={imgUrl(nextFranchise.logo)} alt={nextFranchise.name} className="h-4 object-contain mx-auto drop-shadow-2xl" referrerPolicy="no-referrer" />
+                        {getLogoForFranchise(nextFranchise)
+                          ? <img src={getLogoForFranchise(nextFranchise)!} alt={nextFranchise.name} className="h-4 object-contain mx-auto drop-shadow-2xl" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                           : <p className="text-white font-black text-[9px] uppercase leading-none">{nextFranchise.name}</p>
                         }
                         <p className="font-bold mt-0.5" style={{ fontSize: 7, color: 'rgba(255,255,255,0.35)' }}>Saga Completa</p>
@@ -1390,11 +1422,11 @@ const UniverseTabView = React.memo(({
                         navigate(`/universe/${f.id}`);
                       }}
                     >
-                      <img src={imgUrl(f.backdrop || f.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.45 }} referrerPolicy="no-referrer" alt="" />
+                      <img src={imgUrl(f.backdrop || f.poster)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.45 }} referrerPolicy="no-referrer" alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }} />
                       <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 55%)' }} />
                       <div className="absolute inset-x-0 bottom-0 px-1.5 pb-1.5">
-                        {f.logo
-                          ? <img src={imgUrl(f.logo)} alt={f.name} className="h-3.5 object-contain drop-shadow-2xl mb-0.5" referrerPolicy="no-referrer" />
+                        {getLogoForFranchise(f)
+                          ? <img src={getLogoForFranchise(f)!} alt={f.name} className="h-3.5 object-contain drop-shadow-2xl mb-0.5" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                           : <p className="text-white font-black uppercase leading-none mb-0.5" style={{ fontSize: 8 }}>{f.name}</p>
                         }
                         <p className="font-black uppercase" style={{ fontSize: 6, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.08em' }}>{f.movies?.length || 0} Títulos</p>
@@ -1418,10 +1450,13 @@ const UniverseTabView = React.memo(({
                           style={{ width: '28vw', maxWidth: 108, aspectRatio: '2/3', border: '1px solid rgba(255,255,255,0.08)' }}
                           onClick={() => navigate(`/universe/${f.id}`)}
                         >
-                          <img src={imgUrl(f.poster || f.backdrop)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.6 }} referrerPolicy="no-referrer" alt="" />
+                          <img src={imgUrl(f.poster || f.backdrop)} className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.6 }} referrerPolicy="no-referrer" alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }} />
                           <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 55%)' }} />
                           <div className="absolute inset-x-0 bottom-0 p-1.5 text-center">
-                            {f.logo ? <img src={imgUrl(f.logo)} className="h-4 object-contain mx-auto mb-0.5" referrerPolicy="no-referrer" alt="" /> : <p className="text-white font-black text-[8px] uppercase">{f.name}</p>}
+                            {getLogoForFranchise(f)
+                              ? <img src={getLogoForFranchise(f)!} className="h-4 object-contain mx-auto mb-0.5" referrerPolicy="no-referrer" alt={f.name} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                              : <p className="text-white font-black text-[8px] uppercase">{f.name}</p>
+                            }
                             <p style={{ fontSize: 7, color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>{f.movies?.length || 0} Títulos</p>
                           </div>
                         </motion.div>
