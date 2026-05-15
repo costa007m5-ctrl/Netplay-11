@@ -442,27 +442,50 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               }
             }
           }
-          // Fallback 1: match by season+episode code (SxxExx) — works across multi-season folders
+          // Fallback 1: look up episode metadata using SORTED episodes array (same sort as caller)
+          // initialEpisodeIndex is now always the season→episode sorted position passed from MovieDetailsModal
           if (!file && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0) {
-            const epForIdx = movie.episodes ? movie.episodes[initialEpisodeIndex] : null;
+            // Sort movie.episodes by season then episode number to match the index passed by the UI
+            const sortedEps = movie.episodes
+              ? [...movie.episodes].sort((a: any, b: any) => {
+                  const sa = (a.season || 1) - (b.season || 1);
+                  return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+                })
+              : [];
+            const epForIdx = sortedEps[initialEpisodeIndex] || null;
             const epNum = (epForIdx as any)?.episode;
             const epSeason = (epForIdx as any)?.season || 1;
+
             if (epNum && epNum > 0) {
+              // Try SxxExx (e.g. S01E03), NxMM (e.g. 1x03), Ep NN, Episodio NN patterns
               const sePadded = `S${String(epSeason).padStart(2, '0')}E${String(epNum).padStart(2, '0')}`;
               const seShort = `S${epSeason}E${epNum}`;
+              const altX = `${epSeason}x${String(epNum).padStart(2, '0')}`;
+              const epPad = String(epNum).padStart(2, '0');
               const byCode = sortedList.find((f: any) => {
                 const fn = (f.filename || f.name || '').toUpperCase();
-                return fn.includes(sePadded.toUpperCase()) || fn.includes(seShort.toUpperCase());
+                return (
+                  fn.includes(sePadded.toUpperCase()) ||
+                  fn.includes(seShort.toUpperCase()) ||
+                  fn.includes(altX.toUpperCase()) ||
+                  fn.includes(`EP${epPad}`) ||
+                  fn.includes(`EP ${epPad}`) ||
+                  fn.includes(`EPISODIO ${epPad}`) ||
+                  fn.includes(`EPISÓDIO ${epPad}`) ||
+                  fn.includes(`EPISODE ${epPad}`)
+                );
               }) || null;
               if (byCode) {
                 file = byCode;
-                console.log(`[VideoPlayer] dyn-ref: match por código ${sePadded} → ${file?.filename || file?.name}`);
+                console.log(`[VideoPlayer] dyn-ref: match por padrão T${epSeason}E${epNum} → ${file?.filename || file?.name}`);
               }
             }
-            // Fallback: use the raw flat-array index (never use epNum-1, which breaks multi-season folders)
+
+            // Last resort: use the sorted index directly into the alphabetically-sorted folder list
+            // This works because both the UI and sortedList use the same ordering principle
             if (!file && initialEpisodeIndex < sortedList.length) {
               file = sortedList[initialEpisodeIndex];
-              console.log(`[VideoPlayer] dyn-ref: usando índice ${initialEpisodeIndex} na lista ordenada (${(file?.filename || file?.name) ?? '?'})`);
+              console.log(`[VideoPlayer] dyn-ref: usando índice ordenado ${initialEpisodeIndex} → ${(file?.filename || file?.name) ?? '?'}`);
             }
           }
           // Fallback 2: first sorted file

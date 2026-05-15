@@ -5482,7 +5482,12 @@ export default function App() {
     for (const m of visibleMovies) {
       if (m.type !== 'series' || !m.episodes) continue;
       const seriesMatches = (m.title || m.name || '').toLowerCase().includes(query);
-      (m.episodes as any[]).forEach((ep: any, idx: number) => {
+      // Sort episodes by season→episode so the index aligns with VideoPlayer's sortedList
+      const sortedEps = [...(m.episodes as any[])].sort((a: any, b: any) => {
+        const sa = (a.season || 1) - (b.season || 1);
+        return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+      });
+      sortedEps.forEach((ep: any, idx: number) => {
         const title = (ep.title || '').toLowerCase();
         const overview = (ep.overview || '').toLowerCase();
         if (seriesMatches || title.includes(query) || overview.includes(query)) {

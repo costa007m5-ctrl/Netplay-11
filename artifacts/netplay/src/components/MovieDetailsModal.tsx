@@ -273,6 +273,17 @@ const MovieDetailsModal = React.memo(({
 
   const seasons = useMemo(() => Object.keys(episodesBySeason).map(Number).sort((a, b) => a - b), [episodesBySeason]);
 
+  // Flat list of ALL episodes sorted by season then episode number.
+  // This sorted index is passed to the player so it aligns with how Terabox
+  // folder files are returned (alphabetically sorted), avoiding random episode selection.
+  const sortedEpisodesFlat = useMemo(() => {
+    if (!movie.episodes) return [];
+    return [...movie.episodes].sort((a: any, b: any) => {
+      const sa = (a.season || 1) - (b.season || 1);
+      return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+    });
+  }, [movie.episodes]);
+
   useEffect(() => {
     // Reset states when movie changes
     setShowVideo(false);
@@ -1083,7 +1094,10 @@ const MovieDetailsModal = React.memo(({
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 md:gap-6">
                   {episodesBySeason[selectedSeason]?.map((ep, idx) => {
+                    // Raw index used only for progress tracking (keyed by DB insertion order)
                     const epIdxInAll = movie.episodes?.findIndex((e: any) => e === ep || (e.id && e.id === ep.id)) ?? -1;
+                    // Sorted index (season→episode order) used for Terabox folder file lookup
+                    const epSortedIdx = sortedEpisodesFlat.findIndex((e: any) => e === ep || (e.id && e.id === ep.id));
                     const prog = epIdxInAll >= 0 ? epProgress[epIdxInAll] : undefined;
                     const progressPct = prog && prog.dur > 0 ? Math.min(100, (prog.pos / prog.dur) * 100) : 0;
                     const isWatched = progressPct >= 90;
@@ -1104,7 +1118,8 @@ const MovieDetailsModal = React.memo(({
                         onClick={(e) => {
                           e.stopPropagation();
                           const savedPos = isInProgress && prog ? prog.pos : 0;
-                          triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', savedPos, 'netflix', epIdxInAll >= 0 ? epIdxInAll : undefined);
+                          // Pass sorted index so VideoPlayer maps correctly to alphabetically-sorted folder files
+                          triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', savedPos, 'netflix', epSortedIdx >= 0 ? epSortedIdx : epIdxInAll >= 0 ? epIdxInAll : undefined);
                         }}
                       >
                         <img 
