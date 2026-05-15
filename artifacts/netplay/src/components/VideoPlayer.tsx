@@ -1049,7 +1049,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       // para o player — isso evita o player travar tentando carregar uma página web como vídeo
       if (isExtractingTerabox) return "";
       if (isTeraBox) return ""; // Link TeraBox não extraído ainda — aguarda extração
-      if (isDriveVideo && driveId) return `https://drive.google.com/file/d/${driveId}/preview?autoplay=1`;
+      if (isDriveVideo && driveId) return `/api/stream/${driveId}`;
       if (isYouTube) {
         const ytId = extractYouTubeId(url);
         return ytId ? `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&showinfo=0&modestbranding=1` : url;
