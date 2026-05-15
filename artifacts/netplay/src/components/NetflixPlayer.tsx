@@ -931,6 +931,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       if (!videoToPlay) return;
 
       const lowerSrc = videoToPlay.toLowerCase();
+      // Usar a URL ORIGINAL para detectar formato (m3u8/hls), não a proxied,
+      // pois /api/proxy-stream?url=... não contém ".m3u8" na URL proxied.
+      const lowerOrigSrc = activeSrc.toLowerCase();
       let startLoadTimer: NodeJS.Timeout;
 
       const applyHlsAudioTracks = (hls: any) => {
@@ -965,7 +968,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         
         const startPoint = initialTime > 0 ? Math.max(0, initialTime - 2) : -1;
         
-        if (lowerSrc.includes('.m3u8')) {
+        if (lowerSrc.includes('.m3u8') || lowerOrigSrc.includes('.m3u8')) {
           const canPlayNative = video.canPlayType('application/vnd.apple.mpegurl') !== '';
           const isIOS = /iP(hone|od|ad)/i.test(navigator.userAgent);
           

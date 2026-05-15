@@ -3445,7 +3445,7 @@ export default function App() {
       }
     });
 
-    // 2. Coleções TMDB (belongs_to_collection) para filmes não cobertos pelas franquias acima
+    // 2a. Coleções TMDB por collection_id
     const collectionsById: Record<number, Movie[]> = {};
     myMovies.forEach(m => {
       if (m.collection_id && !coveredMovieIds.has(m.id)) {
@@ -3455,9 +3455,9 @@ export default function App() {
     });
 
     Object.entries(collectionsById).forEach(([id, movies]) => {
-      if (movies.length < 2) return; // só mostrar coleções com ao menos 2 filmes
+      if (movies.length < 2) return;
       const collectionName = movies[0].collection_name || 'Coleção';
-
+      movies.forEach(m => coveredMovieIds.add(m.id));
       list.push({
         id: `tmdb-${id}`,
         name: collectionName,
@@ -3472,6 +3472,38 @@ export default function App() {
         backdrop: movies[0].collection_backdrop_path || movies[0].backdrop_path,
         logo: movies[0].collection_logo_path,
         tmdb_collection_id: parseInt(id)
+      });
+    });
+
+    // 2b. Coleções por collection_name (filmes que têm nome mas ainda não têm collection_id)
+    const collectionsByName: Record<string, Movie[]> = {};
+    myMovies.forEach(m => {
+      const name = (m.collection_name || '').trim();
+      if (name && !coveredMovieIds.has(m.id)) {
+        if (!collectionsByName[name]) collectionsByName[name] = [];
+        collectionsByName[name].push(m);
+      }
+    });
+
+    Object.entries(collectionsByName).forEach(([name, movies]) => {
+      if (movies.length < 2) return;
+      // Evita duplicar com coleções já adicionadas pelo id
+      const alreadyAdded = list.some(f => f.name.toLowerCase() === name.toLowerCase());
+      if (alreadyAdded) return;
+      movies.forEach(m => coveredMovieIds.add(m.id));
+      list.push({
+        id: `name-${name.toLowerCase().replace(/\s+/g, '-')}`,
+        name,
+        keywords: [name.toLowerCase()],
+        color: '#ffffff',
+        bg: 'bg-[#121212]',
+        accent: 'text-gray-400',
+        icon: List,
+        description: `Coleção: ${name}.`,
+        movies: movies.sort((a, b) => (a.release_year || 0) - (b.release_year || 0)),
+        poster: movies[0].collection_poster_path || movies[0].poster_path,
+        backdrop: movies[0].collection_backdrop_path || movies[0].backdrop_path,
+        logo: movies[0].collection_logo_path,
       });
     });
 
