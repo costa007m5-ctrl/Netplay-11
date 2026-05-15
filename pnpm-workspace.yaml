@@ -158,3 +158,40 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+  # ============================================================================
+  # SECURITY: Override vulnerable transitive dependencies to patched versions
+  # ============================================================================
+  # minimatch ReDoS (GHSA-23c5-xmqv-rm74, GHSA-3ppc-4f35-3m26, GHSA-7r86-cg39-jmmj)
+  # Pinned to ^10.2.3 to stay within the 10.x major used by @vercel/build-utils
+  minimatch: "^10.2.3"
+  # undici multiple CVEs (GHSA-v9p9-hfj2-hcw8, GHSA-vrm6-8vpv-qv8q, GHSA-2mjp-6q6p-2qxm,
+  #   GHSA-4992-7rv2-5pvq, GHSA-c76h-2ccp-4975, GHSA-g9mf-h72j-4rw9, GHSA-cxrh-j4jr-qwg3)
+  # ^6.24.0 requires Node >=18.17 (compatible with Node 20); undici 7/8 require Node 22+
+  "@vercel/node>undici": "^6.24.0"
+  # path-to-regexp ReDoS (GHSA-9wv6-86v2-598j) — @vercel/node uses path-to-regexp@6.1.0
+  # ^6.3.0 stays in the 6.x major that @vercel/node expects
+  "@vercel/node>path-to-regexp": "^6.3.0"
+  # path-to-regexp ReDoS (GHSA-j3q9-mxjg-w52f, GHSA-27v5-c462-wpq7) — Express router uses 8.x
+  # ^8.4.0 stays in the 8.x major that router expects
+  "router>path-to-regexp": "^8.4.0"
+  # picomatch ReDoS (GHSA-c2c7-rcm5-vvqj, GHSA-3v7f-55p6-f55p)
+  # micromatch expects picomatch@2 but pnpm resolves to 4.x; ^4.0.4 fixes both CVEs
+  "micromatch>picomatch": "^4.0.4"
+  # vite, fdir, and @vercel/nft all depend on picomatch@4.x
+  "vite>picomatch": "^4.0.4"
+  "fdir>picomatch": "^4.0.4"
+  "@vercel/nft>picomatch": "^4.0.4"
+  # lodash Prototype Pollution (GHSA-r5fr-rjxr-66jc, GHSA-f23m-r3pf-42rh)
+  lodash: "^4.18.0"
+  # ajv ReDoS (GHSA-2g4f-4pwh-qvx6)
+  ajv: "^8.18.0"
+  # yaml Stack Overflow (GHSA-48c2-rrv3-qjmp)
+  yaml: "^2.8.3"
+  # smol-toml DoS (GHSA-v3rj-xjv7-4jmq)
+  smol-toml: "^1.6.1"
+  # fast-uri vulnerabilities (GHSA-q3j6-qgpj-74h6, GHSA-v39h-62p7-jpjc)
+  fast-uri: "^3.1.2"
+  # postcss XSS (GHSA-qx2v-qp2m-jg93)
+  postcss: "^8.5.10"
+  # brace-expansion DoS (GHSA-f886-m6hf-6m8v) — within minimatch's dep chain (2.x only)
+  "minimatch>brace-expansion": "^2.0.3"
