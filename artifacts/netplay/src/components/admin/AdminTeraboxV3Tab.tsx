@@ -8,7 +8,6 @@ import { parseSeasonEpisode, parseEpisodeName, QUALITY_RE, stripGroupTags } from
 
 const QUALITY_OPTIONS: { value: PreferredQuality; label: string }[] = [
   { value: 'auto',            label: 'Auto — HLS adaptativo (recomendado)' },
-  { value: 'fast_stream_url', label: 'Fast Stream — melhor qualidade HLS (áudio garantido)' },
   { value: 'stream',          label: 'Stream HLS — HLS direto' },
   { value: '1080p',           label: '1080p — Full HD' },
   { value: '720p',            label: '720p — HD' },
@@ -153,18 +152,6 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
   const testQualities = React.useMemo(() => {
     if (!testVid) return [] as { id: string; label: string; url: string; desc: string }[];
     const fs = testVid.fast_stream_url || {};
-    const list: { id: string; label: string; url: string; desc: string }[] = [];
-    const seen = new Set<string>();
-
-    // fast_stream_url — melhor qualidade HLS disponível (1080p > 720p > ...) — áudio + vídeo completo
-    const fastStreamLadder = ['1080p', '720p', '480p', '360p', '240p'];
-    const fastStreamBestKey = fastStreamLadder.find(k => fs[k] && typeof fs[k] === 'string');
-    if (fastStreamBestKey) {
-      const fastUrl = fs[fastStreamBestKey];
-      list.push({ id: 'fast_stream_url', label: 'Fast Stream URL', url: fastUrl, desc: `Melhor qualidade HLS disponível (${fastStreamBestKey}) — áudio + vídeo completo. Use quando Link Direto não tem áudio.` });
-      // Não adiciona ao seen para que as qualidades individuais ainda apareçam
-    }
-
     const order = [
       { k: '1080p', label: '1080p (Full HD)',  desc: 'HLS M3U8 — qualidade máxima' },
       { k: '720p',  label: '720p (HD)',         desc: 'HLS M3U8 — HD' },
@@ -172,6 +159,8 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
       { k: '360p',  label: '360p',             desc: 'HLS M3U8 — baixa' },
       { k: '240p',  label: '240p',             desc: 'HLS M3U8 — mínima' },
     ];
+    const list: { id: string; label: string; url: string; desc: string }[] = [];
+    const seen = new Set<string>();
     for (const o of order) {
       if (fs[o.k] && typeof fs[o.k] === 'string' && !seen.has(fs[o.k])) {
         seen.add(fs[o.k]);
@@ -193,7 +182,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
     const direct = testVid.normal_dlink || testVid.direct_link;
     if (direct && !seen.has(direct)) {
       seen.add(direct);
-      list.push({ id: 'direct', label: 'Link Direto (Worker)', url: direct, desc: 'Proxy via Cloudflare Worker — usar quando HLS não carrega. Compatível com MP4. Alguns arquivos podem não ter áudio.' });
+      list.push({ id: 'direct', label: 'Link Direto (Worker)', url: direct, desc: 'Proxy via Cloudflare Worker — usar quando HLS não carrega. Compatível com MP4.' });
     }
     // stream_download_url — download direto via servidor API (alta compatibilidade)
     const dlUrl = testVid.stream_download_url || testResult?._v3_raw?.list?.[0]?.stream_download_url;
@@ -217,41 +206,19 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
 
   useEffect(() => {
     if (!videoUrlToPlay || !videoRef.current) return;
-    const video = videoRef.current;
     let hls: Hls | null = null;
-
-    const tryPlay = () => {
-      video.muted = false;
-      video.volume = 1;
-      video.play().catch(() => {
-        // Se o navegador bloquear autoplay, ao menos garante não mudo
-        video.muted = false;
-      });
-    };
-
     if (videoUrlToPlay.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        hls = new Hls({ enableWorker: true });
+        hls = new Hls();
         hls.loadSource(videoUrlToPlay);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          tryPlay();
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = videoUrlToPlay;
-        video.addEventListener('loadedmetadata', tryPlay, { once: true });
+        hls.attachMedia(videoRef.current);
+      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+        videoRef.current.src = videoUrlToPlay;
       }
     } else {
-      video.src = videoUrlToPlay;
-      video.load();
-      video.addEventListener('canplay', tryPlay, { once: true });
+      videoRef.current.src = videoUrlToPlay;
     }
-
-    return () => {
-      if (hls) hls.destroy();
-      video.removeEventListener('loadedmetadata', tryPlay);
-      video.removeEventListener('canplay', tryPlay);
-    };
+    return () => { if (hls) hls.destroy(); };
   }, [videoUrlToPlay]);
 
   const handleScanFolder = async () => {
@@ -1273,14 +1240,13 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
               {testQualities.map(q => {
                 const isActive = (testSelectedQuality || testQualities[0].id) === q.id;
                 const typeColor: Record<string, string> = {
-                  fast_stream_url: 'text-emerald-400',
                   auto: 'text-green-400', stream: 'text-blue-400', stream_url: 'text-blue-300',
                   direct: 'text-yellow-400', stream_download: 'text-orange-400',
                   '1080p': 'text-purple-400', '720p': 'text-purple-300', '480p': 'text-gray-400',
                   '360p': 'text-gray-500', '240p': 'text-gray-600',
                 };
                 const typeIcon: Record<string, string> = {
-                  fast_stream_url: '⚡', auto: '📡', stream: '🎞️', stream_url: '🎞️', direct: '🔗', stream_download: '⬇️',
+                  auto: '📡', stream: '🎞️', stream_url: '🎞️', direct: '🔗', stream_download: '⬇️',
                   '1080p': '🎬', '720p': '🎬', '480p': '📺', '360p': '📺', '240p': '📺',
                 };
                 return (
@@ -1309,7 +1275,7 @@ export default function AdminTeraboxV3Tab({ movies, onUpdateMovie, onAddMovie }:
               <Video size={16} className="text-violet-400" />
               <span className="text-sm font-bold text-gray-300 uppercase tracking-wider">Preview do Vídeo {testSelectedQuality && <span className="text-violet-400 ml-2">— {testSelectedQuality}</span>}</span>
             </div>
-            <video ref={videoRef} controls className="w-full aspect-video outline-none" playsInline />
+            <video ref={videoRef} controls className="w-full aspect-video outline-none" autoPlay />
           </div>
         )}
         {testResult && (

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { ChevronLeft, Play, Plus, Info } from 'lucide-react';
 import { Movie } from '../types';
 import Row from './Row';
@@ -155,12 +155,6 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
   const featuredMovie = movies[0];
   const [featuredLogo, setFeaturedLogo] = useState<string | null>(null);
   const [brandFilter, setBrandFilter] = useState<string | null>(null);
-  const [featuredIndex, setFeaturedIndex] = useState(0);
-  const [categoryFilter, setCategoryFilter] = useState<'Todos' | 'Séries' | 'Filmes'>('Todos');
-  const [currentFeaturedLogo, setCurrentFeaturedLogo] = useState<string | null>(null);
-
-  const featuredMovies = movies.slice(0, 5);
-  const currentFeatured = featuredMovies[featuredIndex] || movies[0];
 
   useEffect(() => {
     if (featuredMovie) {
@@ -169,22 +163,6 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
       }).catch(() => setFeaturedLogo(null));
     }
   }, [featuredMovie]);
-
-  useEffect(() => {
-    if (provider !== 'Paramount+') return;
-    const timer = setInterval(() => {
-      setFeaturedIndex(prev => (prev + 1) % Math.min(movies.length, 5));
-    }, 6000);
-    return () => clearInterval(timer);
-  }, [provider, movies.length]);
-
-  useEffect(() => {
-    if (!currentFeatured || provider !== 'Paramount+') return;
-    setCurrentFeaturedLogo(null);
-    getMovieLogo(currentFeatured.id, currentFeatured.type as 'movie' | 'tv').then(logo => {
-      setCurrentFeaturedLogo(logo);
-    }).catch(() => setCurrentFeaturedLogo(null));
-  }, [currentFeatured?.id, provider]);
 
   const displayedMovies = React.useMemo(() => {
     let filteredMovies = movies;
@@ -197,15 +175,8 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
     return filteredMovies;
   }, [movies, brandFilter]);
 
-  const filteredByCategory = React.useMemo(() => {
-    if (provider !== 'Paramount+' || categoryFilter === 'Todos') return displayedMovies;
-    if (categoryFilter === 'Séries') return displayedMovies.filter(m => m.type === 'series');
-    if (categoryFilter === 'Filmes') return displayedMovies.filter(m => m.type !== 'series');
-    return displayedMovies;
-  }, [displayedMovies, categoryFilter, provider]);
-
   const moviesByGenre = React.useMemo(() => {
-    return filteredByCategory.reduce((acc, movie) => {
+    return displayedMovies.reduce((acc, movie) => {
       const genres = movie.genres?.split(',') || ['Geral'];
       genres.forEach(g => {
         const genre = g.trim();
@@ -214,7 +185,7 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
       });
       return acc;
     }, {} as Record<string, Movie[]>);
-  }, [filteredByCategory]);
+  }, [displayedMovies]);
 
   return (
     <motion.div 
@@ -224,208 +195,68 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className={`fixed inset-0 z-[200] ${config.bg} overflow-y-auto overflow-x-hidden custom-scrollbar`}
     >
-      {/* ===== PARAMOUNT+ HERO ===== */}
-      {provider === 'Paramount+' ? (
-        <>
-          {currentFeatured && (
-            <div className="relative h-[100dvh] w-full overflow-hidden">
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={featuredIndex}
-                  src={currentFeatured.backdrop_path?.startsWith('http') ? currentFeatured.backdrop_path : `https://image.tmdb.org/t/p/original/${currentFeatured.backdrop_path}`}
-                  alt={currentFeatured.title || currentFeatured.name}
-                  className="w-full h-full object-cover"
-                  initial={{ opacity: 0, scale: 1.04 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.7 }}
-                  referrerPolicy="no-referrer"
-                />
-              </AnimatePresence>
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 z-[210] p-4 md:p-6 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
+        <button 
+          onClick={onClose}
+          className="p-2 md:p-3 bg-black/40 rounded-full text-white hover:bg-red-600 transition-colors"
+        >
+          <ChevronLeft size={24} className="md:w-8 md:h-8" />
+        </button>
+        <img src={config.logo} alt={provider} className="h-6 md:h-12 object-contain" referrerPolicy="no-referrer" />
+        <div className="w-8 md:w-12"></div> {/* Spacer */}
+      </div>
 
-              {/* Gradients */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-[#00001a]" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#00001a] via-[#00001a]/40 to-transparent" />
-
-              {/* Top bar */}
-              <div className="absolute top-0 left-0 right-0 z-20 px-4 pt-10 flex items-center justify-between">
-                <button onClick={onClose} className="p-2 text-white/80 hover:text-white transition-colors">
-                  <ChevronLeft size={26} />
-                </button>
-                <img
-                  src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg"
-                  alt="Paramount+"
-                  className="h-7 object-contain brightness-0 invert drop-shadow-lg"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="w-10" />
-              </div>
-
-              {/* Category tabs */}
-              <div className="absolute top-[72px] left-0 right-0 z-20 flex justify-center gap-8">
-                {(['Séries', 'Filmes', 'Esportes'] as const).map(cat => {
-                  const isActive =
-                    (cat === 'Séries' && categoryFilter === 'Séries') ||
-                    (cat === 'Filmes' && categoryFilter === 'Filmes') ||
-                    (cat === 'Esportes' && categoryFilter === 'Todos');
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => setCategoryFilter(cat === 'Esportes' ? 'Todos' : cat as 'Séries' | 'Filmes')}
-                      className={`text-sm font-bold uppercase tracking-wider transition-all pb-1 ${isActive ? 'text-white border-b-2 border-white' : 'text-white/55 hover:text-white/80'}`}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Bottom content */}
-              <div className="absolute bottom-0 left-0 right-0 z-20 px-5 pb-10 space-y-3">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={featuredIndex}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.4 }}
-                    className="flex justify-center"
-                  >
-                    {currentFeaturedLogo ? (
-                      <img
-                        src={`https://image.tmdb.org/t/p/w500${currentFeaturedLogo}`}
-                        alt={currentFeatured.title || currentFeatured.name}
-                        className="h-[72px] object-contain drop-shadow-2xl max-w-[260px]"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <h1 className="text-[2.6rem] font-black text-white uppercase tracking-tighter text-center drop-shadow-2xl leading-tight">
-                        {currentFeatured.title || currentFeatured.name}
-                      </h1>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-
-                {/* VER AGORA */}
-                <button
-                  onClick={() => onSelectMovie(currentFeatured)}
-                  className="w-full bg-white/20 backdrop-blur-md text-white border border-white/30 rounded-full py-3 font-bold uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-white/30 transition-all active:scale-95 text-sm shadow-xl"
-                >
-                  <Play fill="currentColor" size={13} /> Ver Agora
-                </button>
-
-                {/* Badge */}
-                <p className="text-center text-white/65 uppercase text-[10px] tracking-[0.2em] font-semibold">
-                  {currentFeatured.type === 'series' ? 'Nova temporada disponível' : 'Disponível agora'}
-                </p>
-
-                {/* Tagline */}
-                <p className="text-center text-white/45 text-[11px] line-clamp-1 italic px-4">
-                  {currentFeatured.overview}
-                </p>
-
-                {/* Pagination dots */}
-                <div className="flex justify-center gap-1.5 pt-1">
-                  {featuredMovies.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setFeaturedIndex(i)}
-                      className={`rounded-full transition-all duration-300 ${i === featuredIndex ? 'w-5 h-[7px] bg-white' : 'w-[7px] h-[7px] bg-white/30 hover:bg-white/50'}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Paramount+ Content Rows */}
-          <div className="relative z-30 pb-20 space-y-8 md:space-y-12 px-2 md:px-0 pt-4">
-            <Row
-              title="Top 10 Paramount+ Hoje"
-              movies={filteredByCategory.slice(0, 10)}
-              isLargeRow={true}
-              onSelectMovie={onSelectMovie}
-              onToggleMyList={onToggleMyList}
-              onToggleFavorite={onToggleFavorite}
-              myListIds={myListIds}
-              favoriteIds={favoriteIds}
-              cardStyle={config.cardStyle}
-            />
-            {Object.entries(moviesByGenre).map(([genre, genreMovies]) => (
-              <Row
-                key={genre}
-                title={genre}
-                movies={genreMovies}
-                onSelectMovie={onSelectMovie}
-                onToggleMyList={onToggleMyList}
-                onToggleFavorite={onToggleFavorite}
-                myListIds={myListIds}
-                favoriteIds={favoriteIds}
-                cardStyle={config.cardStyle}
-              />
-            ))}
-          </div>
-        </>
-      ) : (
-        <>
-          {/* ===== DEFAULT HEADER ===== */}
-          <div className="fixed top-0 left-0 right-0 z-[210] p-4 md:p-6 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
-            <button onClick={onClose} className="p-2 md:p-3 bg-black/40 rounded-full text-white hover:bg-red-600 transition-colors">
-              <ChevronLeft size={24} className="md:w-8 md:h-8" />
-            </button>
-            <img src={config.logo} alt={provider} className="h-6 md:h-12 object-contain" referrerPolicy="no-referrer" />
-            <div className="w-8 md:w-12"></div>
-          </div>
-
-          {/* ===== DEFAULT HERO ===== */}
-          {featuredMovie && (
-            <div className="relative h-[60vh] md:h-[90vh] w-full overflow-hidden">
-              <img
-                src={featuredMovie.backdrop_path?.startsWith('http') ? featuredMovie.backdrop_path : `https://image.tmdb.org/t/p/original/${featuredMovie.backdrop_path}`}
-                alt={featuredMovie.title}
-                className="w-full h-full object-cover"
+      {/* Hero */}
+      {featuredMovie && (
+        <div className="relative h-[60vh] md:h-[90vh] w-full overflow-hidden">
+          <img 
+            src={featuredMovie.backdrop_path?.startsWith('http') ? featuredMovie.backdrop_path : `https://image.tmdb.org/t/p/original/${featuredMovie.backdrop_path}`}
+            alt={featuredMovie.title}
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+          />
+          <div className={`absolute inset-0 bg-gradient-to-t ${config.gradient}`}></div>
+          <div className={`absolute inset-0 ${config.overlay}`}></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent"></div>
+          
+          <div className={`absolute ${config.heroLayout} space-y-3 md:space-y-6 max-w-3xl z-20`}>
+            {featuredLogo ? (
+              <img 
+                src={`https://image.tmdb.org/t/p/w500${featuredLogo}`} 
+                alt={featuredMovie.title || featuredMovie.name} 
+                className="w-[70%] md:w-[80%] max-w-[400px] md:max-w-[600px] object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] pb-2" 
                 referrerPolicy="no-referrer"
-                loading="lazy"
               />
-              <div className={`absolute inset-0 bg-gradient-to-t ${config.gradient}`}></div>
-              <div className={`absolute inset-0 ${config.overlay}`}></div>
-              <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent"></div>
-              <div className={`absolute ${config.heroLayout} space-y-3 md:space-y-6 max-w-3xl z-20`}>
-                {featuredLogo ? (
-                  <img
-                    src={`https://image.tmdb.org/t/p/w500${featuredLogo}`}
-                    alt={featuredMovie.title || featuredMovie.name}
-                    className="w-[70%] md:w-[80%] max-w-[400px] md:max-w-[600px] object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] pb-2"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <h1 className={`${config.titleStyle} text-2xl md:text-8xl`}>
-                    {featuredMovie.title || featuredMovie.name}
-                  </h1>
-                )}
-                <p className={`text-gray-200 text-xs md:text-2xl line-clamp-2 md:line-clamp-3 font-medium italic drop-shadow-lg ${config.font}`}>
-                  {featuredMovie.overview}
-                </p>
-                <div className="flex items-center gap-2 md:gap-4 pt-2 md:pt-4">
-                  <button
-                    onClick={() => onSelectMovie(featuredMovie)}
-                    className={`${config.buttonPrimary} px-4 md:px-12 py-2 md:py-4 font-black uppercase tracking-widest flex items-center gap-2 md:gap-3 transition-transform shadow-2xl hover:scale-105 active:scale-95 text-[10px] md:text-base`}
-                  >
-                    <Play fill="currentColor" size={16} className="md:w-6 md:h-6" /> Assistir
-                  </button>
-                  <button
-                    onClick={() => onSelectMovie(featuredMovie)}
-                    className={`${config.buttonSecondary} px-4 md:px-12 py-2 md:py-4 font-black uppercase tracking-widest flex items-center gap-2 md:gap-3 transition-transform hover:scale-105 active:scale-95 text-[10px] md:text-base`}
-                  >
-                    <Info size={16} className="md:w-6 md:h-6" /> Detalhes
-                  </button>
-                </div>
-              </div>
+            ) : (
+              <h1 className={`${config.titleStyle} text-2xl md:text-8xl`}>
+                {featuredMovie.title || featuredMovie.name}
+              </h1>
+            )}
+            <p className={`text-gray-200 text-xs md:text-2xl line-clamp-2 md:line-clamp-3 font-medium italic drop-shadow-lg ${config.font}`}>
+              {featuredMovie.overview}
+            </p>
+            <div className="flex items-center gap-2 md:gap-4 pt-2 md:pt-4">
+              <button 
+                onClick={() => onSelectMovie(featuredMovie)}
+                className={`${config.buttonPrimary} px-4 md:px-12 py-2 md:py-4 font-black uppercase tracking-widest flex items-center gap-2 md:gap-3 transition-transform shadow-2xl hover:scale-105 active:scale-95 text-[10px] md:text-base`}
+              >
+                <Play fill="currentColor" size={16} className="md:w-6 md:h-6" /> Assistir
+              </button>
+              <button 
+                onClick={() => onSelectMovie(featuredMovie)}
+                className={`${config.buttonSecondary} px-4 md:px-12 py-2 md:py-4 font-black uppercase tracking-widest flex items-center gap-2 md:gap-3 transition-transform hover:scale-105 active:scale-95 text-[10px] md:text-base`}
+              >
+                <Info size={16} className="md:w-6 md:h-6" /> Detalhes
+              </button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {/* Default Content Rows */}
-          <div className={`relative z-30 pb-20 space-y-8 md:space-y-12 px-2 md:px-0 ${provider === 'Disney+' ? '' : '-mt-20 md:-mt-48'}`}>
+      {/* Content Rows */}
+      <div className={`relative z-30 pb-20 space-y-8 md:space-y-12 px-2 md:px-0 ${provider === 'Disney+' ? '' : '-mt-20 md:-mt-48'}`}>
         
         {provider === 'Disney+' && (
           <div className="flex overflow-x-auto no-scrollbar gap-4 md:gap-6 px-4 md:px-12 mb-12 relative z-40 py-4 mt-4">
@@ -491,8 +322,6 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
           />
         ))}
       </div>
-        </>
-      )}
     </motion.div>
   );
 };

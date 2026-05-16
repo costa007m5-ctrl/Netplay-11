@@ -547,27 +547,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           // Pick initial: preferred (if available) else best
           let initial = qualityList[0];
           if (preferred) {
-            // 'fast_stream_url' = melhor qualidade HLS disponível (1080p > 720p > 480p > 360p > 240p)
-            if (preferred === 'fast_stream_url') {
-              const ladder = ['1080p', '720p', '480p', '360p', '240p'];
-              const best = qualityList.find(q => ladder.includes(q.id));
-              if (best) {
-                initial = best;
-                const others = qualityList.filter(q => q.id !== best.id);
-                qualityList.length = 0;
-                qualityList.push(best, ...others);
-                console.log(`[VideoPlayer] dyn-ref: qualidade preferida "fast_stream_url" → usando "${best.id}"`);
-              }
-            } else {
-              const found = qualityList.find(q => q.id === preferred);
-              if (found) {
-                initial = found;
-                // reorder so preferred is first
-                const others = qualityList.filter(q => q.id !== found.id);
-                qualityList.length = 0;
-                qualityList.push(found, ...others);
-                console.log(`[VideoPlayer] dyn-ref: qualidade preferida "${preferred}" aplicada`);
-              }
+            const found = qualityList.find(q => q.id === preferred);
+            if (found) {
+              initial = found;
+              // reorder so preferred is first
+              const others = qualityList.filter(q => q.id !== found.id);
+              qualityList.length = 0;
+              qualityList.push(found, ...others);
+              console.log(`[VideoPlayer] dyn-ref: qualidade preferida "${preferred}" aplicada`);
             }
           }
 
@@ -1049,7 +1036,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       // para o player — isso evita o player travar tentando carregar uma página web como vídeo
       if (isExtractingTerabox) return "";
       if (isTeraBox) return ""; // Link TeraBox não extraído ainda — aguarda extração
-      if (isDriveVideo && driveId) return `/api/stream/${driveId}`;
+      if (isDriveVideo && driveId) return `https://drive.google.com/file/d/${driveId}/preview?autoplay=1`;
       if (isYouTube) {
         const ytId = extractYouTubeId(url);
         return ytId ? `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&showinfo=0&modestbranding=1` : url;

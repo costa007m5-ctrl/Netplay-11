@@ -1423,15 +1423,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         const lowerSrc = (activeSrc || '').toLowerCase();
         let errorMsg = "Não foi possível carregar o vídeo.";
         
-        if (lowerSrc.includes('drive.google.com') || lowerSrc.includes('/api/stream/')) {
-          errorMsg = "Não foi possível transmitir este arquivo do Google Drive. Verifique se o arquivo está compartilhado como 'Qualquer pessoa com o link'.";
+        if (lowerSrc.includes('drive.google.com')) {
+          errorMsg = "O Google Drive bloqueou o acesso direto a este vídeo. Tente usar o 'Player Padrão' ou verifique as configurações.";
         } else {
           errorMsg = "Erro ao carregar o vídeo. O formato pode ser incompatível ou o link expirou.";
         }
 
         setError({ 
           message: errorMsg, 
-          type: (lowerSrc.includes('drive.google.com') || lowerSrc.includes('/api/stream/')) ? 'format' : 'network' 
+          type: lowerSrc.includes('drive.google.com') ? 'format' : 'network' 
         });
       }
       setIsLoading(false);
