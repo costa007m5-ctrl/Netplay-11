@@ -81,7 +81,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   preferredAudioLanguage,
   recsOverlayOffset = 120,
   autoQualityCascade = false,
-  cascadeDelaySecs: cascadeDelaySecsProp = 10,
+  cascadeDelaySecs: cascadeDelaySecsProp = 6,
   teraboxV1Ref,
   cascadeToV3OnPenultimate = true,
   dubbingOptions = [],
@@ -99,6 +99,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const autoQualityCascadeRef = useRef(autoQualityCascade);
   const videoUrlOptionsRef = useRef(videoUrlOptions);
   const [cascadeDelaySecs, setCascadeDelaySecs] = useState(cascadeDelaySecsProp);
+  const hlsInstanceIdRef = useRef(0);
   
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
@@ -310,7 +311,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     const timer = setTimeout(() => {
       if (cascadeSucceededRef.current) return;
       const video = videoRef.current;
-      const hasStarted = video && (video.currentTime > 0.5 || video.readyState >= 4);
+      const hasStarted = video && (video.currentTime > 0.5 || video.readyState >= 3);
       if (hasStarted) {
         cascadeSucceededRef.current = true;
         setQualityToast(null);
@@ -336,6 +337,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         console.log(`[AutoCascade] "${currentLabel}" sem resposta em ${cascadeDelaySecs}s → ${nextOpt.label}`);
         setQualityToast(`⏩ Tentando ${nextOpt.label}...`);
         setTimeout(() => setQualityToast(null), 3000);
+        // Destrói HLS atual para cancelar qualquer retry pendente da qualidade anterior
+        if (hlsRef.current) { try { hlsRef.current.destroy(); } catch {} hlsRef.current = null; }
+        retryCountRef.current = 0;
         setActiveSrc(nextOpt.url);
         setCurrentQuality(nextOpt.label);
       } else if (teraboxV1Ref) {
@@ -980,6 +984,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           const isIOS = /iP(hone|od|ad)/i.test(navigator.userAgent);
           
           if (Hls.isSupported() && !isIOS) {
+            const thisHlsId = ++hlsInstanceIdRef.current;
             const hls = new Hls({
               enableWorker: true,
               lowLatencyMode: false,        // VOD: desligar baixa latência melhora seeking drasticamente
@@ -1053,14 +1058,18 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                  const isManifestParseError =
                    data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR ||
                    data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_VERSIONS_ERROR;
-                 const MAX_RETRIES = 7;
+                 // Em modo cascata, tentamos menos vezes para trocar de qualidade mais rápido
+                 const MAX_RETRIES = autoQualityCascadeRef.current ? 2 : 7;
 
                  const shouldRetry = (isAuthError || data.type === Hls.ErrorTypes.NETWORK_ERROR) && retryCountRef.current < MAX_RETRIES;
 
                  if (shouldRetry) {
                    retryCountRef.current++;
-                   // Backoff: 500ms, 1s, 2s, 3.5s, 5s, 7s, 9s — total ~28s de chances no Netflix Player
-                   const retryDelay = Math.min(500 + retryCountRef.current * 1300, 9000);
+                   // Cascata: backoff curto (500ms, 1s) para falhar rápido e trocar de qualidade
+                   // Normal: backoff longo (1.8s, 3.1s, ..., 9s) para tentar mais antes de desistir
+                   const retryDelay = autoQualityCascadeRef.current
+                     ? Math.min(500 + retryCountRef.current * 500, 1500)
+                     : Math.min(500 + retryCountRef.current * 1300, 9000);
                    const reasonTag = isAuthError ? `auth ${respCode}` : 'network';
                    console.warn(`[NetflixPlayer] HLS retry ${retryCountRef.current}/${MAX_RETRIES} (${reasonTag}) in ${retryDelay}ms`);
 
@@ -1069,7 +1078,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                      setTimeout(() => setQualityToast(null), 1500);
                    }
 
+                   const capturedHlsId = thisHlsId;
                    setTimeout(() => {
+                     // Se a instância do HLS já foi trocada (cascata mudou de qualidade), não tenta mais
+                     if (hlsInstanceIdRef.current !== capturedHlsId) return;
                      // Bypass cache da borda forçando uma URL única se for auth error
                      // (assim refazemos extração no servidor, evitando cache stale)
                      const reload = isAuthError && videoToPlay.includes('/api/proxy-stream')
