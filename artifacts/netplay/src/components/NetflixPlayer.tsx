@@ -100,6 +100,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const videoUrlOptionsRef = useRef(videoUrlOptions);
   const [cascadeDelaySecs, setCascadeDelaySecs] = useState(cascadeDelaySecsProp);
   const hlsInstanceIdRef = useRef(0);
+  // Warm-up: teradl.kingx.dev links precisam de uma requisição prévia para ativar a sessão
+  const warmupDoneRef = useRef(true); // true por padrão; false só para links teradl que precisam de warm-up
+  const warmupAbortRef = useRef<AbortController | null>(null);
   
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
@@ -171,7 +174,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
   const attemptStartHlsLoad = useCallback(() => {
     if (startedHlsRef.current) return;
-    if (mediaAttachedRef.current && (!finalVerificationUrl || iframeLoadedRef.current) && hlsRef.current) {
+    // Aguarda: mídia anexada + verificação de iframe (se houver) + warm-up do teradl (se necessário)
+    if (mediaAttachedRef.current && (!finalVerificationUrl || iframeLoadedRef.current) && warmupDoneRef.current && hlsRef.current) {
         startedHlsRef.current = true;
         hlsRef.current.loadSource(videoToPlayRef.current);
     }
@@ -1460,11 +1464,66 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     video.addEventListener('stalled', handleStalled);
     video.addEventListener('error', handleError);
 
+    // ── Pré-aquecimento de links teradl.kingx.dev ─────────────────────────────────────────────────
+    // Esses links exigem que uma requisição seja feita com o Referer correto antes de começar
+    // a reprodução. Sem isso, o HLS.js falha na primeira tentativa e o usuário precisa fechar
+    // e reabrir o player manualmente. O warm-up faz essa requisição via nosso proxy (que injeta
+    // o Referer) enquanto o loading aparece normalmente, e só libera o HLS quando estiver pronto.
+    const lowerActiveSrcForWarmup = (activeSrc || '').toLowerCase();
+    const needsWarmup =
+      (lowerActiveSrcForWarmup.includes('teradl.kingx.dev') ||
+       lowerActiveSrcForWarmup.includes('teraboxdownloader')) &&
+      lowerActiveSrcForWarmup.includes('.m3u8');
+
+    // Aborta qualquer warm-up anterior (caso o usuário troque de fonte rapidamente)
+    if (warmupAbortRef.current) { warmupAbortRef.current.abort(); warmupAbortRef.current = null; }
+    warmupDoneRef.current = !needsWarmup;
+
+    if (needsWarmup && activeSrc) {
+      const warmupAc = new AbortController();
+      warmupAbortRef.current = warmupAc;
+      const warmupReferer = encodeURIComponent('https://player.kingx.dev/');
+      const warmupProxyUrl = `/api/proxy-stream?url=${encodeURIComponent(activeSrc)}&referer=${warmupReferer}`;
+
+      setLoadingProgress(prev => Math.max(prev, 8));
+      setQualityToast('🔥 Conectando servidor...');
+
+      // Timeout de segurança: se o warm-up demorar mais de 7s, inicia o HLS assim mesmo
+      const warmupTimeout = setTimeout(() => {
+        if (!warmupAc.signal.aborted) {
+          console.log('[Warmup] Timeout — iniciando HLS sem warm-up completo');
+          warmupDoneRef.current = true;
+          setQualityToast(null);
+          attemptStartHlsLoad();
+        }
+      }, 7000);
+
+      fetch(warmupProxyUrl, { signal: warmupAc.signal, cache: 'no-store' })
+        .then(r => {
+          console.log(`[Warmup] teradl pré-aquecido (${r.status}) — HLS pode iniciar`);
+        })
+        .catch(() => {
+          console.log('[Warmup] Requisição falhou, iniciando HLS mesmo assim');
+        })
+        .finally(() => {
+          if (!warmupAc.signal.aborted) {
+            clearTimeout(warmupTimeout);
+            warmupDoneRef.current = true;
+            setQualityToast(null);
+            setLoadingProgress(prev => Math.max(prev, 30));
+            attemptStartHlsLoad();
+          }
+        });
+    }
+
     let isMounted = true;
     const cleanupInit = initPlayer();
 
     return () => {
       isMounted = false;
+      // Cancela warm-up em andamento se o usuário trocar de fonte ou desmontar o player
+      if (warmupAbortRef.current) { warmupAbortRef.current.abort(); warmupAbortRef.current = null; }
+      warmupDoneRef.current = true; // reset para não bloquear próxima fonte
       if (cleanupInit) cleanupInit();
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
