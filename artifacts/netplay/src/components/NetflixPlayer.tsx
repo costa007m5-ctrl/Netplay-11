@@ -1109,28 +1109,37 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                        }
                      };
 
-                     // Para links teradl: re-aquece via proxy antes de retentar
-                     // Isso simula o comportamento de fechar e reabrir o app que o usuário faz manualmente.
-                     // O proxy envia o Referer correto (player.kingx.dev) para reativar a sessão.
+                     // Para links teradl: re-aquece via proxy antes de retentar, com espera
+                     // escalonada após o request para dar tempo ao servidor de ativar a sessão:
+                     //   retry 1 → espera 10s após request
+                     //   retry 2+ → espera 15s após request
                      if (isTeradlRetry && activeSrc) {
+                       const retryCurrent = retryCountRef.current;
+                       const settleMs = retryCurrent <= 1 ? 10000 : 15000;
                        const reWarmReferer = encodeURIComponent('https://player.kingx.dev/');
                        const reWarmUrl = `/api/proxy-stream?url=${encodeURIComponent(activeSrc)}&referer=${reWarmReferer}&_t=${Date.now()}`;
-                       console.log(`[Warmup] Re-aquecendo link (retry ${retryCountRef.current})...`);
-                       setQualityToast(`🔥 Reaquecendo link... (${retryCountRef.current}/${MAX_RETRIES})`);
-                       // Timeout de segurança para não travar indefinidamente
+                       console.log(`[Warmup] Re-aquecendo link (retry ${retryCurrent}/${MAX_RETRIES}), settle=${settleMs / 1000}s...`);
+                       setQualityToast(`🔥 Reaquecendo link... (${retryCurrent}/${MAX_RETRIES})`);
+                       // Timeout de segurança: fetch (~4s) + settle + folga (3s)
+                       const safetyMs = 4000 + settleMs + 3000;
                        const reWarmTimeoutId = setTimeout(() => {
-                         console.log('[Warmup] Re-aquecimento timeout — retentando mesmo assim');
+                         if (hlsInstanceIdRef.current !== capturedHlsId) return;
+                         console.log('[Warmup] Re-aquecimento timeout total — retentando mesmo assim');
                          setQualityToast(null);
                          doHlsReload();
-                       }, 5000);
+                       }, safetyMs);
                        fetch(reWarmUrl, { cache: 'no-store' })
-                         .then(r => { console.log(`[Warmup] Re-aquecimento concluído (${r.status})`); })
-                         .catch(() => { console.log('[Warmup] Re-aquecimento falhou, tentando HLS mesmo assim'); })
+                         .then(r => { console.log(`[Warmup] Re-aquecimento concluído (${r.status}) — aguardando ${settleMs / 1000}s...`); })
+                         .catch(() => { console.log('[Warmup] Re-aquecimento falhou — aguardando mesmo assim...'); })
                          .finally(() => {
                            if (hlsInstanceIdRef.current !== capturedHlsId) return;
-                           clearTimeout(reWarmTimeoutId);
-                           setQualityToast(null);
-                           doHlsReload();
+                           // Espera intencional após request para o servidor ativar a sessão
+                           setTimeout(() => {
+                             if (hlsInstanceIdRef.current !== capturedHlsId) return;
+                             clearTimeout(reWarmTimeoutId);
+                             setQualityToast(null);
+                             doHlsReload();
+                           }, settleMs);
                          });
                      } else {
                        doHlsReload();
@@ -1524,31 +1533,38 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       setLoadingProgress(prev => Math.max(prev, 8));
       setQualityToast('🔥 Conectando servidor...');
 
-      // Timeout de segurança: se o warm-up demorar mais de 7s, inicia o HLS assim mesmo
+      // Tempo de espera após o request completar antes de iniciar o HLS.
+      // O servidor teradl precisa desse tempo para "ativar" a sessão depois do request.
+      const WARMUP_SETTLE_MS = 5000; // 5s no warm-up inicial
+      // Timeout de segurança: fetch (~4s) + settle (5s) + folga (3s) = 12s
       const warmupTimeout = setTimeout(() => {
         if (!warmupAc.signal.aborted) {
-          console.log('[Warmup] Timeout — iniciando HLS sem warm-up completo');
+          console.log('[Warmup] Timeout total — iniciando HLS sem esperar mais');
           warmupDoneRef.current = true;
           setQualityToast(null);
           attemptStartHlsLoad();
         }
-      }, 7000);
+      }, 12000);
 
       fetch(warmupProxyUrl, { signal: warmupAc.signal, cache: 'no-store' })
         .then(r => {
-          console.log(`[Warmup] teradl pré-aquecido (${r.status}) — HLS pode iniciar`);
+          console.log(`[Warmup] teradl request concluído (${r.status}) — aguardando ${WARMUP_SETTLE_MS / 1000}s para ativar sessão...`);
         })
         .catch(() => {
-          console.log('[Warmup] Requisição falhou, iniciando HLS mesmo assim');
+          console.log('[Warmup] Requisição falhou — aguardando mesmo assim antes de tentar HLS');
         })
         .finally(() => {
-          if (!warmupAc.signal.aborted) {
+          if (warmupAc.signal.aborted) return;
+          setQualityToast('🔥 Ativando sessão...');
+          setLoadingProgress(prev => Math.max(prev, 30));
+          // Espera intencional para o servidor processar antes do HLS carregar o manifesto
+          setTimeout(() => {
+            if (warmupAc.signal.aborted) return;
             clearTimeout(warmupTimeout);
             warmupDoneRef.current = true;
             setQualityToast(null);
-            setLoadingProgress(prev => Math.max(prev, 30));
             attemptStartHlsLoad();
-          }
+          }, WARMUP_SETTLE_MS);
         });
     }
 
