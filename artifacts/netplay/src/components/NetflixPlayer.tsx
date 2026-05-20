@@ -1062,8 +1062,10 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                  const isManifestParseError =
                    data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR ||
                    data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_VERSIONS_ERROR;
-                 // Em modo cascata, tentamos menos vezes para trocar de qualidade mais rápido
-                 const MAX_RETRIES = autoQualityCascadeRef.current ? 2 : 7;
+                 // Teradl links: mais tentativas porque cada retry re-aquece o link
+                 // Cascata normal: menos tentativas para trocar de qualidade mais rápido
+                 const isTeradlLink = videoToPlay.includes('/api/proxy-stream');
+                 const MAX_RETRIES = isTeradlLink ? 5 : (autoQualityCascadeRef.current ? 2 : 7);
 
                  const shouldRetry = (isAuthError || data.type === Hls.ErrorTypes.NETWORK_ERROR) && retryCountRef.current < MAX_RETRIES;
 
@@ -1077,27 +1079,61 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                    const reasonTag = isAuthError ? `auth ${respCode}` : 'network';
                    console.warn(`[NetflixPlayer] HLS retry ${retryCountRef.current}/${MAX_RETRIES} (${reasonTag}) in ${retryDelay}ms`);
 
+                   // Para links teradl, mostra toast de reaquecimento em vez de "Reconectando"
+                   const isTeradlRetry = videoToPlay.includes('/api/proxy-stream') &&
+                     (activeSrc || '').toLowerCase().includes('teradl.kingx.dev');
+
                    if (retryCountRef.current === 1) {
-                     setQualityToast("Reconectando...");
-                     setTimeout(() => setQualityToast(null), 1500);
+                     setQualityToast(isTeradlRetry ? "🔥 Reaquecendo link..." : "Reconectando...");
+                     if (!isTeradlRetry) setTimeout(() => setQualityToast(null), 1500);
                    }
 
                    const capturedHlsId = thisHlsId;
                    setTimeout(() => {
                      // Se a instância do HLS já foi trocada (cascata mudou de qualidade), não tenta mais
                      if (hlsInstanceIdRef.current !== capturedHlsId) return;
+
                      // Bypass cache da borda forçando uma URL única se for auth error
-                     // (assim refazemos extração no servidor, evitando cache stale)
                      const reload = isAuthError && videoToPlay.includes('/api/proxy-stream')
                        ? videoToPlay + (videoToPlay.includes('?') ? '&' : '?') + '_t=' + Date.now()
                        : videoToPlay;
 
-                     if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
-                         data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
-                         isAuthError) {
-                       hls.loadSource(reload);
+                     const doHlsReload = () => {
+                       if (hlsInstanceIdRef.current !== capturedHlsId) return;
+                       if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+                           data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
+                           isAuthError) {
+                         hls.loadSource(reload);
+                       } else {
+                         hls.startLoad();
+                       }
+                     };
+
+                     // Para links teradl: re-aquece via proxy antes de retentar
+                     // Isso simula o comportamento de fechar e reabrir o app que o usuário faz manualmente.
+                     // O proxy envia o Referer correto (player.kingx.dev) para reativar a sessão.
+                     if (isTeradlRetry && activeSrc) {
+                       const reWarmReferer = encodeURIComponent('https://player.kingx.dev/');
+                       const reWarmUrl = `/api/proxy-stream?url=${encodeURIComponent(activeSrc)}&referer=${reWarmReferer}&_t=${Date.now()}`;
+                       console.log(`[Warmup] Re-aquecendo link (retry ${retryCountRef.current})...`);
+                       setQualityToast(`🔥 Reaquecendo link... (${retryCountRef.current}/${MAX_RETRIES})`);
+                       // Timeout de segurança para não travar indefinidamente
+                       const reWarmTimeoutId = setTimeout(() => {
+                         console.log('[Warmup] Re-aquecimento timeout — retentando mesmo assim');
+                         setQualityToast(null);
+                         doHlsReload();
+                       }, 5000);
+                       fetch(reWarmUrl, { cache: 'no-store' })
+                         .then(r => { console.log(`[Warmup] Re-aquecimento concluído (${r.status})`); })
+                         .catch(() => { console.log('[Warmup] Re-aquecimento falhou, tentando HLS mesmo assim'); })
+                         .finally(() => {
+                           if (hlsInstanceIdRef.current !== capturedHlsId) return;
+                           clearTimeout(reWarmTimeoutId);
+                           setQualityToast(null);
+                           doHlsReload();
+                         });
                      } else {
-                       hls.startLoad();
+                       doHlsReload();
                      }
                    }, retryDelay);
                    return;
