@@ -103,6 +103,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   // Warm-up: teradl.kingx.dev links precisam de uma requisição prévia para ativar a sessão
   const warmupDoneRef = useRef(true); // true por padrão; false só para links teradl que precisam de warm-up
   const warmupAbortRef = useRef<AbortController | null>(null);
+  // Stall detection: reinicia o player se o vídeo travar em buffering por muito tempo
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const parsedUrls = useMemo(() => {
     let vToPlay = src;
@@ -409,6 +411,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
+  // Incrementar força reinício completo do player (warm-up + HLS do zero) — equivale a fechar/reabrir app
+  const [stallRestartKey, setStallRestartKey] = useState(0);
 
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -1132,12 +1136,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                          .then(r => { console.log(`[Warmup] Re-aquecimento concluído (${r.status}) — aguardando ${settleMs / 1000}s...`); })
                          .catch(() => { console.log('[Warmup] Re-aquecimento falhou — aguardando mesmo assim...'); })
                          .finally(() => {
-                           if (hlsInstanceIdRef.current !== capturedHlsId) return;
+                           // Limpa toast independente do estado do HLS (evita ficar preso mostrando o toast)
+                           if (hlsInstanceIdRef.current !== capturedHlsId) {
+                             setQualityToast(null);
+                             return;
+                           }
                            // Espera intencional após request para o servidor ativar a sessão
                            setTimeout(() => {
+                             setQualityToast(null); // sempre limpa, mesmo se capturedHlsId mudou
                              if (hlsInstanceIdRef.current !== capturedHlsId) return;
                              clearTimeout(reWarmTimeoutId);
-                             setQualityToast(null);
                              doHlsReload();
                            }, settleMs);
                          });
@@ -1375,9 +1383,24 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         if (bufferedEnd > video.currentTime + 1.5) return;
       }
       setIsBuffering(true);
+
+      // Stall detection: se o vídeo ficou travado por 12s APÓS ter começado a tocar,
+      // reinicia o player completamente com novo warm-up (equivale a fechar e reabrir o app)
+      if (hasStartedPlayedRef.current) {
+        if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+        stallTimerRef.current = setTimeout(() => {
+          stallTimerRef.current = null;
+          console.log('[Stall] Vídeo travado por 12s — reiniciando player com novo warm-up');
+          setQualityToast('🔄 Reiniciando player...');
+          setStallRestartKey(k => k + 1);
+        }, 12000);
+      }
     };
 
     const handlePlaying = () => {
+      // Cancela stall timer — o vídeo voltou a tocar
+      if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; }
+
       // Só esconde loading quando o vídeo realmente avançou (frame renderizado),
       // evita o "loading some uns segundos antes do play tocar"
       if (video.currentTime <= 0 || video.readyState < 3) {
@@ -1573,7 +1596,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
     return () => {
       isMounted = false;
-      // Cancela warm-up em andamento se o usuário trocar de fonte ou desmontar o player
+      // Cancela stall timer, warm-up e HLS ao desmontar/trocar fonte
+      if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; }
       if (warmupAbortRef.current) { warmupAbortRef.current.abort(); warmupAbortRef.current = null; }
       warmupDoneRef.current = true; // reset para não bloquear próxima fonte
       if (cleanupInit) cleanupInit();
@@ -1597,7 +1621,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         video.load();
       } catch (e) {}
     };
-  }, [activeSrc, sessionKey, movieId, playerMode]);
+  }, [activeSrc, sessionKey, movieId, playerMode, stallRestartKey]);
 
   const lockOrientation = useCallback(async () => {
     if (!autoRotate) return;

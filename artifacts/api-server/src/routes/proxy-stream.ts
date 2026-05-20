@@ -1,5 +1,12 @@
 import { Router, type IRouter } from "express";
 import axios from "axios";
+import http from "http";
+import https from "https";
+
+// Agentes sem keep-alive: cada request cria uma nova conexão TCP
+// Isso replica o comportamento de fechar e reabrir o browser, que o teradl usa para autenticar sessões
+const noKeepAliveHttpAgent = new http.Agent({ keepAlive: false });
+const noKeepAliveHttpsAgent = new https.Agent({ keepAlive: false });
 
 const router: IRouter = Router();
 
@@ -35,6 +42,10 @@ router.get("/proxy-stream", async (req, res) => {
       responseType: "arraybuffer",
       timeout: 20000,
       maxRedirects: 10,
+      // Desabilita keep-alive: cada request abre uma nova conexão TCP ao teradl
+      // O teradl usa a "frescura" da conexão para autenticar a sessão (por isso fechar/reabrir funciona)
+      httpAgent: noKeepAliveHttpAgent,
+      httpsAgent: noKeepAliveHttpsAgent,
     });
 
     const contentType: string =
