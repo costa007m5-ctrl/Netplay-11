@@ -175,15 +175,10 @@ const MovieDetailsModal = React.memo(({
   };
 
   const triggerSmartPlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
-    const urlToCheck = episodeUrl || movie.videoUrl || '';
-    if (isDynamicRef(urlToCheck)) {
-      setPendingEpisodeUrl(episodeUrl);
-      setPendingStartTime(startTime || 0);
-      setPendingEpisodeIndex(episodeIndex);
-      setShowSmartSelector(true);
-    } else {
-      handlePlay(episodeUrl, startTime, playerStyle, episodeIndex);
-    }
+    setPendingEpisodeUrl(episodeUrl);
+    setPendingStartTime(startTime || 0);
+    setPendingEpisodeIndex(episodeIndex);
+    setShowSmartSelector(true);
   };
 
   const [resolvingError, setResolvingError] = useState<string | null>(null);
