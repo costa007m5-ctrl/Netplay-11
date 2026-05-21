@@ -25,7 +25,7 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, initialPlayerStyle, initialEpisodeIndex, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
-  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'betterflix' | null>((initialPlayerStyle as any) || 'netflix');
+  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'betterflix' | 'vidsrc' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
   const [isAutoProCascade, setIsAutoProCascade] = useState(initialPlayerStyle === 'netflix-cascade');
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
@@ -77,6 +77,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [bfStreamUrl, setBfStreamUrl] = useState<string | null>(null);
   const [bfLoading, setBfLoading] = useState(false);
   const [bfFailed, setBfFailed] = useState(false);
+
+  // Net 2.0 — dica de áudio em Português
+  const [showVidsrcHint, setShowVidsrcHint] = useState(true);
+  useEffect(() => {
+    if (!showVidsrcHint) return;
+    const t = setTimeout(() => setShowVidsrcHint(false), 9000);
+    return () => clearTimeout(t);
+  }, [showVidsrcHint]);
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
   const [showEmotePicker, setShowEmotePicker] = useState(false);
@@ -1083,55 +1091,64 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
-  // Vidsrc (Net 2.0) — sempre iframe embed
+  // Vidsrc (Net 2.0) — roda dentro do NetflixPlayer com dica de áudio em PT-BR
   const isVidsrcUrl = url.includes('vidsrc-embed.ru') || url.includes('vidsrc-embed.su') || url.includes('vidsrcme.su') || url.includes('vsrc.su');
   if (isVidsrcUrl || playerStyle === 'vidsrc') {
     const vsTitle = movie.title || movie.name || 'Assistindo';
-    const vsYear = movie.release_date
-      ? new Date(movie.release_date).getFullYear()
-      : movie.first_air_date
-      ? new Date(movie.first_air_date).getFullYear()
-      : null;
     const vsIsTV = movie.type === 'series';
     return (
-      <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
-        <div className="relative z-10 flex items-center gap-3 px-4 py-2.5 bg-gradient-to-b from-black/95 via-black/60 to-transparent shrink-0">
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/25 text-white flex items-center justify-center transition-all backdrop-blur-md group"
-            aria-label="Fechar"
+      <div className="relative w-full h-full">
+        <NetflixPlayer
+          src={url}
+          title={vsTitle}
+          seriesTitle={vsIsTV ? (movie.title || movie.name || '') : undefined}
+          backdropUrl={movie.backdrop_path}
+          posterUrl={movie.poster_path}
+          logoUrl={movieLogo || undefined}
+          onClose={onClose}
+          initialTime={0}
+          isMovie={!vsIsTV}
+          hasNextEpisode={false}
+          recommendations={recommendations}
+          onSelectRecommendation={(rec) => {
+            const recUrl = rec.type === 'series' && rec.episodes?.length ? rec.episodes[0].videoUrl : rec.videoUrl;
+            if (onPlayNext) onPlayNext(rec, recUrl || '');
+          }}
+          onNextEpisode={() => {}}
+          videoUrlOptions={[]}
+          isHost={isHost}
+          roomId={roomId}
+          profile={profile}
+          maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
+          onProgress={async (time, duration) => {
+            currentTimeRef.current = time;
+            if (duration !== undefined) durationRef.current = duration;
+            if (onProgress) onProgress(movie.id, time, movie.videoUrl);
+          }}
+          isBackgroundMode={isBackgroundMode}
+          onClickBackground={onClickBackground}
+        />
+        {/* Dica: como trocar para áudio em Português no player Vidsrc */}
+        {showVidsrcHint && (
+          <div
+            className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[500] flex items-start gap-3 bg-black/85 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-3 shadow-2xl max-w-[340px] w-[92vw] animate-fade-in"
+            style={{ animation: 'fadeInUp 0.4s ease' }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-white font-black text-sm truncate max-w-[55vw] tracking-tight">{vsTitle}</span>
-              {vsYear && <span className="text-gray-500 text-xs shrink-0">{vsYear}</span>}
+            <span className="text-xl shrink-0 mt-0.5">🇧🇷</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-xs font-semibold leading-snug">
+                Vídeo em inglês? Toque na <span className="text-yellow-400">⚙️ engrenagem</span> dentro do player para selecionar <span className="text-green-400">Áudio em Português</span> ou ativar <span className="text-blue-400">Legendas PT-BR</span>.
+              </p>
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[9px] font-black uppercase tracking-widest text-red-400 bg-red-500/15 border border-red-500/30 px-1.5 py-0.5 rounded-md">
-                Net 2.0
-              </span>
-              {vsIsTV && (
-                <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-md">
-                  Série
-                </span>
-              )}
-            </div>
+            <button
+              onClick={() => setShowVidsrcHint(false)}
+              className="shrink-0 text-white/40 hover:text-white/80 transition-colors mt-0.5 text-base leading-none"
+              aria-label="Fechar dica"
+            >
+              ✕
+            </button>
           </div>
-        </div>
-        <div className="flex-1 relative">
-          <iframe
-            src={url}
-            className="absolute inset-0 w-full h-full border-0"
-            allowFullScreen
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
-            referrerPolicy="no-referrer-when-downgrade"
-            title={vsTitle}
-          />
-        </div>
+        )}
       </div>
     );
   }
