@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Play, X, Server, RefreshCcw, Zap, Star, Clock } from 'lucide-react';
+import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2 } from 'lucide-react';
 import { Movie } from '../types';
 import { isDynamicRef, parseDynamicRef, makeDynamicRef, makeDynamicRefV2, makeDynamicRefV3 } from '../services/terabox';
+import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 
 export const NATIVE_API_STORAGE_KEY = 'netplay_native_terabox_api';
 
@@ -125,6 +126,22 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     return getAdminUrl();
   };
 
+  const hasTmdbId = !!movie.id;
+
+  const getBetterFlixPlayerUrl = (): string => {
+    const isMovie = movie.type !== 'series';
+    if (isMovie) {
+      return buildBetterFlixUrl(movie.id, 'movie');
+    }
+    // For series, find the current episode's season/episode numbers
+    const ep = episodeUrl && movie.episodes
+      ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
+      : null;
+    const season = ep?.season ?? 1;
+    const episode = ep?.episode ?? 1;
+    return buildBetterFlixUrl(movie.id, 'tv', season, episode);
+  };
+
   const options = [
     {
       id: 'admin',
@@ -192,6 +209,28 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         saveSelectedServer({ id: 'auto', playerStyle: 'netflix-cascade', altApi, nativeApi });
         const nativeUrl = convertTeraboxToApi(currentUrl, nativeApi);
         onPlay(nativeUrl, startTime, 'netflix-cascade');
+      },
+    },
+    {
+      id: 'betterflix',
+      num: '04',
+      title: 'API Flix',
+      subtitle: 'BetterFlix · Player Externo',
+      desc: 'Reproduz via player externo BetterFlix. Ideal quando os servidores internos falham. Suporta filmes, séries e canais.',
+      icon: Tv2,
+      gradient: 'from-orange-600/12 to-red-900/5',
+      border: 'border-orange-500/20 hover:border-orange-400/50',
+      iconBg: 'bg-orange-500/15',
+      iconColor: 'text-orange-400',
+      badgeBg: 'bg-orange-500/20',
+      badgeColor: 'text-orange-300',
+      badge: 'FLIX',
+      glowColor: 'shadow-orange-500/10',
+      available: hasTmdbId,
+      unavailableMsg: 'ID TMDB não disponível para este título.',
+      action: () => {
+        const bfUrl = getBetterFlixPlayerUrl();
+        onPlay(bfUrl, 0, 'betterflix');
       },
     },
   ];

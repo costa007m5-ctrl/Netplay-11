@@ -23,6 +23,7 @@ import AdminTeraboxV2Tab from './AdminTeraboxV2Tab';
 import AdminTeraboxV3Tab from './AdminTeraboxV3Tab';
 import AdminQuenteTab from './AdminQuenteTab';
 import AdminEpisodeSettingsTab from './AdminEpisodeSettingsTab';
+import AdminFlixAPITab from './AdminFlixAPITab';
 import QualitySelect from './QualitySelect';
 import MigrateBatchPanel from './MigrateBatchPanel';
 
@@ -54,7 +55,7 @@ interface AdminPanelProps {
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1690,6 +1691,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Activity },
               { id: 'quente', label: 'Quente', icon: Activity },
+              { id: 'flixapi', label: 'API Flix', icon: Tv },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
               { id: 'terabox', label: 'Terabox API', icon: Database },
@@ -2265,6 +2267,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminMercadoPagoTab />
             ) : activeTab === 'referrals' ? (
               <AdminReferralsTab />
+            ) : activeTab === 'flixapi' ? (
+              <AdminFlixAPITab />
             ) : activeTab === 'apis' ? (
               <AdminAPIsTab />
             ) : activeTab === 'terabox' ? (

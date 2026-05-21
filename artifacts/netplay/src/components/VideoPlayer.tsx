@@ -17,7 +17,7 @@ interface VideoPlayerProps {
   onProgress?: (movieId: string | number, time: number, episodeUrl?: string) => void;
   appSettings?: AppSettings;
   initialTime?: number;
-  initialPlayerStyle?: 'netflix' | 'standard' | 'special' | string;
+  initialPlayerStyle?: 'netflix' | 'standard' | 'special' | 'betterflix' | string;
   initialEpisodeIndex?: number;
   isBackgroundMode?: boolean;
   onClickBackground?: () => void;
@@ -25,7 +25,7 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, initialPlayerStyle, initialEpisodeIndex, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
-  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | null>((initialPlayerStyle as any) || 'netflix');
+  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'betterflix' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
   const [isAutoProCascade, setIsAutoProCascade] = useState(initialPlayerStyle === 'netflix-cascade');
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
@@ -914,8 +914,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   }, []);
 
   // Sempre usar o Netflix Player como único player
+  // Exceção: betterflix usa iframe externo — não sobreescrever
   useEffect(() => {
-    setPlayerStyle('netflix');
+    const isBetterFlix = (movie.videoUrl || '').includes('betterflix.click');
+    if (!isBetterFlix) {
+      setPlayerStyle('netflix');
+    }
     requestLandscape();
   }, [movie.videoUrl]);
 
@@ -1017,6 +1021,38 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       requestLandscape();
     }
   }, [isKingX, playerStyle]);
+
+  // BetterFlix iframe player — renderizado antes do NetflixPlayer
+  const isBetterFlixUrl = url.includes('betterflix.click');
+  if (isBetterFlixUrl || playerStyle === 'betterflix') {
+    const bfSrc = isBetterFlixUrl ? url : (movie.videoUrl || '');
+    return (
+      <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 bg-black/60 px-2 py-1 rounded-lg border border-orange-500/30">
+            API Flix
+          </span>
+          <button
+            onClick={onClose}
+            className="bg-black/70 hover:bg-red-600 text-white p-2 rounded-xl border border-white/10 transition-all backdrop-blur-sm"
+            aria-label="Fechar"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <iframe
+          src={bfSrc}
+          className="w-full h-full border-0"
+          allowFullScreen
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          referrerPolicy="origin"
+          title={movie.title || movie.name || 'BetterFlix Player'}
+        />
+      </div>
+    );
+  }
 
   // NetflixPlayer é o único player — todos os links são roteados aqui
   {

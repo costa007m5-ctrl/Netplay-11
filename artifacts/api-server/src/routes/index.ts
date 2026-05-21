@@ -8,6 +8,7 @@ import keepwarmRouter from "./keepwarm";
 import probeStreamsRouter from "./probe-streams";
 import tmdbRouter from "./tmdb";
 import aiRouter from "./ai";
+import betterflixRouter from "./betterflix";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(keepwarmRouter);
 router.use(probeStreamsRouter);
 router.use(tmdbRouter);
 router.use(aiRouter);
+router.use(betterflixRouter);
 
 export default router;
