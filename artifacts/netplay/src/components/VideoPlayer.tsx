@@ -438,17 +438,34 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
           });
 
-          // Find file: exact → case-insensitive → episode code (SxxExx) partial match → initialEpisodeIndex → first
+          // Normalize filename for fuzzy matching (strip diacritics, collapse spaces, lowercase)
+          const normFn = (s: string) =>
+            s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLowerCase().trim();
+
+          // Find file: exact → case-insensitive → normalized → episode code (SxxExx) partial match → initialEpisodeIndex → first
           let file: any = null;
           if (filename) {
+            const normFilename = normFn(filename);
             file = sortedList.find(f => (f.filename || f.name) === filename)
-                || sortedList.find(f => (f.filename || f.name || '').toLowerCase() === filename.toLowerCase());
+                || sortedList.find(f => (f.filename || f.name || '').toLowerCase() === filename.toLowerCase())
+                || sortedList.find(f => normFn(f.filename || f.name || '') === normFilename);
             if (!file) {
               const epCodeMatch = filename.match(/S(\d+)E(\d+)/i);
               if (epCodeMatch) {
                 const targetCode = epCodeMatch[0].toUpperCase();
                 file = sortedList.find(f => (f.filename || f.name || '').toUpperCase().includes(targetCode)) || null;
                 if (file) console.log(`[VideoPlayer] dyn-ref: match parcial por código de episódio "${targetCode}"`);
+              }
+            }
+            // Partial normalized match — strip extension and compare base names
+            if (!file) {
+              const baseFilename = normFilename.replace(/\.[^.]+$/, '');
+              if (baseFilename.length > 4) {
+                file = sortedList.find(f => {
+                  const baseFn = normFn(f.filename || f.name || '').replace(/\.[^.]+$/, '');
+                  return baseFn === baseFilename || baseFn.includes(baseFilename) || baseFilename.includes(baseFn);
+                }) || null;
+                if (file) console.log(`[VideoPlayer] dyn-ref: match parcial normalizado "${baseFilename}" → ${file?.filename || file?.name}`);
               }
             }
           }

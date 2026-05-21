@@ -105,6 +105,7 @@ export default function ProfileDashboard({
     return Math.round(totalSize);
   }, [downloads]);
 
+  const [showExportModal, setShowExportModal] = useState(false);
   const [referralStats, setReferralStats] = useState({ count: 0, credits: 0, freeMonths: 0, pending: null as any });
   const [redeeming, setRedeeming] = useState(false);
 
@@ -184,19 +185,54 @@ export default function ProfileDashboard({
   };
 
   const handleExportData = () => {
+    setShowExportModal(true);
+  };
+
+  const handleDownloadJSON = () => {
     const data = {
-      profile,
-      stats,
-      history: continueWatching,
-      myList,
-      favorites
+      exportedAt: new Date().toISOString(),
+      profile: {
+        id: profile?.id,
+        name: profile?.name,
+        avatar_url: profile?.avatar_url,
+      },
+      stats: {
+        horasAssistidas: stats.hoursWatched,
+        filmes: stats.movieCount,
+        series: stats.seriesCount,
+        generoFavorito: stats.topGenre,
+        atorFavorito: stats.topActor,
+        nivel: stats.userLevel,
+      },
+      historicoRecente: continueWatching.slice(0, 50).map((cw: any) => {
+        const m = myMovies?.find((mv: any) => mv.id === cw.id);
+        return {
+          titulo: m?.title || m?.name || `ID ${cw.id}`,
+          tipo: m?.type || 'filme',
+          progresso: `${Math.round((cw.progress / (cw.duration || 1)) * 100)}%`,
+          duracaoAssistida: `${Math.floor(cw.progress / 60)}min`,
+        };
+      }),
+      minhaLista: myList.map((m: any) => ({
+        titulo: m.title || m.name,
+        tipo: m.type || 'filme',
+        ano: m.release_date ? new Date(m.release_date).getFullYear() : undefined,
+      })),
+      favoritos: favorites.map((fM: any) => {
+        const movieInfo = myMovies?.find((m: any) => m.id === (fM.movie_data?.id || fM.movie_id)) || fM.movie_data;
+        return {
+          titulo: movieInfo?.title || movieInfo?.name || `ID ${fM.movie_id}`,
+          tipo: movieInfo?.type || 'filme',
+        };
+      }),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `netplay_data_${profile?.name}.json`;
+    a.download = `netplay_${profile?.name?.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleClearHistory = async () => {
@@ -822,6 +858,179 @@ export default function ProfileDashboard({
           )}
 
         </motion.div>
+      </AnimatePresence>
+
+      {/* MODAL: EXPORTAR MEUS DADOS */}
+      <AnimatePresence>
+        {showExportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4"
+            onClick={() => setShowExportModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-[#111] border border-white/10 rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-600/20 flex items-center justify-center text-red-500">
+                    <Download size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-black uppercase tracking-tighter italic text-lg">Exportar Meus Dados</h2>
+                    <p className="text-gray-500 text-xs font-bold">Resumo da sua conta em {new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowExportModal(false)} className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="overflow-y-auto flex-1 p-6 space-y-5">
+
+                {/* Perfil */}
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-red-500 mb-4 flex items-center gap-2">
+                    <UserCircle size={12} /> Perfil
+                  </h3>
+                  <div className="flex items-center gap-4">
+                    <img src={profile?.avatar_url || "https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png"} className="w-14 h-14 rounded-xl object-cover border border-white/20" alt="" referrerPolicy="no-referrer" />
+                    <div>
+                      <p className="text-white font-black text-lg uppercase italic">{profile?.name}</p>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full text-yellow-500 text-[10px] font-bold uppercase tracking-widest">
+                        <Award size={10} /> {stats.userLevel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Estatísticas */}
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-500 mb-4 flex items-center gap-2">
+                    <TrendingUp size={12} /> Estatísticas de Consumo
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Horas Assistidas', value: `${stats.hoursWatched}h`, icon: Clock, color: 'text-red-400' },
+                      { label: 'Filmes', value: stats.movieCount, icon: Film, color: 'text-blue-400' },
+                      { label: 'Séries', value: stats.seriesCount, icon: Tv, color: 'text-green-400' },
+                      { label: 'Gênero Favorito', value: stats.topGenre, icon: Heart, color: 'text-purple-400' },
+                      { label: 'Ator Favorito', value: stats.topActor || 'N/D', icon: Award, color: 'text-yellow-400' },
+                      { label: 'Total no Histórico', value: continueWatching.length, icon: Play, color: 'text-orange-400' },
+                    ].map(({ label, value, icon: Icon, color }) => (
+                      <div key={label} className="bg-black/30 rounded-xl p-3 border border-white/5">
+                        <Icon size={14} className={`${color} mb-1.5`} />
+                        <p className="text-white font-black text-sm truncate">{value}</p>
+                        <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest leading-tight">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Minha Lista */}
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-green-500 mb-4 flex items-center gap-2">
+                    <Bookmark size={12} /> Minha Lista <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full ml-1">{myList.length}</span>
+                  </h3>
+                  {myList.length === 0 ? (
+                    <p className="text-gray-600 text-xs italic">Nenhum item na sua lista.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                      {myList.map((m: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                          <span className="text-white text-xs font-bold truncate flex-1">{m.title || m.name}</span>
+                          <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest ml-2 shrink-0">{m.type === 'series' ? 'Série' : 'Filme'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Favoritos */}
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-purple-500 mb-4 flex items-center gap-2">
+                    <Heart size={12} /> Favoritos <span className="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full ml-1">{favorites.length}</span>
+                  </h3>
+                  {favorites.length === 0 ? (
+                    <p className="text-gray-600 text-xs italic">Nenhum favorito salvo.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                      {favorites.map((fM: any, i: number) => {
+                        const movieInfo = myMovies?.find((m: any) => m.id === (fM.movie_data?.id || fM.movie_id)) || fM.movie_data;
+                        if (!movieInfo) return null;
+                        return (
+                          <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
+                            <span className="text-white text-xs font-bold truncate flex-1">{movieInfo.title || movieInfo.name}</span>
+                            <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest ml-2 shrink-0">{movieInfo.type === 'series' ? 'Série' : 'Filme'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Histórico Recente */}
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-500 mb-4 flex items-center gap-2">
+                    <Clock size={12} /> Histórico Recente <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full ml-1">{continueWatching.length}</span>
+                  </h3>
+                  {continueWatching.length === 0 ? (
+                    <p className="text-gray-600 text-xs italic">Histórico vazio.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {continueWatching.slice(0, 20).map((cw: any, i: number) => {
+                        const m = myMovies?.find((mv: any) => mv.id === cw.id);
+                        const pct = cw.duration > 0 ? Math.min(100, Math.round((cw.progress / cw.duration) * 100)) : 0;
+                        return (
+                          <div key={i} className="flex items-center gap-3 py-1.5 border-b border-white/5 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-xs font-bold truncate">{m?.title || m?.name || `ID ${cw.id}`}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                                  <div className="h-full bg-red-500 rounded-full" style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="text-gray-500 text-[10px] font-bold shrink-0">{pct}%</span>
+                              </div>
+                            </div>
+                            <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest shrink-0">
+                              {Math.floor(cw.progress / 60)}min
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-white/10 flex gap-3">
+                <button
+                  onClick={handleDownloadJSON}
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)]"
+                >
+                  <Download size={16} /> Baixar JSON
+                </button>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-6 bg-white/10 hover:bg-white/20 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </motion.div>
   );

@@ -586,8 +586,11 @@ const MovieDetailsModal = React.memo(({
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
                       if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
-                        const urlToPlay = savedUrl || movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
-                        triggerSmartPlay(urlToPlay, savedProgress, 'netflix');
+                        const firstSortedEp = sortedEpisodesFlat[0];
+                        const savedEpEntry = savedUrl ? sortedEpisodesFlat.find((e: any) => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl) : null;
+                        const urlToPlay = savedUrl || firstSortedEp?.videoUrl || firstSortedEp?.videoUrl2 || '';
+                        const savedEpSortedIdx = savedEpEntry ? sortedEpisodesFlat.indexOf(savedEpEntry) : 0;
+                        triggerSmartPlay(urlToPlay, savedProgress, 'netflix', savedEpSortedIdx);
                       } else if (isYouTube || isKingX) {
                         const defaultUrl = movie.videoUrl;
                         handlePlay(savedUrl || defaultUrl || undefined, savedProgress);
@@ -614,8 +617,9 @@ const MovieDetailsModal = React.memo(({
                       localStorage.removeItem(`netplay_progress_${movie.id}`);
                       setUserResetProgress(true);
                       if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
-                        const urlToPlay = movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
-                        triggerSmartPlay(urlToPlay, 0, 'netflix');
+                        const firstSortedEp2 = sortedEpisodesFlat[0];
+                        const urlToPlay = firstSortedEp2?.videoUrl || firstSortedEp2?.videoUrl2 || '';
+                        triggerSmartPlay(urlToPlay, 0, 'netflix', 0);
                       } else if (isYouTube || isKingX) {
                         handlePlay(movie.videoUrl, 0);
                       } else {
@@ -646,8 +650,9 @@ const MovieDetailsModal = React.memo(({
                             return;
                           }
                           if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
-                            const urlToPlay = movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || '';
-                            triggerSmartPlay(urlToPlay, 0, 'netflix');
+                            const firstSortedEp3 = sortedEpisodesFlat[0];
+                            const urlToPlay = firstSortedEp3?.videoUrl || firstSortedEp3?.videoUrl2 || '';
+                            triggerSmartPlay(urlToPlay, 0, 'netflix', 0);
                           } else if (isYouTube || isKingX) {
                             handlePlay(movie.videoUrl, 0, 'netflix');
                           } else {
@@ -1295,7 +1300,7 @@ const MovieDetailsModal = React.memo(({
                 <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-transparent" />
                 <button 
                   onClick={() => {
-                    const detailIdx = movie.episodes?.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id)) ?? -1;
+                    const detailIdx = sortedEpisodesFlat.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id));
                     triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
                   }}
                   className="absolute inset-0 flex items-center justify-center group-hover:bg-black/20 transition-all"
@@ -1328,7 +1333,7 @@ const MovieDetailsModal = React.memo(({
                    <button
                      onClick={(e) => {
                        e.stopPropagation();
-                       const detailIdx = movie.episodes?.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id)) ?? -1;
+                       const detailIdx = sortedEpisodesFlat.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id));
                        triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
                      }}
                      className="bg-white hover:bg-gray-200 text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
@@ -1339,7 +1344,7 @@ const MovieDetailsModal = React.memo(({
                      <button
                        onClick={(e) => {
                          e.stopPropagation();
-                         const detailIdx = movie.episodes?.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id)) ?? -1;
+                         const detailIdx = sortedEpisodesFlat.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id));
                          handlePlay(selectedEpisodeDetails.videoUrl2, 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
                        }}
                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
