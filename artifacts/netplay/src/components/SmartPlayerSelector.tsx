@@ -4,7 +4,7 @@ import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2, Loader2 } from 'luc
 import { Movie } from '../types';
 import { isDynamicRef, parseDynamicRef, makeDynamicRef, makeDynamicRefV2, makeDynamicRefV3 } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
-import { buildVidsrcMovieUrl, buildVidsrcTvUrl } from './admin/AdminNet2Tab';
+import { buildVidsrcMovieUrlSafe, buildVidsrcTvUrlSafe } from './admin/AdminNet2Tab';
 import { lookupTmdbId } from '../services/tmdb';
 
 export const NATIVE_API_STORAGE_KEY = 'netplay_native_terabox_api';
@@ -177,8 +177,8 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     const season = ep?.season ?? 1;
     const episode = ep?.episode ?? 1;
     return isMovie
-      ? buildVidsrcMovieUrl(tmdbId)
-      : buildVidsrcTvUrl(tmdbId, season, episode);
+      ? buildVidsrcMovieUrlSafe(tmdbId)
+      : buildVidsrcTvUrlSafe(tmdbId, season, episode);
   };
 
   const options = [

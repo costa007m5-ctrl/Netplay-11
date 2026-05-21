@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Tv2, Film, Play, ExternalLink, RefreshCw, Globe, List, CheckCircle2, Copy, ChevronRight } from 'lucide-react';
 
-export const VIDSRC_DOMAIN_KEY = 'netplay_vidsrc_domain';
+// Versão v3 da chave — garante que caches antigos com domínios quebrados sejam ignorados
+export const VIDSRC_DOMAIN_KEY = 'netplay_vidsrc_domain_v3';
 export const VIDSRC_DOMAINS = [
   'vidsrc.me',
-  'vidsrc.xyz',
   'vidsrc.to',
+  'vidsrc.xyz',
+  'vidsrc.cc',
   'vidsrc.rip',
   'vidsrc.net',
+  'vidsrc.pm',
+  'vidsrc.icu',
 ];
 
 export function getVidsrcDomain(): string {
   try {
     const stored = localStorage.getItem(VIDSRC_DOMAIN_KEY);
-    // Ignora domínios antigos/offline que não estão mais na lista
     if (stored && VIDSRC_DOMAINS.includes(stored)) return stored;
-    // Remove o domínio inválido do cache
     if (stored) localStorage.removeItem(VIDSRC_DOMAIN_KEY);
     return VIDSRC_DOMAINS[0];
   } catch {
@@ -29,22 +31,69 @@ export function setVidsrcDomain(domain: string) {
   } catch {}
 }
 
-export function buildVidsrcMovieUrl(tmdbId: number | string, dsLang = 'pt-BR'): string {
-  const domain = getVidsrcDomain();
-  // vidsrc.to usa formato de path em vez de query params
-  if (domain === 'vidsrc.to') {
-    return `https://vidsrc.to/embed/movie/${tmdbId}`;
+// Testa se um domínio está acessível (detecta falhas de DNS/timeout)
+export async function testVidsrcDomain(domain: string): Promise<boolean> {
+  try {
+    await fetch(`https://${domain}/`, {
+      method: 'HEAD',
+      mode: 'no-cors',
+      signal: AbortSignal.timeout(5000),
+    });
+    return true; // no-cors: sucesso = servidor respondeu (mesmo que CORS bloqueie)
+  } catch {
+    return false; // falha = DNS offline ou timeout
   }
-  return `https://${domain}/embed/movie?tmdb=${tmdbId}&ds_lang=${dsLang}&autoplay=1`;
+}
+
+// Testa todos os domínios em paralelo e retorna o primeiro que funcionar (em ordem de preferência)
+export async function findWorkingVidsrcDomain(): Promise<string> {
+  const cached = getVidsrcDomain();
+
+  // Primeiro testa o domínio em cache (pode ser o mais rápido se já funcionar)
+  const cachedWorks = await testVidsrcDomain(cached);
+  if (cachedWorks) return cached;
+
+  // Testa o restante em paralelo
+  const others = VIDSRC_DOMAINS.filter(d => d !== cached);
+  const results = await Promise.all(
+    others.map(async (domain, i) => ({ domain, ok: await testVidsrcDomain(domain), i }))
+  );
+
+  const working = results.filter(r => r.ok).sort((a, b) => a.i - b.i);
+  if (working.length > 0) {
+    setVidsrcDomain(working[0].domain);
+    return working[0].domain;
+  }
+
+  return VIDSRC_DOMAINS[0];
+}
+
+function buildUrlForDomain(type: 'movie' | 'tv', tmdbId: number | string, domain: string, season?: number, episode?: number, dsLang = 'pt-BR'): string {
+  if (type === 'movie') {
+    if (domain === 'vidsrc.to') return `https://vidsrc.to/embed/movie/${tmdbId}`;
+    return `https://${domain}/embed/movie?tmdb=${tmdbId}&ds_lang=${dsLang}&autoplay=1`;
+  }
+  if (domain === 'vidsrc.to') return `https://vidsrc.to/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`;
+  return `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season ?? 1}&episode=${episode ?? 1}&ds_lang=${dsLang}&autoplay=1&autonext=1`;
+}
+
+export function buildVidsrcMovieUrl(tmdbId: number | string, dsLang = 'pt-BR'): string {
+  return buildUrlForDomain('movie', tmdbId, getVidsrcDomain(), undefined, undefined, dsLang);
 }
 
 export function buildVidsrcTvUrl(tmdbId: number | string, season: number, episode: number, dsLang = 'pt-BR'): string {
-  const domain = getVidsrcDomain();
-  // vidsrc.to usa formato de path em vez de query params
-  if (domain === 'vidsrc.to') {
-    return `https://vidsrc.to/embed/tv/${tmdbId}/${season}/${episode}`;
-  }
-  return `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&ds_lang=${dsLang}&autoplay=1&autonext=1`;
+  return buildUrlForDomain('tv', tmdbId, getVidsrcDomain(), season, episode, dsLang);
+}
+
+// Versão async que garante usar domínio funcional antes de construir a URL
+export async function buildVidsrcMovieUrlSafe(tmdbId: number | string, dsLang = 'pt-BR'): Promise<string> {
+  const domain = await findWorkingVidsrcDomain();
+  return buildUrlForDomain('movie', tmdbId, domain, undefined, undefined, dsLang);
+}
+
+export async function buildVidsrcTvUrlSafe(tmdbId: number | string, season: number, episode: number, dsLang = 'pt-BR'): Promise<string> {
+  const domain = await findWorkingVidsrcDomain();
+  return buildUrlForDomain('tv', tmdbId, domain, season, episode, dsLang);
 }
 
 function CopyBtn({ text }: { text: string }) {

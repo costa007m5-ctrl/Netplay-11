@@ -211,10 +211,13 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       lowerSrc.includes('gdplayer.to') ||
       lowerSrc.includes('gdplayer.org') ||
       lowerSrc.includes('vidsrc.me') ||
-      lowerSrc.includes('vidsrc.xyz') ||
       lowerSrc.includes('vidsrc.to') ||
+      lowerSrc.includes('vidsrc.xyz') ||
+      lowerSrc.includes('vidsrc.cc') ||
       lowerSrc.includes('vidsrc.rip') ||
       lowerSrc.includes('vidsrc.net') ||
+      lowerSrc.includes('vidsrc.pm') ||
+      lowerSrc.includes('vidsrc.icu') ||
       lowerSrc.includes('vidsrc-embed.ru') ||
       lowerSrc.includes('vidsrc-embed.su') ||
       lowerSrc.includes('vidsrcme.su') ||
