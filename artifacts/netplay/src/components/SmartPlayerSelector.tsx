@@ -147,15 +147,24 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
 
   const [isVidsrcLoading, setIsVidsrcLoading] = useState(false);
 
-  const getVidsrcUrl = (): string => {
+  const resolveVidsrcUrl = async (): Promise<string> => {
     const isMovie = movie.type !== 'series';
-    if (isMovie) return buildVidsrcMovieUrl(movie.id);
+    const title = movie.title || movie.name || '';
+    const releaseYear = movie.release_date
+      ? new Date(movie.release_date).getFullYear()
+      : movie.first_air_date
+      ? new Date(movie.first_air_date).getFullYear()
+      : null;
+    const tmdbId = await lookupTmdbId(title, isMovie ? 'movie' : 'tv', releaseYear);
+    const id = tmdbId || movie.id;
     const ep = episodeUrl && movie.episodes
       ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
       : null;
     const season = ep?.season ?? 1;
     const episode = ep?.episode ?? 1;
-    return buildVidsrcTvUrl(movie.id, season, episode);
+    return isMovie
+      ? buildVidsrcMovieUrl(id)
+      : buildVidsrcTvUrl(id, season, episode);
   };
 
   const options = [
@@ -292,7 +301,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         if (isVidsrcLoading) return;
         setIsVidsrcLoading(true);
         try {
-          const vUrl = getVidsrcUrl();
+          const vUrl = await resolveVidsrcUrl();
           onPlay(vUrl, 0, 'vidsrc');
         } finally {
           setIsVidsrcLoading(false);
