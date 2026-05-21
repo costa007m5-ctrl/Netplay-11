@@ -2429,7 +2429,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
-          referrerPolicy="no-referrer-when-downgrade"
+          referrerPolicy="origin"
           onLoad={() => {
             setIsLoading(false);
             setLoadingProgress(100);
