@@ -75,6 +75,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
 
   // BetterFlix stream resolution
   const [bfStreamUrl, setBfStreamUrl] = useState<string | null>(null);
+  const [bfEmbedUrl, setBfEmbedUrl] = useState<string | null>(null);
   const [bfLoading, setBfLoading] = useState(false);
   const [bfFailed, setBfFailed] = useState(false);
 
@@ -393,6 +394,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
 
     setBfLoading(true);
     setBfStreamUrl(null);
+    setBfEmbedUrl(null);
     setBfFailed(false);
 
     const abort = new AbortController();
@@ -405,6 +407,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
         if (abort.signal.aborted) return;
         if (data.streamUrl) {
           setBfStreamUrl(data.streamUrl);
+        } else if (data.embedUrl) {
+          // Sem stream direto — usa embedUrl no NetflixPlayer como iframe
+          setBfEmbedUrl(data.embedUrl);
         } else {
           setBfFailed(true);
         }
@@ -1153,38 +1158,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     );
   }
 
-  // BetterFlix — resolve stream e exibe no NetflixPlayer nativo
+  // BetterFlix — sempre renderiza dentro do NetflixPlayer
   const isBetterFlixUrl = url.includes('betterflix.click');
   if (isBetterFlixUrl || playerStyle === 'betterflix') {
-    const bfSrc = isBetterFlixUrl ? url : (movie.videoUrl || '');
     const bfTitle = movie.title || movie.name || 'Assistindo';
-    const bfYear = movie.release_date
-      ? new Date(movie.release_date).getFullYear()
-      : movie.first_air_date
-      ? new Date(movie.first_air_date).getFullYear()
-      : null;
     const bfIsTV = movie.type === 'series';
-    const closeBtn = (
-      <button
-        onClick={onClose}
-        className="absolute top-3 left-3 z-20 w-9 h-9 rounded-xl bg-black/60 hover:bg-black/80 border border-white/10 text-white flex items-center justify-center transition-all backdrop-blur-md group"
-        aria-label="Fechar"
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    );
 
-    // Carregando resolução
+    // Aguardando resolução do stream
     if (bfLoading) {
       return (
         <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center gap-4">
-          {closeBtn}
+          <button
+            onClick={onClose}
+            className="absolute top-3 left-3 z-20 w-9 h-9 rounded-xl bg-black/60 hover:bg-black/80 border border-white/10 text-white flex items-center justify-center transition-all backdrop-blur-md group"
+            aria-label="Fechar"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
           <div className="w-12 h-12 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
           <div className="flex flex-col items-center gap-1.5">
-            <p className="text-white font-semibold text-sm">{bfTitle}{bfYear ? ` (${bfYear})` : ''}</p>
-            <p className="text-white/40 text-xs">Carregando stream…</p>
+            <p className="text-white font-semibold text-sm">{bfTitle}</p>
+            <p className="text-white/40 text-xs">Preparando API Flix…</p>
             <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/15 border border-orange-500/30 px-1.5 py-0.5 rounded-md mt-1">
               API Flix
             </span>
@@ -1193,84 +1189,40 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       );
     }
 
-    // Stream resolvido — usa NetflixPlayer nativo com hls.js
-    if (bfStreamUrl && !bfFailed) {
-      return (
-        <div className="relative w-full h-full">
-          <NetflixPlayer
-            src={bfStreamUrl}
-            title={bfTitle}
-            seriesTitle={bfIsTV ? (movie.title || movie.name || '') : undefined}
-            episodes={bfIsTV && (movie.episodes?.length ?? 0) > 0 ? movie.episodes : undefined}
-            backdropUrl={movie.backdrop_path}
-            logoUrl={movieLogo || undefined}
-            onClose={onClose}
-            initialTime={initialTime ?? movie.last_position ?? 0}
-            isMovie={!bfIsTV}
-            hasNextEpisode={false}
-            recommendations={recommendations}
-            onSelectRecommendation={(rec) => {
-              const recUrl = rec.type === 'series' && rec.episodes?.length ? rec.episodes[0].videoUrl : rec.videoUrl;
-              if (onPlayNext) onPlayNext(rec, recUrl || '');
-            }}
-            onNextEpisode={() => {}}
-            videoUrlOptions={[]}
-            isHost={isHost}
-            roomId={roomId}
-            profile={profile}
-            maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
-            onProgress={async (time, duration) => {
-              currentTimeRef.current = time;
-              if (duration !== undefined) durationRef.current = duration;
-              if (onProgress) onProgress(movie.id, time, movie.videoUrl);
-            }}
-            isBackgroundMode={isBackgroundMode}
-            onClickBackground={onClickBackground}
-          />
-        </div>
-      );
-    }
-
-    // Fallback iframe — stream não pôde ser extraído
+    // Stream direto (m3u8/mp4) OU embed iframe — ambos rodam dentro do NetflixPlayer
+    const bfPlayerSrc = bfStreamUrl || bfEmbedUrl || url;
     return (
-      <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
-        <div className="relative z-10 flex items-center gap-3 px-4 py-2.5 bg-gradient-to-b from-black/95 via-black/60 to-transparent shrink-0">
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/25 text-white flex items-center justify-center transition-all backdrop-blur-md group"
-            aria-label="Fechar"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-white font-black text-sm truncate max-w-[55vw] tracking-tight">{bfTitle}</span>
-              {bfYear && <span className="text-gray-500 text-xs shrink-0">{bfYear}</span>}
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/15 border border-orange-500/30 px-1.5 py-0.5 rounded-md">
-                API Flix
-              </span>
-              {bfIsTV && (
-                <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-md">
-                  Série
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 relative">
-          <iframe
-            src={bfSrc}
-            className="absolute inset-0 w-full h-full border-0"
-            allowFullScreen
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
-            referrerPolicy="origin"
-            title={bfTitle}
-          />
-        </div>
+      <div className="relative w-full h-full">
+        <NetflixPlayer
+          src={bfPlayerSrc}
+          title={bfTitle}
+          seriesTitle={bfIsTV ? (movie.title || movie.name || '') : undefined}
+          episodes={bfIsTV && (movie.episodes?.length ?? 0) > 0 ? movie.episodes : undefined}
+          backdropUrl={movie.backdrop_path}
+          logoUrl={movieLogo || undefined}
+          onClose={onClose}
+          initialTime={initialTime ?? movie.last_position ?? 0}
+          isMovie={!bfIsTV}
+          hasNextEpisode={false}
+          recommendations={recommendations}
+          onSelectRecommendation={(rec) => {
+            const recUrl = rec.type === 'series' && rec.episodes?.length ? rec.episodes[0].videoUrl : rec.videoUrl;
+            if (onPlayNext) onPlayNext(rec, recUrl || '');
+          }}
+          onNextEpisode={() => {}}
+          videoUrlOptions={[]}
+          isHost={isHost}
+          roomId={roomId}
+          profile={profile}
+          maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
+          onProgress={async (time, duration) => {
+            currentTimeRef.current = time;
+            if (duration !== undefined) durationRef.current = duration;
+            if (onProgress) onProgress(movie.id, time, movie.videoUrl);
+          }}
+          isBackgroundMode={isBackgroundMode}
+          onClickBackground={onClickBackground}
+        />
       </div>
     );
   }

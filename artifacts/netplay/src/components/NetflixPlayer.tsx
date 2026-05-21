@@ -221,7 +221,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       lowerSrc.includes('vidsrc-embed.ru') ||
       lowerSrc.includes('vidsrc-embed.su') ||
       lowerSrc.includes('vidsrcme.su') ||
-      lowerSrc.includes('vsrc.su')
+      lowerSrc.includes('vsrc.su') ||
+      lowerSrc.includes('betterflix.click')
     ) {
       return true;
     }

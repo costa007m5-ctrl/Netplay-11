@@ -5,7 +5,7 @@ const router = Router();
 
 router.get("/betterflix/stream", async (req, res) => {
   const { id, type, season, episode } = req.query;
-  const key = process.env.BETTERFLIX_API_KEY || process.env.VITE_BETTERFLIX_API_KEY || '';
+  const key = process.env.VITE_BETTERFLIX_API_KEY || process.env.BETTERFLIX_API_KEY || '';
 
   if (!id || !type) {
     res.status(400).json({ error: 'id e type são obrigatórios' });
@@ -28,31 +28,29 @@ router.get("/betterflix/stream", async (req, res) => {
   };
 
   try {
-    // 1) Tenta endpoint JSON dedicado
+    // 1) Tenta endpoint JSON dedicado /api/stream
     try {
-      const streamParams = new URLSearchParams(params);
-      const { data: jsonData } = await axios.get(`https://betterflix.click/api/stream?${streamParams}`, {
+      const { data: jsonData } = await axios.get(`https://betterflix.click/api/stream?${params}`, {
         timeout: 8000,
         headers: { ...baseHeaders, Accept: 'application/json' },
       });
       if (jsonData?.url) {
-        res.json({ streamUrl: jsonData.url, type: jsonData.type || 'm3u8' });
+        res.json({ streamUrl: jsonData.url, type: jsonData.type || 'm3u8', embedUrl: playerUrl });
         return;
       }
-      if (jsonData?.sources && Array.isArray(jsonData.sources) && jsonData.sources.length > 0) {
+      if (Array.isArray(jsonData?.sources) && jsonData.sources.length > 0) {
         const best = jsonData.sources.find((s: any) => s.quality === '1080p') || jsonData.sources[0];
-        res.json({ streamUrl: best.url || best.file, type: 'm3u8' });
+        res.json({ streamUrl: best.url || best.file, type: 'm3u8', embedUrl: playerUrl });
         return;
       }
     } catch {}
 
-    // 2) Busca a página do player e extrai a URL do stream do HTML/JS
+    // 2) Busca a página do player e extrai URL de stream do HTML/JS embutido
     const { data: html } = await axios.get(playerUrl, {
       timeout: 15000,
       headers: baseHeaders,
     });
 
-    // Padrões comuns de URL em players embutidos
     const patterns: RegExp[] = [
       /["'`](https?:\/\/[^"'`\s]+\.m3u8(?:[?#][^"'`\s]*)?)[`"']/,
       /file\s*:\s*["'`](https?:\/\/[^"'`\s]+\.m3u8(?:[?#][^"'`\s]*)?)[`"']/,
@@ -65,13 +63,13 @@ router.get("/betterflix/stream", async (req, res) => {
       const match = String(html).match(pattern);
       if (match?.[1]) {
         const streamUrl = match[1];
-        const type = streamUrl.includes('.m3u8') ? 'm3u8' : 'mp4';
-        res.json({ streamUrl, type });
+        const streamType = streamUrl.includes('.m3u8') ? 'm3u8' : 'mp4';
+        res.json({ streamUrl, type: streamType, embedUrl: playerUrl });
         return;
       }
     }
 
-    // Nenhuma URL encontrada — frontend usa iframe como fallback
+    // 3) Sem stream extraível — devolve embedUrl para o frontend usar no NetflixPlayer como iframe
     res.json({ streamUrl: null, embedUrl: playerUrl });
   } catch (err: any) {
     res.status(502).json({ error: 'Falha ao resolver stream BetterFlix', detail: err.message });
