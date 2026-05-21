@@ -3,15 +3,21 @@ import { Tv2, Film, Play, ExternalLink, RefreshCw, Globe, List, CheckCircle2, Co
 
 export const VIDSRC_DOMAIN_KEY = 'netplay_vidsrc_domain';
 export const VIDSRC_DOMAINS = [
-  'vidsrc-embed.ru',
-  'vidsrc-embed.su',
-  'vidsrcme.su',
-  'vsrc.su',
+  'vidsrc.me',
+  'vidsrc.xyz',
+  'vidsrc.to',
+  'vidsrc.rip',
+  'vidsrc.net',
 ];
 
 export function getVidsrcDomain(): string {
   try {
-    return localStorage.getItem(VIDSRC_DOMAIN_KEY) || VIDSRC_DOMAINS[0];
+    const stored = localStorage.getItem(VIDSRC_DOMAIN_KEY);
+    // Ignora domínios antigos/offline que não estão mais na lista
+    if (stored && VIDSRC_DOMAINS.includes(stored)) return stored;
+    // Remove o domínio inválido do cache
+    if (stored) localStorage.removeItem(VIDSRC_DOMAIN_KEY);
+    return VIDSRC_DOMAINS[0];
   } catch {
     return VIDSRC_DOMAINS[0];
   }
@@ -25,11 +31,19 @@ export function setVidsrcDomain(domain: string) {
 
 export function buildVidsrcMovieUrl(tmdbId: number | string, dsLang = 'pt-BR'): string {
   const domain = getVidsrcDomain();
+  // vidsrc.to usa formato de path em vez de query params
+  if (domain === 'vidsrc.to') {
+    return `https://vidsrc.to/embed/movie/${tmdbId}`;
+  }
   return `https://${domain}/embed/movie?tmdb=${tmdbId}&ds_lang=${dsLang}&autoplay=1`;
 }
 
 export function buildVidsrcTvUrl(tmdbId: number | string, season: number, episode: number, dsLang = 'pt-BR'): string {
   const domain = getVidsrcDomain();
+  // vidsrc.to usa formato de path em vez de query params
+  if (domain === 'vidsrc.to') {
+    return `https://vidsrc.to/embed/tv/${tmdbId}/${season}/${episode}`;
+  }
   return `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&ds_lang=${dsLang}&autoplay=1&autonext=1`;
 }
 

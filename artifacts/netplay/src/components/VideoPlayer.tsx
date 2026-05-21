@@ -1092,7 +1092,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   }, [isKingX, playerStyle]);
 
   // Vidsrc (Net 2.0) — roda dentro do NetflixPlayer com dica de áudio em PT-BR
-  const isVidsrcUrl = url.includes('vidsrc-embed.ru') || url.includes('vidsrc-embed.su') || url.includes('vidsrcme.su') || url.includes('vsrc.su');
+  const isVidsrcUrl = url.includes('vidsrc.me') || url.includes('vidsrc.xyz') || url.includes('vidsrc.to') || url.includes('vidsrc.rip') || url.includes('vidsrc.net') || url.includes('vidsrc-embed.ru') || url.includes('vidsrc-embed.su') || url.includes('vidsrcme.su') || url.includes('vsrc.su');
   if (isVidsrcUrl || playerStyle === 'vidsrc') {
     const vsTitle = movie.title || movie.name || 'Assistindo';
     const vsIsTV = movie.type === 'series';
