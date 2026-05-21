@@ -85,17 +85,12 @@ export function AdminNet2Tab() {
     setLatestLoading(true);
     setLatestError('');
     setLatestData([]);
-    const pathMap = {
-      movies: 'movies',
-      tvshows: 'tvshows',
-      episodes: 'episodes',
-    };
-    const url = `https://${domain}/${pathMap[latestType]}/latest/page-${latestPage}.json`;
     try {
-      const res = await fetch(url);
+      const params = new URLSearchParams({ type: latestType, page: String(latestPage), domain });
+      const res = await fetch(`/api/vidsrc/latest?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setLatestData(Array.isArray(data) ? data : (data.result || []));
+      setLatestData(data.results || []);
     } catch (e: any) {
       setLatestError(e.message || 'Erro ao carregar dados');
     } finally {

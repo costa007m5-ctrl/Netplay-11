@@ -4,6 +4,7 @@ import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2, Loader2 } from 'luc
 import { Movie } from '../types';
 import { isDynamicRef, parseDynamicRef, makeDynamicRef, makeDynamicRefV2, makeDynamicRefV3 } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
+import { buildVidsrcMovieUrl, buildVidsrcTvUrl } from './admin/AdminNet2Tab';
 import { lookupTmdbId } from '../services/tmdb';
 
 export const NATIVE_API_STORAGE_KEY = 'netplay_native_terabox_api';
@@ -144,6 +145,19 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     return buildBetterFlixUrl(movie.id, 'tv', season, episode);
   };
 
+  const [isVidsrcLoading, setIsVidsrcLoading] = useState(false);
+
+  const getVidsrcUrl = (): string => {
+    const isMovie = movie.type !== 'series';
+    if (isMovie) return buildVidsrcMovieUrl(movie.id);
+    const ep = episodeUrl && movie.episodes
+      ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
+      : null;
+    const season = ep?.season ?? 1;
+    const episode = ep?.episode ?? 1;
+    return buildVidsrcTvUrl(movie.id, season, episode);
+  };
+
   const options = [
     {
       id: 'admin',
@@ -257,6 +271,34 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         }
       },
     },
+    {
+      id: 'vidsrc',
+      num: '05',
+      title: 'Net 2.0',
+      subtitle: 'Vidsrc · Player Externo',
+      desc: 'Reproduz via Vidsrc com embed integrado. Alternativa confiável com legendas automáticas em português.',
+      icon: Tv2,
+      gradient: 'from-red-600/12 to-pink-900/5',
+      border: 'border-red-500/20 hover:border-red-400/50',
+      iconBg: 'bg-red-500/15',
+      iconColor: 'text-red-400',
+      badgeBg: 'bg-red-500/20',
+      badgeColor: 'text-red-300',
+      badge: 'NET 2.0',
+      glowColor: 'shadow-red-500/10',
+      available: hasTmdbId,
+      unavailableMsg: 'ID TMDB não disponível para este título.',
+      action: async () => {
+        if (isVidsrcLoading) return;
+        setIsVidsrcLoading(true);
+        try {
+          const vUrl = getVidsrcUrl();
+          onPlay(vUrl, 0, 'vidsrc');
+        } finally {
+          setIsVidsrcLoading(false);
+        }
+      },
+    },
   ];
 
   return (
@@ -362,15 +404,15 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.06 + idx * 0.07, duration: 0.28 }}
                 onClick={option.available ? () => (option.action as any)() : undefined}
-                disabled={!option.available || (option.id === 'betterflix' && isBfLoading)}
+                disabled={!option.available || (option.id === 'betterflix' && isBfLoading) || (option.id === 'vidsrc' && isVidsrcLoading)}
                 className={`
                   relative w-full flex items-center gap-3.5 p-3.5 rounded-2xl text-left group
                   bg-gradient-to-r ${option.gradient}
                   backdrop-blur-xl border ${option.border}
                   transition-all duration-200 shadow-lg ${option.glowColor}
-                  ${option.available && !(option.id === 'betterflix' && isBfLoading)
+                  ${option.available && !(option.id === 'betterflix' && isBfLoading) && !(option.id === 'vidsrc' && isVidsrcLoading)
                     ? 'hover:scale-[1.012] active:scale-[0.988] cursor-pointer hover:shadow-xl'
-                    : option.id === 'betterflix' && isBfLoading
+                    : (option.id === 'betterflix' && isBfLoading) || (option.id === 'vidsrc' && isVidsrcLoading)
                     ? 'cursor-wait opacity-80'
                     : 'opacity-30 cursor-not-allowed'}
                 `}
@@ -380,7 +422,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
                 </span>
 
                 <div className={`w-10 h-10 rounded-xl ${option.iconBg} border border-white/10 flex items-center justify-center shrink-0 transition-transform duration-200 ${option.available ? 'group-hover:scale-110' : ''}`}>
-                  {option.id === 'betterflix' && isBfLoading
+                  {(option.id === 'betterflix' && isBfLoading) || (option.id === 'vidsrc' && isVidsrcLoading)
                     ? <Loader2 size={18} className={`${option.iconColor} animate-spin`} />
                     : <Icon size={18} className={option.iconColor} />
                   }

@@ -1083,6 +1083,59 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
+  // Vidsrc (Net 2.0) — sempre iframe embed
+  const isVidsrcUrl = url.includes('vidsrc-embed.ru') || url.includes('vidsrc-embed.su') || url.includes('vidsrcme.su') || url.includes('vsrc.su');
+  if (isVidsrcUrl || playerStyle === 'vidsrc') {
+    const vsTitle = movie.title || movie.name || 'Assistindo';
+    const vsYear = movie.release_date
+      ? new Date(movie.release_date).getFullYear()
+      : movie.first_air_date
+      ? new Date(movie.first_air_date).getFullYear()
+      : null;
+    const vsIsTV = movie.type === 'series';
+    return (
+      <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
+        <div className="relative z-10 flex items-center gap-3 px-4 py-2.5 bg-gradient-to-b from-black/95 via-black/60 to-transparent shrink-0">
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/25 text-white flex items-center justify-center transition-all backdrop-blur-md group"
+            aria-label="Fechar"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-black text-sm truncate max-w-[55vw] tracking-tight">{vsTitle}</span>
+              {vsYear && <span className="text-gray-500 text-xs shrink-0">{vsYear}</span>}
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[9px] font-black uppercase tracking-widest text-red-400 bg-red-500/15 border border-red-500/30 px-1.5 py-0.5 rounded-md">
+                Net 2.0
+              </span>
+              {vsIsTV && (
+                <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-md">
+                  Série
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 relative">
+          <iframe
+            src={url}
+            className="absolute inset-0 w-full h-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
+            referrerPolicy="origin"
+            title={vsTitle}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // BetterFlix — resolve stream e exibe no NetflixPlayer nativo
   const isBetterFlixUrl = url.includes('betterflix.click');
   if (isBetterFlixUrl || playerStyle === 'betterflix') {
