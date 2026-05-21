@@ -4,7 +4,11 @@ import { Tv2, Key, CheckCircle2, ExternalLink, Save, Trash2, Radio, Trophy } fro
 export const BETTERFLIX_KEY_STORAGE = 'netplay_betterflix_b2b_key';
 
 export function getBetterFlixKey(): string {
-  try { return localStorage.getItem(BETTERFLIX_KEY_STORAGE) || ''; } catch { return ''; }
+  try {
+    return localStorage.getItem(BETTERFLIX_KEY_STORAGE)
+      || import.meta.env.VITE_BETTERFLIX_API_KEY
+      || '';
+  } catch { return import.meta.env.VITE_BETTERFLIX_API_KEY || ''; }
 }
 
 export function setBetterFlixKey(key: string) {
