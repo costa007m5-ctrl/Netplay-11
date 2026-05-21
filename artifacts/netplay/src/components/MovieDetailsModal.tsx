@@ -176,6 +176,25 @@ const MovieDetailsModal = React.memo(({
   // ID real do TMDB resolvido via busca por título (≠ ID do banco)
   const [tmdbResolvedId, setTmdbResolvedId] = useState<number | null>(null);
 
+  // Declarações antecipadas para evitar TDZ (usadas em useEffect abaixo)
+  const effectiveEpisodes = useMemo(() => {
+    if (movie.episodes && movie.episodes.length > 0) return movie.episodes;
+    return tmdbFetchedEpisodes;
+  }, [movie.episodes, tmdbFetchedEpisodes]);
+
+  const episodesBySeason = useMemo(() => {
+    const bySeason = effectiveEpisodes.reduce((acc: any, ep: any) => {
+      const s = ep.season || 1;
+      if (!acc[s]) acc[s] = [];
+      acc[s].push(ep);
+      return acc;
+    }, {} as Record<number, any[]>);
+    Object.values(bySeason).forEach((eps: any) => eps?.sort((a: any, b: any) => (a.episode || 0) - (b.episode || 0)));
+    return bySeason;
+  }, [effectiveEpisodes]);
+
+  const seasons = useMemo(() => Object.keys(episodesBySeason).map(Number).sort((a, b) => a - b), [episodesBySeason]);
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`netplay_ep_progress_${movie.id}`);
@@ -334,27 +353,6 @@ const MovieDetailsModal = React.memo(({
     }
     return null;
   }, [movie, savedUrl]);
-
-  // Usa episódios locais se disponíveis, caso contrário usa os buscados do TMDB
-  const effectiveEpisodes = useMemo(() => {
-    if (movie.episodes && movie.episodes.length > 0) return movie.episodes;
-    return tmdbFetchedEpisodes;
-  }, [movie.episodes, tmdbFetchedEpisodes]);
-
-  // Organizar episódios por temporada e ordenar por número do episódio
-  const episodesBySeason = useMemo(() => {
-    const bySeason = effectiveEpisodes.reduce((acc: any, ep: any) => {
-      const s = ep.season || 1;
-      if (!acc[s]) acc[s] = [];
-      acc[s].push(ep);
-      return acc;
-    }, {} as Record<number, any[]>);
-    // Ordenar episódios dentro de cada temporada pelo número do episódio
-    Object.values(bySeason).forEach((eps: any) => eps?.sort((a: any, b: any) => (a.episode || 0) - (b.episode || 0)));
-    return bySeason;
-  }, [effectiveEpisodes]);
-
-  const seasons = useMemo(() => Object.keys(episodesBySeason).map(Number).sort((a, b) => a - b), [episodesBySeason]);
 
   // Lista flat de TODOS os episódios ordenada por temporada e número do episódio.
   const sortedEpisodesFlat = useMemo(() => {
