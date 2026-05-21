@@ -4,7 +4,6 @@ import NetflixPlayer from './NetflixPlayer';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
 import { isDynamicRef, parseDynamicRef } from '../services/terabox';
-import { getBetterFlixKey } from './admin/AdminFlixAPITab';
 
 interface VideoPlayerProps {
   movie: Movie;
@@ -1035,8 +1034,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       : null;
     const bfIsTV = movie.type === 'series';
     const bfIsLive = (movie.type as string) === 'live' || (!movie.type && !bfIsTV);
-    const bfKey = getBetterFlixKey();
-    const bfHasKey = Boolean(bfKey);
     return (
       <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
         {/* Top bar */}
@@ -1073,40 +1070,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             </div>
           </div>
         </div>
-        {/* Player iframe ou aviso de chave não configurada */}
+        {/* Player iframe */}
         <div className="flex-1 relative">
-          {!bfHasKey ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-2">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-orange-400">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-              </div>
-              <div className="space-y-2">
-                <p className="text-white font-black text-lg tracking-tight">Chave API Flix não configurada</p>
-                <p className="text-gray-400 text-sm max-w-xs leading-relaxed">
-                  Para usar o player API Flix, configure sua chave B2B no painel de administração.
-                </p>
-              </div>
-              <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-gray-400 font-mono text-left max-w-sm w-full">
-                <span className="text-gray-500">Admin</span>
-                <span className="text-white mx-1">→</span>
-                <span className="text-gray-500">API Flix</span>
-                <span className="text-white mx-1">→</span>
-                <span className="text-orange-400">Chave B2B</span>
-              </div>
-            </div>
-          ) : (
-            <iframe
-              src={bfSrc}
-              className="absolute inset-0 w-full h-full border-0"
-              allowFullScreen
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
-              referrerPolicy="no-referrer-when-downgrade"
-              title={bfTitle}
-            />
-          )}
+          <iframe
+            src={bfSrc}
+            className="absolute inset-0 w-full h-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
+            referrerPolicy="no-referrer-when-downgrade"
+            title={bfTitle}
+          />
         </div>
       </div>
     );
