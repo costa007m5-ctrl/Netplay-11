@@ -1033,7 +1033,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
       ? new Date(movie.first_air_date).getFullYear()
       : null;
     const bfIsTV = movie.type === 'series';
-    const bfIsLive = (movie.type as string) === 'live' || (!movie.type && !bfIsTV);
     return (
       <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
         {/* Top bar */}
@@ -1061,23 +1060,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                   Série
                 </span>
               )}
-              {bfIsLive && (
-                <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                  Ao Vivo
-                </span>
-              )}
+              <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                Ao Vivo
+              </span>
             </div>
           </div>
         </div>
-        {/* Player iframe */}
+        {/* Player iframe — fills remaining space */}
         <div className="flex-1 relative">
           <iframe
             src={bfSrc}
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
-            referrerPolicy="no-referrer-when-downgrade"
+            referrerPolicy="origin"
             title={bfTitle}
           />
         </div>
