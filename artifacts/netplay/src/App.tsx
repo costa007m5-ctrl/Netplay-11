@@ -2709,13 +2709,25 @@ const MovieDetailRouteWrapper = ({
   const [tmdbMovie, setTmdbMovie] = useState<any>(null);
   const [notFound, setNotFound] = useState(false);
 
+  const movieFromState = location.state?.movie;
+
   const localMovie = useMemo(() => myMovies.find((m: any) => m.id.toString() === movieId), [movieId, myMovies]);
+
+  // Se veio do state da navegação e o ID bate, usamos diretamente (evita busca errada no TMDB)
+  const stateMovie = useMemo(() => {
+    if (movieFromState && movieFromState.id?.toString() === movieId) return movieFromState;
+    return null;
+  }, [movieFromState, movieId]);
   
   useEffect(() => {
-    if (!localMovie && movieId && !tmdbMovie && !notFound) {
+    if (!localMovie && !stateMovie && movieId && !tmdbMovie && !notFound) {
       const fetchFromTmdb = async () => {
-         try {
-            const res = await tmdb.get(requests.movieDetails(Number(movieId)));
+         // Usa media_type do state para saber qual endpoint chamar primeiro
+         const hintMediaType = movieFromState?.media_type || movieFromState?.type;
+         const isTV = hintMediaType === 'tv' || hintMediaType === 'series';
+
+         const fetchMovie = async () => {
+            const res = await tmdb.get(requests.movieDetails(Number(movieId)), { params: { language: 'pt-BR' } });
             setTmdbMovie({
               id: res.data.id,
               title: res.data.title,
@@ -2728,22 +2740,39 @@ const MovieDetailRouteWrapper = ({
               type: 'movie',
               videoUrl: '' 
             });
+         };
+
+         const fetchTV = async () => {
+            const res2 = await tmdb.get(requests.tvDetails(Number(movieId)), { params: { language: 'pt-BR' } });
+            setTmdbMovie({
+               id: res2.data.id,
+               title: res2.data.name,
+               overview: res2.data.overview,
+               poster_path: res2.data.poster_path,
+               backdrop_path: res2.data.backdrop_path,
+               vote_average: res2.data.vote_average,
+               release_date: res2.data.first_air_date,
+               genres: res2.data.genres?.map((g:any) => g.name).join(', ') || '',
+               type: 'series',
+               episodes: [],
+               videoUrl: '',
+               number_of_seasons: res2.data.number_of_seasons || 1,
+            });
+         };
+
+         try {
+            if (isTV) {
+               await fetchTV();
+            } else {
+               await fetchMovie();
+            }
          } catch (e) {
             try {
-               const res2 = await tmdb.get(requests.tvDetails(Number(movieId)));
-               setTmdbMovie({
-                  id: res2.data.id,
-                  title: res2.data.name,
-                  overview: res2.data.overview,
-                  poster_path: res2.data.poster_path,
-                  backdrop_path: res2.data.backdrop_path,
-                  vote_average: res2.data.vote_average,
-                  release_date: res2.data.first_air_date,
-                  genres: res2.data.genres?.map((g:any) => g.name).join(', ') || '',
-                  type: 'series',
-                  episodes: [],
-                  videoUrl: ''
-               });
+               if (isTV) {
+                  await fetchMovie();
+               } else {
+                  await fetchTV();
+               }
             } catch (e2) {
                setNotFound(true);
             }
@@ -2751,16 +2780,16 @@ const MovieDetailRouteWrapper = ({
       };
       fetchFromTmdb();
     }
-  }, [localMovie, movieId, tmdbMovie, notFound]);
+  }, [localMovie, stateMovie, movieId, tmdbMovie, notFound]);
 
   const movie = useMemo(() => {
-    const base = localMovie || tmdbMovie;
+    const base = localMovie || stateMovie || tmdbMovie;
     if (!base) return null;
     return {
       ...base,
       last_position: watchHistory[base.id] || base.last_position || 0
     };
-  }, [localMovie, tmdbMovie, watchHistory]);
+  }, [localMovie, stateMovie, tmdbMovie, watchHistory]);
 
   const movieRank = useMemo(() => {
     if (!movie) return undefined;
@@ -5602,7 +5631,7 @@ export default function App() {
   }, [profile]);
 
   const handleSelectMovie = useCallback((movie: Movie) => {
-    navigate(`/movie/${movie.id}`, { state: { backgroundLocation: location.pathname } });
+    navigate(`/movie/${movie.id}`, { state: { backgroundLocation: location.pathname, movie } });
   }, [navigate, location.pathname]);
 
   const handlePlayMovie = useCallback((movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
