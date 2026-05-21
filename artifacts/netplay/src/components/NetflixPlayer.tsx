@@ -955,8 +955,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       const lowerOrigSrc = activeSrc.toLowerCase();
       let startLoadTimer: NodeJS.Timeout;
 
-      const applyHlsAudioTracks = (hls: any) => {
-        const tracks: { id: number; name: string; lang: string; default?: boolean }[] = (hls.audioTracks || []).map((t: any, i: number) => ({
+      const applyHlsAudioTracks = (hls: any, retry = false) => {
+        const rawTracks: any[] = hls.audioTracks || [];
+        const tracks: { id: number; name: string; lang: string; default?: boolean }[] = rawTracks.map((t: any, i: number) => ({
           id: i,
           name: t.name || t.lang || `Faixa ${i + 1}`,
           lang: (t.lang || '').toLowerCase(),
@@ -968,13 +969,27 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           const prefBase = pref.split('-')[0];
           const isPortuguese = prefBase === 'pt' || pref.startsWith('por');
           const ptCodes = new Set(['pt', 'pt-br', 'por', 'por-br', 'pb', 'pob', 'ptbr', 'portuguese', 'pt-pt', 'por-pt']);
+          // Palavras-chave nos nomes das faixas — cobre casos onde lang está vazio mas o nome é descritivo
+          const ptNameKw = ['portugu', 'brasil', 'pt-br', 'ptbr', 'dub'];
           const prefTrack = isPortuguese
-            ? (tracks.find(t => ptCodes.has(t.lang)) || tracks.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.lang === 'pb' || t.lang === 'pob'))
+            ? (
+                tracks.find(t => ptCodes.has(t.lang)) ||
+                tracks.find(t => t.lang.startsWith('pt') || t.lang.startsWith('por') || t.lang === 'pb' || t.lang === 'pob') ||
+                tracks.find(t => { const n = t.name.toLowerCase(); return ptNameKw.some(k => n.includes(k)); })
+              )
             : (tracks.find(t => t.lang === pref || t.lang === prefBase || t.lang.startsWith(prefBase)));
-          if (prefTrack && prefTrack.id !== hls.audioTrack) {
-            hls.audioTrack = prefTrack.id;
-            setCurrentAudioTrackId(prefTrack.id);
-            console.log(`[NetflixPlayer] HLS áudio auto-selecionado: ${prefTrack.name} (${prefTrack.lang})`);
+          if (prefTrack) {
+            if (prefTrack.id !== hls.audioTrack) {
+              hls.audioTrack = prefTrack.id;
+              setCurrentAudioTrackId(prefTrack.id);
+              console.log(`[NetflixPlayer] HLS áudio auto-selecionado: ${prefTrack.name} (${prefTrack.lang})`);
+            } else {
+              setCurrentAudioTrackId(prefTrack.id);
+            }
+            // Re-aplica após 800ms para garantir que o switch foi efetivado pelo HLS.js
+            if (!retry && isMounted) {
+              setTimeout(() => { if (isMounted) applyHlsAudioTracks(hls, true); }, 800);
+            }
           } else {
             setCurrentAudioTrackId(hls.audioTrack ?? 0);
           }

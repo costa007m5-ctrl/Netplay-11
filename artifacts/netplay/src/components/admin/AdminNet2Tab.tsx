@@ -23,12 +23,12 @@ export function setVidsrcDomain(domain: string) {
   } catch {}
 }
 
-export function buildVidsrcMovieUrl(tmdbId: number | string, dsLang = 'pt'): string {
+export function buildVidsrcMovieUrl(tmdbId: number | string, dsLang = 'pt-BR'): string {
   const domain = getVidsrcDomain();
   return `https://${domain}/embed/movie?tmdb=${tmdbId}&ds_lang=${dsLang}&autoplay=1`;
 }
 
-export function buildVidsrcTvUrl(tmdbId: number | string, season: number, episode: number, dsLang = 'pt'): string {
+export function buildVidsrcTvUrl(tmdbId: number | string, season: number, episode: number, dsLang = 'pt-BR'): string {
   const domain = getVidsrcDomain();
   return `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}&ds_lang=${dsLang}&autoplay=1&autonext=1`;
 }
@@ -107,22 +107,22 @@ export function AdminNet2Tab() {
     {
       label: 'Filme (TMDB)',
       color: 'blue',
-      url: `https://${domain}/embed/movie?tmdb=385687&ds_lang=pt&autoplay=1`,
+      url: `https://${domain}/embed/movie?tmdb=385687&ds_lang=pt-BR&autoplay=1`,
     },
     {
       label: 'Série (TMDB)',
       color: 'purple',
-      url: `https://${domain}/embed/tv?tmdb=1399&ds_lang=pt`,
+      url: `https://${domain}/embed/tv?tmdb=1399&ds_lang=pt-BR`,
     },
     {
       label: 'Episódio (TMDB)',
       color: 'green',
-      url: `https://${domain}/embed/tv?tmdb=1399&season=1&episode=1&ds_lang=pt&autoplay=1&autonext=1`,
+      url: `https://${domain}/embed/tv?tmdb=1399&season=1&episode=1&ds_lang=pt-BR&autoplay=1&autonext=1`,
     },
     {
       label: 'Filme (IMDB)',
       color: 'orange',
-      url: `https://${domain}/embed/movie?imdb=tt5433140&ds_lang=pt&autoplay=1`,
+      url: `https://${domain}/embed/movie?imdb=tt5433140&ds_lang=pt-BR&autoplay=1`,
     },
   ];
 
@@ -209,7 +209,7 @@ export function AdminNet2Tab() {
             <div className="bg-black/30 rounded-xl p-3 border border-white/5">
               <p className="text-gray-400 font-bold mb-1">Parâmetros opcionais</p>
               <ul className="space-y-1">
-                <li><code className="text-gray-500">ds_lang=pt</code> — Legenda padrão (ISO 639)</li>
+                <li><code className="text-gray-500">ds_lang=pt-BR</code> — Legenda padrão (Português Brasil)</li>
                 <li><code className="text-gray-500">autoplay=1</code> — Reprodução automática</li>
                 <li><code className="text-gray-500">autonext=1</code> — Próximo episódio automático</li>
                 <li><code className="text-gray-500">sub_url=...</code> — URL de legenda externa (.srt/.vtt)</li>
