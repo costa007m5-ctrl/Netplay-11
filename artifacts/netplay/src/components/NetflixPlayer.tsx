@@ -2438,7 +2438,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         <iframe
           src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
           className="relative z-[10] w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
           referrerPolicy="origin"
