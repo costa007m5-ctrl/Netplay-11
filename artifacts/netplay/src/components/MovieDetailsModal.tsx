@@ -3,12 +3,11 @@ import { X, Play, Plus, ThumbsUp, Volume2, VolumeX, Users, Sparkles, Calendar, S
 import { QRCodeSVG } from 'qrcode.react';
 import { Movie } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import tmdb, { requests, getMovieLogo } from '../services/tmdb';
+import tmdb, { requests, getMovieLogo, lookupTmdbId, fetchSeasonDetailsWithFallback } from '../services/tmdb';
 import VideoPlayer from './VideoPlayer';
 import SmartPlayerSelector from './SmartPlayerSelector';
 import { isDynamicRef } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
-import { lookupTmdbId } from '../services/tmdb';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -174,6 +173,8 @@ const MovieDetailsModal = React.memo(({
   // Episódios buscados do TMDB quando a série não tem episódios locais
   const [tmdbFetchedEpisodes, setTmdbFetchedEpisodes] = useState<any[]>([]);
   const [isFetchingTmdbEpisodes, setIsFetchingTmdbEpisodes] = useState(false);
+  // ID real do TMDB resolvido via busca por título (≠ ID do banco)
+  const [tmdbResolvedId, setTmdbResolvedId] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -189,15 +190,26 @@ const MovieDetailsModal = React.memo(({
     const fetchTmdbEpisodes = async () => {
       setIsFetchingTmdbEpisodes(true);
       try {
-        // 1. Busca detalhes da série para saber quantas temporadas existem
-        const detailsRes = await tmdb.get(requests.tvDetails(movie.id), { params: { language: 'pt-BR' } });
+        const title = movie.title || (movie as any).name || '';
+        const year = movie.release_date
+          ? new Date(movie.release_date).getFullYear()
+          : (movie as any).first_air_date
+          ? new Date((movie as any).first_air_date).getFullYear()
+          : null;
+
+        // 1. Resolve o ID real do TMDB (movie.id é o ID do banco, não do TMDB)
+        const resolvedId = (await lookupTmdbId(title, 'tv', year)) || movie.id;
+        setTmdbResolvedId(resolvedId);
+
+        // 2. Busca detalhes da série para saber quantas temporadas existem
+        const detailsRes = await tmdb.get(requests.tvDetails(resolvedId), { params: { language: 'pt-BR' } });
         const numberOfSeasons: number = detailsRes.data.number_of_seasons || 1;
 
-        // 2. Busca episódios de cada temporada
+        // 3. Busca episódios de cada temporada com fallback en-US para sinopses
         const allEpisodes: any[] = [];
         for (let season = 1; season <= numberOfSeasons; season++) {
           try {
-            const seasonRes = await tmdb.get(requests.tvSeasonDetails(movie.id, season), { params: { language: 'pt-BR' } });
+            const seasonRes = await fetchSeasonDetailsWithFallback(resolvedId, season);
             const eps = seasonRes.data.episodes || [];
             eps.forEach((ep: any) => {
               allEpisodes.push({
@@ -214,7 +226,9 @@ const MovieDetailsModal = React.memo(({
                 _tmdbOnly: true,
               });
             });
-          } catch {}
+          } catch (e) {
+            console.warn(`[MovieDetailsModal] Falha ao buscar temporada ${season}:`, e);
+          }
         }
 
         if (allEpisodes.length > 0) {
@@ -229,6 +243,13 @@ const MovieDetailsModal = React.memo(({
 
     fetchTmdbEpisodes();
   }, [isSeries, movie.id, movie.episodes]);
+
+  // Atualiza selectedSeason quando as temporadas do TMDB carregam
+  useEffect(() => {
+    if (seasons.length > 0 && !episodesBySeason[selectedSeason]) {
+      setSelectedSeason(seasons[0]);
+    }
+  }, [seasons]);
 
   const handlePlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
     onPlay(movie, episodeUrl, startTime, playerStyle, episodeIndex);
@@ -798,19 +819,18 @@ const MovieDetailsModal = React.memo(({
                         : movie.first_air_date
                         ? new Date(movie.first_air_date).getFullYear()
                         : null;
-                      const tmdbId = await lookupTmdbId(title, isMovie ? 'movie' : 'tv', year);
-                      const id = tmdbId || movie.id;
+                      // Usa o ID do TMDB já resolvido, ou faz lookup se necessário
+                      const resolvedId = tmdbResolvedId || await lookupTmdbId(title, isMovie ? 'movie' : 'tv', year) || movie.id;
+                      if (!tmdbResolvedId) setTmdbResolvedId(resolvedId);
+                      const id = resolvedId;
                       if (isMovie) {
                         handlePlay(buildBetterFlixUrl(id, 'movie'), 0, 'betterflix');
                       } else {
-                        const firstEp = movie.episodes && movie.episodes.length > 0
-                          ? [...movie.episodes].sort((a: any, b: any) => {
-                              const sa = (a.season || 1) - (b.season || 1);
-                              return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
-                            })[0]
-                          : null;
-                        const season = (firstEp as any)?.season ?? 1;
-                        const episode = (firstEp as any)?.episode ?? 1;
+                        // Usa a temporada selecionada e o primeiro episódio dela
+                        const firstEpInSeason = sortedEpisodesFlat.find((e: any) => (e.season || 1) === selectedSeason)
+                          || sortedEpisodesFlat[0];
+                        const season = (firstEpInSeason as any)?.season ?? selectedSeason ?? 1;
+                        const episode = (firstEpInSeason as any)?.episode ?? 1;
                         handlePlay(buildBetterFlixUrl(id, 'tv', season, episode), 0, 'betterflix');
                       }
                     } finally {
@@ -1253,10 +1273,15 @@ const MovieDetailsModal = React.memo(({
                       </div>
                       
                       <div
-                        className={`relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl z-10 ${!isTmdbOnly ? 'group/ep cursor-pointer' : 'cursor-default'}`}
+                        className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl z-10 group/ep cursor-pointer"
                         onClick={(e) => {
-                          if (isTmdbOnly) return;
                           e.stopPropagation();
+                          if (isTmdbOnly) {
+                            // Episódio sem link local → usa API FLIX com season/episode corretos
+                            const id = tmdbResolvedId || movie.id;
+                            handlePlay(buildBetterFlixUrl(id, 'tv', ep.season, ep.episode), 0, 'betterflix');
+                            return;
+                          }
                           const savedPos = isInProgress && prog ? prog.pos : 0;
                           triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', savedPos, 'netflix', epSortedIdx >= 0 ? epSortedIdx : epIdxInAll >= 0 ? epIdxInAll : undefined);
                         }}
@@ -1264,17 +1289,18 @@ const MovieDetailsModal = React.memo(({
                         <img 
                           src={ep.still_path || backgroundUrl} 
                           alt={ep.title} 
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover/ep:scale-110"
                           referrerPolicy="no-referrer"
                         />
-                        {!isTmdbOnly && (
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/ep:opacity-100 transition-opacity">
-                            <Play size={32} className="text-white fill-white md:w-16 md:h-16" />
-                          </div>
-                        )}
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/ep:opacity-100 transition-opacity">
+                          {isTmdbOnly
+                            ? <span className="bg-orange-600 text-white text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">API Flix</span>
+                            : <Play size={32} className="text-white fill-white md:w-16 md:h-16" />
+                          }
+                        </div>
                         {isTmdbOnly && (
-                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                            <span className="text-[8px] md:text-[10px] text-gray-400 font-black uppercase tracking-widest text-center px-2">Sem link</span>
+                          <div className="absolute bottom-1 right-1 bg-orange-600/80 px-1.5 py-0.5 rounded text-[7px] font-black text-white italic">
+                            API
                           </div>
                         )}
                         {!isTmdbOnly && (
