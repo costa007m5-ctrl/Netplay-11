@@ -1130,7 +1130,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
             referrerPolicy="no-referrer-when-downgrade"
             title={vsTitle}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-presentation allow-top-navigation-by-user-activation"
           />
         </div>
       </div>

@@ -149,22 +149,36 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
 
   const resolveVidsrcUrl = async (): Promise<string> => {
     const isMovie = movie.type !== 'series';
-    const title = movie.title || movie.name || '';
+    const type = isMovie ? 'movie' : 'tv';
+
+    // Tenta pelo título principal, depois pelo nome original como fallback
+    const primaryTitle = movie.title || movie.name || '';
+    const originalTitle = movie.original_name || '';
     const releaseYear = movie.release_date
       ? new Date(movie.release_date).getFullYear()
       : movie.first_air_date
       ? new Date(movie.first_air_date).getFullYear()
       : null;
-    const tmdbId = await lookupTmdbId(title, isMovie ? 'movie' : 'tv', releaseYear);
-    const id = tmdbId || movie.id;
+
+    let tmdbId = await lookupTmdbId(primaryTitle, type, releaseYear);
+
+    // Se não encontrou, tenta com o nome original (ex: título em inglês armazenado como original_name)
+    if (!tmdbId && originalTitle && originalTitle !== primaryTitle) {
+      tmdbId = await lookupTmdbId(originalTitle, type, releaseYear);
+    }
+
+    if (!tmdbId) {
+      throw new Error(`Não foi possível encontrar o ID TMDB para "${primaryTitle}". Verifique o título no painel admin.`);
+    }
+
     const ep = episodeUrl && movie.episodes
       ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
       : null;
     const season = ep?.season ?? 1;
     const episode = ep?.episode ?? 1;
     return isMovie
-      ? buildVidsrcMovieUrl(id)
-      : buildVidsrcTvUrl(id, season, episode);
+      ? buildVidsrcMovieUrl(tmdbId)
+      : buildVidsrcTvUrl(tmdbId, season, episode);
   };
 
   const options = [
@@ -303,6 +317,8 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         try {
           const vUrl = await resolveVidsrcUrl();
           onPlay(vUrl, 0, 'vidsrc');
+        } catch (err: any) {
+          alert(err?.message || 'Não foi possível carregar o Net 2.0 para este título.');
         } finally {
           setIsVidsrcLoading(false);
         }

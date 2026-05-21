@@ -91,27 +91,40 @@ export const getMovieLogo = async (id: number, type: 'movie' | 'tv' = 'movie'): 
 
 /**
  * Searches TMDB by title and returns the correct TMDB numeric ID for use with
- * external players (BetterFlix, etc.).  Falls back to null on any error.
+ * external players (Vidsrc, BetterFlix, etc.).  Falls back to null on any error.
+ * Uses type-specific endpoints (search/movie or search/tv) for better accuracy.
+ * Retries without year and in English if the first attempt fails.
  */
 export const lookupTmdbId = async (
   title: string,
   type: 'movie' | 'tv' = 'movie',
   year?: number | null,
 ): Promise<number | null> => {
-  try {
-    const params: Record<string, string | number> = { query: title, language: 'pt-BR' };
-    if (year) params.year = year;
-    const { data } = await tmdb.get(requests.searchMulti, { params });
-    const results: any[] = data.results || [];
-    const mediaType = type === 'tv' ? 'tv' : 'movie';
-    const match =
-      results.find(r => r.media_type === mediaType) ||
-      results.find(r => r.media_type === 'movie' || r.media_type === 'tv') ||
-      null;
-    return match?.id ?? null;
-  } catch {
-    return null;
-  }
+  const endpoint = type === 'tv' ? requests.searchTv : requests.searchMovie;
+  const trySearch = async (q: string, lang: string, yr?: number | null): Promise<number | null> => {
+    try {
+      const params: Record<string, string | number> = { query: q, language: lang };
+      // Para filmes: ano ajuda a distinguir remakes. Para séries: NÃO usar year (TMDB usa first_air_date_year, não year)
+      if (yr && type === 'movie') params.year = yr;
+      const { data } = await tmdb.get(endpoint, { params });
+      const results: any[] = data.results || [];
+      return results[0]?.id ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1ª tentativa: título em PT-BR com ano (movies) ou sem ano (TV)
+  const r1 = await trySearch(title, 'pt-BR', year);
+  if (r1) return r1;
+
+  // 2ª tentativa: PT-BR sem ano
+  const r2 = await trySearch(title, 'pt-BR', null);
+  if (r2) return r2;
+
+  // 3ª tentativa: inglês sem ano (títulos que no banco estão em inglês ou TMDB só tem entrada em inglês)
+  const r3 = await trySearch(title, 'en-US', null);
+  return r3;
 };
 
 export const fetchSeasonDetailsWithFallback = async (tvId: number, seasonNumber: number) => {
