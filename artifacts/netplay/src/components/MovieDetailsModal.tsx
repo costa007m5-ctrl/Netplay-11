@@ -7,6 +7,7 @@ import tmdb, { requests, getMovieLogo } from '../services/tmdb';
 import VideoPlayer from './VideoPlayer';
 import SmartPlayerSelector from './SmartPlayerSelector';
 import { isDynamicRef } from '../services/terabox';
+import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -723,6 +724,34 @@ const MovieDetailsModal = React.memo(({
                 </>
               )}
               
+              {/* API Flix button — always available when movie has TMDB ID */}
+              {!isLocked && movie.id && (
+                <motion.button
+                  whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(251,146,60,0.25)' }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    const isMovie = movie.type !== 'series';
+                    if (isMovie) {
+                      handlePlay(buildBetterFlixUrl(movie.id, 'movie'), 0, 'betterflix');
+                    } else {
+                      const firstEp = movie.episodes && movie.episodes.length > 0
+                        ? [...movie.episodes].sort((a: any, b: any) => {
+                            const sa = (a.season || 1) - (b.season || 1);
+                            return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+                          })[0]
+                        : null;
+                      const season = (firstEp as any)?.season ?? 1;
+                      const episode = (firstEp as any)?.episode ?? 1;
+                      handlePlay(buildBetterFlixUrl(movie.id, 'tv', season, episode), 0, 'betterflix');
+                    }
+                  }}
+                  className="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/30 hover:border-orange-400/60 px-4 md:px-6 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 text-xs md:text-sm shadow-xl transition-all backdrop-blur-sm"
+                >
+                  <Tv size={14} className="md:w-5 md:h-5" />
+                  <span className="whitespace-nowrap">API Flix</span>
+                </motion.button>
+              )}
+
               <div className="flex bg-black/20 rounded-full items-center gap-3 md:gap-4 p-1">
                 <motion.button 
                   whileHover={{ scale: 1.1 }}

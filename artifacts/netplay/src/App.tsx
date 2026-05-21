@@ -31,6 +31,7 @@ import { User } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'motion/react';
 
 const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
+const CanaisTVPage = React.lazy(() => import('./pages/CanaisTVPage'));
 const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'));
 const ProviderPage = React.lazy(() => import('./components/ProviderPage'));
 const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
@@ -38,7 +39,7 @@ const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSel
 const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
 const FranchiseCarousels = React.lazy(() => import('./components/FranchiseCarousels'));
 
-import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info, Trophy } from 'lucide-react';
+import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
 
 // Basic title cleaner to replace AI cleaning
 const cleanTitle = (fileName: string) => {
@@ -1172,6 +1173,15 @@ const HomeView = React.memo(({
              >
                <Shuffle size={24} className="text-white mb-2 group-hover:scale-110 transition-transform drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
                <span className="text-white font-black text-sm md:text-base italic uppercase tracking-tighter drop-shadow-md">Surpreenda</span>
+            </motion.div>
+
+            <motion.div 
+               whileHover={{ scale: 1.05 }}
+               onClick={() => navigate('/canais')}
+               className="bg-black/60 backdrop-blur-2xl border border-white/5 rounded-[1.5rem] p-4 flex flex-col items-center justify-center cursor-pointer group hover:bg-orange-500/10 hover:border-orange-500/30 transition-all shadow-xl relative overflow-hidden col-span-2"
+             >
+               <Tv2 size={24} className="text-orange-400 mb-2 group-hover:scale-110 transition-transform" />
+               <span className="text-white font-black text-sm md:text-base italic uppercase tracking-tighter">Canais de TV</span>
             </motion.div>
           </div>
         </section>
@@ -6233,6 +6243,12 @@ export default function App() {
               myMovies={myMovies}
             />
           } />
+          <Route path="/canais" element={
+            <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+              <CanaisTVPage />
+            </Suspense>
+          } />
+
           <Route path="/perfil" element={
              <ProfileDashboard 
                profile={profile}
