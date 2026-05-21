@@ -2714,8 +2714,13 @@ const MovieDetailRouteWrapper = ({
   const localMovie = useMemo(() => myMovies.find((m: any) => m.id.toString() === movieId), [movieId, myMovies]);
 
   // Se veio do state da navegação e o ID bate, usamos diretamente (evita busca errada no TMDB)
+  // Normaliza type a partir de media_type caso não esteja definido
   const stateMovie = useMemo(() => {
-    if (movieFromState && movieFromState.id?.toString() === movieId) return movieFromState;
+    if (movieFromState && movieFromState.id?.toString() === movieId) {
+      const mediaType = movieFromState.media_type || movieFromState.type;
+      const normalizedType = movieFromState.type || (mediaType === 'tv' ? 'series' : 'movie');
+      return { ...movieFromState, type: normalizedType };
+    }
     return null;
   }, [movieFromState, movieId]);
   

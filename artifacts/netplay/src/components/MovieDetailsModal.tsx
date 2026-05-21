@@ -146,7 +146,13 @@ const MovieDetailsModal = React.memo(({
   const [isMuted, setIsMuted] = useState(true);
   const [showVideo, setShowVideo] = useState(false);
   const [isPlayingFullscreen, setIsPlayingFullscreen] = useState(false);
-  const [activeInfoTab, setActiveInfoTab] = useState<'details' | 'episodes' | 'similar'>(movie.type === 'series' ? 'episodes' : 'details');
+  const isSeries = movie.type === 'series' || movie.media_type === 'tv';
+  const [activeInfoTab, setActiveInfoTab] = useState<'details' | 'episodes' | 'similar'>(isSeries ? 'episodes' : 'details');
+
+  // Atualiza o tab ativo quando o tipo do filme muda (ex: carregamento assíncrono)
+  useEffect(() => {
+    setActiveInfoTab(isSeries ? 'episodes' : 'details');
+  }, [isSeries]);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [showTvShare, setShowTvShare] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -208,7 +214,7 @@ const MovieDetailsModal = React.memo(({
       // Skip if movie already has watch_providers data stored (avoids unnecessary TMDB call)
       if (movie.watch_providers) return;
       try {
-        const isTv = movie.type === 'series' || !!movie.first_air_date;
+        const isTv = isSeries || !!movie.first_air_date;
         const url = isTv ? requests.tvWatchProviders(movie.id) : requests.movieWatchProviders(movie.id);
         const res = await tmdb.get(url);
         const brProviders = res.data.results?.BR?.flatrate || res.data.results?.BR?.buy || [];
@@ -248,7 +254,7 @@ const MovieDetailsModal = React.memo(({
   }, [movie.id, movie.savedEpisodeUrl]);
 
   const savedEpisodeSeason = useMemo(() => {
-    if (movie.type !== 'series' || !movie.episodes || !savedUrl) return null;
+    if (!isSeries || !movie.episodes || !savedUrl) return null;
     const ep = movie.episodes.find(e => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl);
     if (ep) {
        return ep.season;
@@ -314,7 +320,7 @@ const MovieDetailsModal = React.memo(({
   }, [movie.id, movie.last_position, userResetProgress]);
 
   const savedEpisodeInfo = useMemo(() => {
-    if (movie.type !== 'series' || !movie.episodes || !savedUrl) return null;
+    if (!isSeries || !movie.episodes || !savedUrl) return null;
     const ep = movie.episodes.find(e => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl);
     if (ep) {
        return `T${ep.season} E${ep.episode}`;
@@ -583,7 +589,7 @@ const MovieDetailsModal = React.memo(({
                     whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255,255,255,0.3)' }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
-                      if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                      if (isSeries && movie.episodes && movie.episodes.length > 0) {
                         const firstSortedEp = sortedEpisodesFlat[0];
                         const savedEpEntry = savedUrl ? sortedEpisodesFlat.find((e: any) => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl) : null;
                         const urlToPlay = savedUrl || firstSortedEp?.videoUrl || firstSortedEp?.videoUrl2 || '';
@@ -614,7 +620,7 @@ const MovieDetailsModal = React.memo(({
                     onClick={() => {
                       localStorage.removeItem(`netplay_progress_${movie.id}`);
                       setUserResetProgress(true);
-                      if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                      if (isSeries && movie.episodes && movie.episodes.length > 0) {
                         const firstSortedEp2 = sortedEpisodesFlat[0];
                         const urlToPlay = firstSortedEp2?.videoUrl || firstSortedEp2?.videoUrl2 || '';
                         triggerSmartPlay(urlToPlay, 0, 'netflix', 0);
@@ -637,7 +643,7 @@ const MovieDetailsModal = React.memo(({
                 </div>
               ) : (
                 <>
-                  {movie.videoUrl || movie.videoUrl2 || (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) ? (
+                  {movie.videoUrl || movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0) ? (
                     <div className="flex flex-wrap gap-3 md:gap-4">
                       <motion.button 
                         whileHover={{ scale: 1.05, boxShadow: isLocked ? '0 0 40px rgba(220,38,38,0.3)' : '0 0 40px rgba(255,255,255,0.3)' }}
@@ -647,7 +653,7 @@ const MovieDetailsModal = React.memo(({
                             document.dispatchEvent(new CustomEvent('open-plans'));
                             return;
                           }
-                          if (movie.type === 'series' && movie.episodes && movie.episodes.length > 0) {
+                          if (isSeries && movie.episodes && movie.episodes.length > 0) {
                             const firstSortedEp3 = sortedEpisodesFlat[0];
                             const urlToPlay = firstSortedEp3?.videoUrl || firstSortedEp3?.videoUrl2 || '';
                             triggerSmartPlay(urlToPlay, 0, 'netflix', 0);
@@ -682,7 +688,7 @@ const MovieDetailsModal = React.memo(({
                           whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(147,51,234,0.3)' }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
-                            const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
+                            const urlToPlay = isSeries && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
                             handlePlay(urlToPlay, 0, 'special');
                           }}
                           className={`bg-purple-600 text-white hover:bg-purple-500 px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-all`}
@@ -704,12 +710,12 @@ const MovieDetailsModal = React.memo(({
                     </motion.button>
                   )}
 
-                  {!isLocked && (movie.videoUrl2 || (movie.type === 'series' && movie.episodes && movie.episodes.some(e => e.videoUrl2))) && (
+                  {!isLocked && (movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.some(e => e.videoUrl2))) && (
                     <motion.button 
                       whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255,255,255,0.3)' }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => {
-                        const urlToPlay = movie.type === 'series' && movie.episodes && movie.episodes.length > 0 ? (movie.episodes[0].videoUrl2 || movie.episodes[0].videoUrl) : movie.videoUrl2;
+                        const urlToPlay = isSeries && movie.episodes && movie.episodes.length > 0 ? (movie.episodes[0].videoUrl2 || movie.episodes[0].videoUrl) : movie.videoUrl2;
                         handlePlay(urlToPlay, 0);
                       }}
                       className={`bg-white text-black hover:bg-gray-200 px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-all`}
@@ -730,7 +736,7 @@ const MovieDetailsModal = React.memo(({
                   onClick={async () => {
                     setIsBfLoading(true);
                     try {
-                      const isMovie = movie.type !== 'series';
+                      const isMovie = !isSeries;
                       const title = movie.title || movie.name || '';
                       const year = movie.release_date
                         ? new Date(movie.release_date).getFullYear()
@@ -892,7 +898,7 @@ const MovieDetailsModal = React.memo(({
 
           {/* Tabs Section */}
           <div className="flex gap-6 md:gap-10 mb-8 md:mb-12 border-b-2 border-white/10 overflow-x-auto no-scrollbar sticky top-0 bg-[#040714]/80 backdrop-blur-3xl z-50 py-2 px-6 md:px-12">
-            {movie.type === 'series' && (
+            {isSeries && (
               <button 
                 onClick={() => setActiveInfoTab('episodes')}
                 className={`pb-4 md:pb-5 text-sm md:text-base font-bold uppercase tracking-[0.15em] transition-all relative whitespace-nowrap pt-4 ${activeInfoTab === 'episodes' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
@@ -1116,7 +1122,7 @@ const MovieDetailsModal = React.memo(({
                 </div>
               </motion.div>
             )}
-            {activeInfoTab === 'episodes' && movie.type === 'series' && (
+            {activeInfoTab === 'episodes' && isSeries && (
               <motion.div 
                 key="episodes"
                 initial={{ opacity: 0, y: 20 }}

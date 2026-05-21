@@ -114,12 +114,16 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
         const { data } = await tmdb.get(endpoint, { params: searchParamsTMDB });
         tmdbResults = data.results?.filter((r: any) => r.media_type !== 'person') || [];
 
-        let filteredTmdb = tmdbResults.map((r: any) => ({
-            ...r,
-            title: r.title || r.name,
-            media_type: r.media_type || (r.title ? 'movie' : 'tv'),
-            _isTmdb: true
-        })).filter((r: any) => {
+        let filteredTmdb = tmdbResults.map((r: any) => {
+            const resolvedMediaType = r.media_type || (r.first_air_date !== undefined ? 'tv' : 'movie');
+            return {
+              ...r,
+              title: r.title || r.name,
+              media_type: resolvedMediaType,
+              type: resolvedMediaType === 'tv' ? 'series' : 'movie',
+              _isTmdb: true,
+            };
+        }).filter((r: any) => {
             const matchesRating = !minRating || (r.vote_average >= minRating);
             const matchesYear = !year || (r.release_date || r.first_air_date || "").includes(year);
             return matchesRating && matchesYear;
@@ -161,39 +165,37 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
 
   // Deduplicate merged results for final render
   const mergedDisplayResults = useMemo(() => {
-     // Combine synchronous local results using Title+Year
-     const localsMap = new globalThis.Map<string, Movie>();
+     // Mapa de resultados locais — chave primária é o ID numérico do item
+     const localsById = new globalThis.Map<any, Movie>();
      localResults.forEach(loc => {
-        localsMap.set(getMovieKey(loc), loc);
+        localsById.set(loc.id, loc);
      });
-     
+
      const externals: any[] = [];
-     
+
      externalResults.forEach((ext: any) => {
-        const extKey = getMovieKey(ext);
-        // Check if this TMDB match ALREADY exists in the ENTIRE library
-        const existingInLibrary = myMovies.find(m => m.id === ext.id || getMovieKey(m) === extKey);
-        
+        // Se o item externo já está na biblioteca (por ID), mostra como local com dados corretos
+        const existingInLibrary = myMovies.find(m => m.id == ext.id);
+
         if (existingInLibrary) {
-          // If we already own it, but our local text search missed it, add it to localsMap!
-          if (!localsMap.has(extKey)) {
-             localsMap.set(extKey, existingInLibrary);
+          // Garante que aparece com dados completos da biblioteca (type, episodes, etc.)
+          if (!localsById.has(existingInLibrary.id)) {
+             localsById.set(existingInLibrary.id, existingInLibrary);
           }
         } else {
-          // Truly an external suggestion
-          // Ensure we don't duplicate suggestions
-          if (!externals.some(e => e.id === ext.id || getMovieKey(e) === extKey)) {
+          // Sugestão externa genuína — deduplica por ID
+          if (!externals.some(e => e.id == ext.id)) {
             externals.push(ext);
           }
         }
      });
 
-     const locals = Array.from(localsMap.values());
-     
-     // Annotate the arrays to easily render badges
+     const locals = Array.from(localsById.values());
+
+     // Anota os arrays para renderizar badges
      const annotatedLocals = locals.map((m: any) => ({ ...(m as any), _isLocal: true }));
      const annotatedExternals = externals.map((m: any) => ({ ...(m as any), _isLocal: false }));
-     
+
      return [...annotatedLocals, ...annotatedExternals];
   }, [localResults, externalResults, myMovies]);
 
