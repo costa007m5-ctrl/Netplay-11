@@ -72,6 +72,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [isExtractingTerabox, setIsExtractingTerabox] = useState(false);
   const [extractedQualities, setExtractedQualities] = useState<{ id: string; label: string; url: string }[]>([]);
   const [dubbingOptions, setDubbingOptions] = useState<{ id: string; label: string; url: string }[]>([]);
+
+  // BetterFlix stream resolution
+  const [bfStreamUrl, setBfStreamUrl] = useState<string | null>(null);
+  const [bfLoading, setBfLoading] = useState(false);
+  const [bfFailed, setBfFailed] = useState(false);
   
   const [emotes, setEmotes] = useState<{ id: string; emoji: string; x: number; y: number }[]>([]);
   const [showEmotePicker, setShowEmotePicker] = useState(false);
@@ -345,6 +350,62 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   useEffect(() => {
     setFinalVideoUrl(getInitialFinalVideoUrl());
   }, [movie.id, movie.videoUrl]);
+
+  // Resolve BetterFlix stream URL para usar no NetflixPlayer nativo
+  useEffect(() => {
+    const currentUrl = movie.videoUrl || '';
+    const isBF = currentUrl.includes('betterflix.click') || initialPlayerStyle === 'betterflix';
+    if (!isBF) {
+      setBfStreamUrl(null);
+      setBfLoading(false);
+      setBfFailed(false);
+      return;
+    }
+
+    let id: string, type: string, season: string, episode: string;
+    if (currentUrl.includes('betterflix.click')) {
+      try {
+        const urlParams = new URLSearchParams(currentUrl.split('?')[1] || '');
+        id = urlParams.get('id') || String(movie.id);
+        type = urlParams.get('type') || (movie.type === 'series' ? 'tv' : 'movie');
+        season = urlParams.get('season') || '1';
+        episode = urlParams.get('episode') || '1';
+      } catch {
+        id = String(movie.id);
+        type = movie.type === 'series' ? 'tv' : 'movie';
+        season = '1';
+        episode = '1';
+      }
+    } else {
+      id = String(movie.id);
+      type = movie.type === 'series' ? 'tv' : 'movie';
+      season = '1';
+      episode = '1';
+    }
+
+    setBfLoading(true);
+    setBfStreamUrl(null);
+    setBfFailed(false);
+
+    const abort = new AbortController();
+    fetch(
+      `/api/betterflix/stream?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}&season=${encodeURIComponent(season)}&episode=${encodeURIComponent(episode)}`,
+      { signal: abort.signal }
+    )
+      .then(r => r.json())
+      .then(data => {
+        if (abort.signal.aborted) return;
+        if (data.streamUrl) {
+          setBfStreamUrl(data.streamUrl);
+        } else {
+          setBfFailed(true);
+        }
+      })
+      .catch(() => { if (!abort.signal.aborted) setBfFailed(true); })
+      .finally(() => { if (!abort.signal.aborted) setBfLoading(false); });
+
+    return () => abort.abort();
+  }, [movie.id, movie.videoUrl, initialPlayerStyle]);
 
   // Pre-warm KingX/direct HLS URLs as soon as they are loaded so CDN edges are hot
   useEffect(() => {
@@ -1022,20 +1083,87 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     }
   }, [isKingX, playerStyle]);
 
-  // BetterFlix iframe player — renderizado antes do NetflixPlayer
+  // BetterFlix — resolve stream e exibe no NetflixPlayer nativo
   const isBetterFlixUrl = url.includes('betterflix.click');
   if (isBetterFlixUrl || playerStyle === 'betterflix') {
     const bfSrc = isBetterFlixUrl ? url : (movie.videoUrl || '');
-    const bfTitle = movie.title || movie.name || 'Ao Vivo';
+    const bfTitle = movie.title || movie.name || 'Assistindo';
     const bfYear = movie.release_date
       ? new Date(movie.release_date).getFullYear()
       : movie.first_air_date
       ? new Date(movie.first_air_date).getFullYear()
       : null;
     const bfIsTV = movie.type === 'series';
+    const closeBtn = (
+      <button
+        onClick={onClose}
+        className="absolute top-3 left-3 z-20 w-9 h-9 rounded-xl bg-black/60 hover:bg-black/80 border border-white/10 text-white flex items-center justify-center transition-all backdrop-blur-md group"
+        aria-label="Fechar"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    );
+
+    // Carregando resolução
+    if (bfLoading) {
+      return (
+        <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center gap-4">
+          {closeBtn}
+          <div className="w-12 h-12 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex flex-col items-center gap-1.5">
+            <p className="text-white font-semibold text-sm">{bfTitle}{bfYear ? ` (${bfYear})` : ''}</p>
+            <p className="text-white/40 text-xs">Carregando stream…</p>
+            <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/15 border border-orange-500/30 px-1.5 py-0.5 rounded-md mt-1">
+              API Flix
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // Stream resolvido — usa NetflixPlayer nativo com hls.js
+    if (bfStreamUrl && !bfFailed) {
+      return (
+        <div className="relative w-full h-full">
+          <NetflixPlayer
+            src={bfStreamUrl}
+            title={bfTitle}
+            seriesTitle={bfIsTV ? (movie.title || movie.name || '') : undefined}
+            episodes={bfIsTV && (movie.episodes?.length ?? 0) > 0 ? movie.episodes : undefined}
+            backdropUrl={movie.backdrop_path}
+            logoUrl={movieLogo || undefined}
+            onClose={onClose}
+            initialTime={initialTime ?? movie.last_position ?? 0}
+            isMovie={!bfIsTV}
+            hasNextEpisode={false}
+            recommendations={recommendations}
+            onSelectRecommendation={(rec) => {
+              const recUrl = rec.type === 'series' && rec.episodes?.length ? rec.episodes[0].videoUrl : rec.videoUrl;
+              if (onPlayNext) onPlayNext(rec, recUrl || '');
+            }}
+            onNextEpisode={() => {}}
+            videoUrlOptions={[]}
+            isHost={isHost}
+            roomId={roomId}
+            profile={profile}
+            maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
+            onProgress={async (time, duration) => {
+              currentTimeRef.current = time;
+              if (duration !== undefined) durationRef.current = duration;
+              if (onProgress) onProgress(movie.id, time, movie.videoUrl);
+            }}
+            isBackgroundMode={isBackgroundMode}
+            onClickBackground={onClickBackground}
+          />
+        </div>
+      );
+    }
+
+    // Fallback iframe — stream não pôde ser extraído
     return (
       <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
-        {/* Top bar */}
         <div className="relative z-10 flex items-center gap-3 px-4 py-2.5 bg-gradient-to-b from-black/95 via-black/60 to-transparent shrink-0">
           <button
             onClick={onClose}
@@ -1060,14 +1188,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                   Série
                 </span>
               )}
-              <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                Ao Vivo
-              </span>
             </div>
           </div>
         </div>
-        {/* Player iframe — fills remaining space */}
         <div className="flex-1 relative">
           <iframe
             src={bfSrc}
