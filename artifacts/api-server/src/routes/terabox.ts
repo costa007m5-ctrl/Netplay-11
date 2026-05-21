@@ -112,6 +112,15 @@ router.get("/terabox-pro", async (req, res) => {
   if (apiKey) {
     try {
       const data = await callTeraboxApi(url, apiKey, { nocache: useNocache });
+      // Normalizar nomes de arquivo para formato consistente com V3
+      // O V1 (xapiverse) retorna dados brutos onde o nome real pode estar em
+      // server_filename, filename ou name — padronizamos tudo para filename+name
+      if (data && Array.isArray(data.list)) {
+        data.list = data.list.map((f: any) => {
+          const resolvedName = f.server_filename || f.filename || f.name || '';
+          return { ...f, filename: resolvedName, name: resolvedName, server_filename: resolvedName };
+        });
+      }
       const list: any[] = Array.isArray(data?.list) ? data.list : [];
       const hasPlayable = list.some((f) => pickBestUrl(f));
       if (hasPlayable || !allowFallback || !v2Key) {
@@ -143,7 +152,16 @@ router.get("/terabox-pro", async (req, res) => {
       );
       // Marca a resposta para client saber que veio de fallback
       const data = v2Resp.data;
-      if (data && typeof data === "object") (data as any)._source = "v2-fallback";
+      if (data && typeof data === "object") {
+        (data as any)._source = "v2-fallback";
+        // Normalizar nomes para formato consistente
+        if (Array.isArray(data.list)) {
+          data.list = data.list.map((f: any) => {
+            const resolvedName = f.server_filename || f.filename || f.name || '';
+            return { ...f, filename: resolvedName, name: resolvedName, server_filename: resolvedName };
+          });
+        }
+      }
       res.json(data);
       return;
     } catch (error: unknown) {

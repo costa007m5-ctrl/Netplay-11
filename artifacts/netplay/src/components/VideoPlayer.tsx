@@ -431,10 +431,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           if (list.length === 0) throw new Error('Pasta vazia ou expirada');
           if ((data as any)._source) console.log(`[VideoPlayer] dyn-ref resolvido via ${(data as any)._source}`);
 
+          // Helper: extrai o nome do arquivo de qualquer campo possível da resposta da API
+          // V1 (xapiverse) pode retornar em server_filename, V3 normaliza para filename
+          const getFn = (f: any): string =>
+            (f.server_filename || f.filename || f.name || '').trim();
+
           // Sort list by filename for consistent, deterministic ordering
           const sortedList = [...list].sort((a: any, b: any) => {
-            const nameA = (a.filename || a.name || '').toLowerCase();
-            const nameB = (b.filename || b.name || '').toLowerCase();
+            const nameA = getFn(a).toLowerCase();
+            const nameB = getFn(b).toLowerCase();
             return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
           });
 
@@ -446,15 +451,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           let file: any = null;
           if (filename) {
             const normFilename = normFn(filename);
-            file = sortedList.find(f => (f.filename || f.name) === filename)
-                || sortedList.find(f => (f.filename || f.name || '').toLowerCase() === filename.toLowerCase())
-                || sortedList.find(f => normFn(f.filename || f.name || '') === normFilename);
+            file = sortedList.find(f => getFn(f) === filename)
+                || sortedList.find(f => getFn(f).toLowerCase() === filename.toLowerCase())
+                || sortedList.find(f => normFn(getFn(f)) === normFilename);
             if (!file) {
               const epCodeMatch = filename.match(/S(\d+)E(\d+)/i);
               if (epCodeMatch) {
                 const targetCode = epCodeMatch[0].toUpperCase();
-                file = sortedList.find(f => (f.filename || f.name || '').toUpperCase().includes(targetCode)) || null;
-                if (file) console.log(`[VideoPlayer] dyn-ref: match parcial por código de episódio "${targetCode}"`);
+                file = sortedList.find(f => getFn(f).toUpperCase().includes(targetCode)) || null;
+                if (file) console.log(`[VideoPlayer] dyn-ref: match parcial por código de episódio "${targetCode}" → ${getFn(file)}`);
               }
             }
             // Partial normalized match — strip extension and compare base names
@@ -462,17 +467,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               const baseFilename = normFilename.replace(/\.[^.]+$/, '');
               if (baseFilename.length > 4) {
                 file = sortedList.find(f => {
-                  const baseFn = normFn(f.filename || f.name || '').replace(/\.[^.]+$/, '');
+                  const baseFn = normFn(getFn(f)).replace(/\.[^.]+$/, '');
                   return baseFn === baseFilename || baseFn.includes(baseFilename) || baseFilename.includes(baseFn);
                 }) || null;
-                if (file) console.log(`[VideoPlayer] dyn-ref: match parcial normalizado "${baseFilename}" → ${file?.filename || file?.name}`);
+                if (file) console.log(`[VideoPlayer] dyn-ref: match parcial normalizado "${baseFilename}" → ${getFn(file)}`);
               }
             }
           }
           // Filtrar apenas arquivos de vídeo para o fallback por índice
           // (evita pegar legendas, thumbnails, etc. que quebrariam a correspondência posicional)
           const VIDEO_EXT_RE = /\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts|mts|vob|3gp|rmvb|rm|ogv|m3u8)$/i;
-          const videoOnlyList = sortedList.filter((f: any) => VIDEO_EXT_RE.test(f.filename || f.name || ''));
+          const videoOnlyList = sortedList.filter((f: any) => VIDEO_EXT_RE.test(getFn(f)));
           const indexPool = videoOnlyList.length > 0 ? videoOnlyList : sortedList;
 
           // Fallback 1: look up episode metadata using SORTED episodes array (same sort as caller)
@@ -496,7 +501,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               const altX = `${epSeason}x${String(epNum).padStart(2, '0')}`;
               const epPad = String(epNum).padStart(2, '0');
               const byCode = sortedList.find((f: any) => {
-                const fn = (f.filename || f.name || '').toUpperCase();
+                const fn = getFn(f).toUpperCase();
                 return (
                   fn.includes(sePadded.toUpperCase()) ||
                   fn.includes(seShort.toUpperCase()) ||
