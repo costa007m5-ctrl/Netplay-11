@@ -24,6 +24,7 @@ import AdminTeraboxV3Tab from './AdminTeraboxV3Tab';
 import AdminQuenteTab from './AdminQuenteTab';
 import AdminEpisodeSettingsTab from './AdminEpisodeSettingsTab';
 import AdminFlixAPITab from './AdminFlixAPITab';
+import AdminNet2Tab from './AdminNet2Tab';
 import QualitySelect from './QualitySelect';
 import MigrateBatchPanel from './MigrateBatchPanel';
 
@@ -55,7 +56,7 @@ interface AdminPanelProps {
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1691,6 +1692,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Activity },
               { id: 'quente', label: 'Quente', icon: Activity },
+              { id: 'net2', label: 'Net 2.0', icon: Tv },
               { id: 'flixapi', label: 'API Flix', icon: Tv },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
@@ -2267,6 +2269,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminMercadoPagoTab />
             ) : activeTab === 'referrals' ? (
               <AdminReferralsTab />
+            ) : activeTab === 'net2' ? (
+              <AdminNet2Tab />
             ) : activeTab === 'flixapi' ? (
               <AdminFlixAPITab />
             ) : activeTab === 'apis' ? (
