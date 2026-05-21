@@ -663,6 +663,17 @@ const CustomUrlModal: React.FC<CustomUrlModalProps> = ({
                             </div>
 
                             <div className="space-y-2">
+                              <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest ml-4">Sinopse do Episódio</label>
+                              <textarea
+                                value={(ep as any).overview || ''}
+                                onChange={(e) => handleEpisodeChange(index, 'overview' as any, e.target.value)}
+                                placeholder="Descrição do que acontece neste episódio..."
+                                rows={2}
+                                className="w-full bg-black/40 text-white px-6 py-4 rounded-2xl outline-none border border-white/5 focus:border-red-600/50 transition-all font-bold italic text-xs resize-none"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
                               <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest ml-4">Link do Vídeo</label>
                               <input
                                 type="text"

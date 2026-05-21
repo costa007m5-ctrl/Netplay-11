@@ -4946,7 +4946,7 @@ export default function App() {
       await handleCreateMovie({
         ...movie,
         videoUrl: 'REQUESTED',
-        is_hidden: true
+        is_hidden: false
       });
       alert('Entendido! Sua indicação foi enviada aos comandantes. Fique de olho nas novidades!');
     } catch (err) {
