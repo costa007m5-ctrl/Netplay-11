@@ -2823,9 +2823,15 @@ const MovieDetailRouteWrapper = ({
   
   const videoUrl = useMemo(() => {
     if (!movie) return '';
-    // For series, if no specific episode URL was requested, start from the first episode
+    // For series: always use the sorted first episode as fallback (not DB insertion order)
     const firstEpisodeUrl = movie.type === 'series' && movie.episodes && movie.episodes.length > 0
-      ? movie.episodes[0].videoUrl || movie.episodes[0].videoUrl2 || ''
+      ? (() => {
+          const sorted = [...movie.episodes].sort((a: any, b: any) => {
+            const sa = (a.season || 1) - (b.season || 1);
+            return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+          });
+          return sorted[0]?.videoUrl || sorted[0]?.videoUrl2 || '';
+        })()
       : '';
     return episodeUrlFromState || movie.video_url || movie.videoUrl || firstEpisodeUrl || '';
   }, [movie, episodeUrlFromState]);
@@ -5738,10 +5744,15 @@ export default function App() {
   const handlePlayNextEpisode = (currentMovie: Movie) => {
     if (currentMovie.type !== 'series' || !currentMovie.episodes) return;
 
-    const currentEpIndex = currentMovie.episodes.findIndex(ep => ep.videoUrl === currentMovie.videoUrl);
+    // Usar episódios ordenados por temporada→episódio para "próximo episódio" correto
+    const sortedEpsForNext = [...currentMovie.episodes].sort((a: any, b: any) => {
+      const sa = (a.season || 1) - (b.season || 1);
+      return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+    });
+    const currentEpIndex = sortedEpsForNext.findIndex((ep: any) => ep.videoUrl === currentMovie.videoUrl || ep.videoUrl2 === currentMovie.videoUrl);
     
-    if (currentEpIndex !== -1 && currentEpIndex < currentMovie.episodes.length - 1) {
-      const nextEp = currentMovie.episodes[currentEpIndex + 1];
+    if (currentEpIndex !== -1 && currentEpIndex < sortedEpsForNext.length - 1) {
+      const nextEp = sortedEpsForNext[currentEpIndex + 1];
       const rawUrl = nextEp.videoUrl || '';
       let nextUrl = rawUrl;
       let nextPlayerStyle: string | undefined = undefined;

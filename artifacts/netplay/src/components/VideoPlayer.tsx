@@ -469,6 +469,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               }
             }
           }
+          // Filtrar apenas arquivos de vídeo para o fallback por índice
+          // (evita pegar legendas, thumbnails, etc. que quebrariam a correspondência posicional)
+          const VIDEO_EXT_RE = /\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts|mts|vob|3gp|rmvb|rm|ogv|m3u8)$/i;
+          const videoOnlyList = sortedList.filter((f: any) => VIDEO_EXT_RE.test(f.filename || f.name || ''));
+          const indexPool = videoOnlyList.length > 0 ? videoOnlyList : sortedList;
+
           // Fallback 1: look up episode metadata using SORTED episodes array (same sort as caller)
           // initialEpisodeIndex is now always the season→episode sorted position passed from MovieDetailsModal
           if (!file && initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0) {
@@ -508,15 +514,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
               }
             }
 
-            // Last resort: use the sorted index directly into the alphabetically-sorted folder list
-            // This works because both the UI and sortedList use the same ordering principle
-            if (!file && initialEpisodeIndex < sortedList.length) {
-              file = sortedList[initialEpisodeIndex];
-              console.log(`[VideoPlayer] dyn-ref: usando índice ordenado ${initialEpisodeIndex} → ${(file?.filename || file?.name) ?? '?'}`);
+            // Last resort: use the sorted index into the VIDEO-ONLY pool
+            // (legendas/thumbnails são excluídos de indexPool para evitar seleção errada)
+            if (!file && initialEpisodeIndex < indexPool.length) {
+              file = indexPool[initialEpisodeIndex];
+              console.log(`[VideoPlayer] dyn-ref: usando índice ordenado ${initialEpisodeIndex} (pool de vídeos: ${indexPool.length}) → ${(file?.filename || file?.name) ?? '?'}`);
             }
           }
-          // Fallback 2: first sorted file
-          if (!file) file = sortedList[0] || list[0];
+          // Fallback 2: first sorted video file
+          if (!file) file = indexPool[0] || sortedList[0] || list[0];
 
           // Build COMPLETE quality list
           const fs = file.fast_stream_url || {};

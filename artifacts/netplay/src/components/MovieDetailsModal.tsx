@@ -1099,10 +1099,16 @@ const MovieDetailsModal = React.memo(({
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 md:gap-6">
                   {episodesBySeason[selectedSeason]?.map((ep, idx) => {
+                    // Robust episode comparison: ref equality → id → videoUrl → videoUrl2
+                    const sameEp = (a: any, b: any) =>
+                      a === b ||
+                      (a.id && b.id && String(a.id) === String(b.id)) ||
+                      (a.videoUrl && b.videoUrl && a.videoUrl === b.videoUrl) ||
+                      (a.videoUrl2 && b.videoUrl2 && a.videoUrl2 === b.videoUrl2);
                     // Raw index used only for progress tracking (keyed by DB insertion order)
-                    const epIdxInAll = movie.episodes?.findIndex((e: any) => e === ep || (e.id && e.id === ep.id)) ?? -1;
+                    const epIdxInAll = movie.episodes?.findIndex((e: any) => sameEp(e, ep)) ?? -1;
                     // Sorted index (season→episode order) used for Terabox folder file lookup
-                    const epSortedIdx = sortedEpisodesFlat.findIndex((e: any) => e === ep || (e.id && e.id === ep.id));
+                    const epSortedIdx = sortedEpisodesFlat.findIndex((e: any) => sameEp(e, ep));
                     const prog = epIdxInAll >= 0 ? epProgress[epIdxInAll] : undefined;
                     const progressPct = prog && prog.dur > 0 ? Math.min(100, (prog.pos / prog.dur) * 100) : 0;
                     const isWatched = progressPct >= 90;
@@ -1300,7 +1306,8 @@ const MovieDetailsModal = React.memo(({
                 <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-transparent" />
                 <button 
                   onClick={() => {
-                    const detailIdx = sortedEpisodesFlat.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id));
+                    const _sameEpD = (a: any, b: any) => a === b || (a.id && b.id && String(a.id) === String(b.id)) || (a.videoUrl && b.videoUrl && a.videoUrl === b.videoUrl) || (a.videoUrl2 && b.videoUrl2 && a.videoUrl2 === b.videoUrl2);
+                    const detailIdx = sortedEpisodesFlat.findIndex((e: any) => _sameEpD(e, selectedEpisodeDetails));
                     triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
                   }}
                   className="absolute inset-0 flex items-center justify-center group-hover:bg-black/20 transition-all"
@@ -1333,7 +1340,8 @@ const MovieDetailsModal = React.memo(({
                    <button
                      onClick={(e) => {
                        e.stopPropagation();
-                       const detailIdx = sortedEpisodesFlat.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id));
+                       const _sameEpD2 = (a: any, b: any) => a === b || (a.id && b.id && String(a.id) === String(b.id)) || (a.videoUrl && b.videoUrl && a.videoUrl === b.videoUrl) || (a.videoUrl2 && b.videoUrl2 && a.videoUrl2 === b.videoUrl2);
+                       const detailIdx = sortedEpisodesFlat.findIndex((e: any) => _sameEpD2(e, selectedEpisodeDetails));
                        triggerSmartPlay(selectedEpisodeDetails.videoUrl || selectedEpisodeDetails.videoUrl2 || '', 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
                      }}
                      className="bg-white hover:bg-gray-200 text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
@@ -1344,7 +1352,8 @@ const MovieDetailsModal = React.memo(({
                      <button
                        onClick={(e) => {
                          e.stopPropagation();
-                         const detailIdx = sortedEpisodesFlat.findIndex((e: any) => e === selectedEpisodeDetails || (e.id && e.id === selectedEpisodeDetails.id));
+                         const _sameEpD3 = (a: any, b: any) => a === b || (a.id && b.id && String(a.id) === String(b.id)) || (a.videoUrl && b.videoUrl && a.videoUrl === b.videoUrl) || (a.videoUrl2 && b.videoUrl2 && a.videoUrl2 === b.videoUrl2);
+                         const detailIdx = sortedEpisodesFlat.findIndex((e: any) => _sameEpD3(e, selectedEpisodeDetails));
                          handlePlay(selectedEpisodeDetails.videoUrl2, 0, 'netflix', detailIdx >= 0 ? detailIdx : undefined);
                        }}
                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest italic flex items-center gap-2 transition-all"
