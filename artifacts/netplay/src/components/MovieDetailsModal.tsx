@@ -171,12 +171,64 @@ const MovieDetailsModal = React.memo(({
   const [epProgress, setEpProgress] = useState<Record<number, { pos: number; dur: number }>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Episódios buscados do TMDB quando a série não tem episódios locais
+  const [tmdbFetchedEpisodes, setTmdbFetchedEpisodes] = useState<any[]>([]);
+  const [isFetchingTmdbEpisodes, setIsFetchingTmdbEpisodes] = useState(false);
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`netplay_ep_progress_${movie.id}`);
       if (stored) setEpProgress(JSON.parse(stored));
     } catch {}
   }, [movie.id]);
+
+  // Busca episódios do TMDB automaticamente quando a série não tem episódios cadastrados
+  useEffect(() => {
+    if (!isSeries || (movie.episodes && movie.episodes.length > 0) || isFetchingTmdbEpisodes) return;
+
+    const fetchTmdbEpisodes = async () => {
+      setIsFetchingTmdbEpisodes(true);
+      try {
+        // 1. Busca detalhes da série para saber quantas temporadas existem
+        const detailsRes = await tmdb.get(requests.tvDetails(movie.id), { params: { language: 'pt-BR' } });
+        const numberOfSeasons: number = detailsRes.data.number_of_seasons || 1;
+
+        // 2. Busca episódios de cada temporada
+        const allEpisodes: any[] = [];
+        for (let season = 1; season <= numberOfSeasons; season++) {
+          try {
+            const seasonRes = await tmdb.get(requests.tvSeasonDetails(movie.id, season), { params: { language: 'pt-BR' } });
+            const eps = seasonRes.data.episodes || [];
+            eps.forEach((ep: any) => {
+              allEpisodes.push({
+                id: ep.id,
+                title: ep.name,
+                episode: ep.episode_number,
+                season: ep.season_number,
+                overview: ep.overview || '',
+                still_path: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : null,
+                runtime: ep.runtime || 0,
+                rating: ep.vote_average || 0,
+                videoUrl: '',
+                videoUrl2: '',
+                _tmdbOnly: true,
+              });
+            });
+          } catch {}
+        }
+
+        if (allEpisodes.length > 0) {
+          setTmdbFetchedEpisodes(allEpisodes);
+        }
+      } catch (e) {
+        console.warn('[MovieDetailsModal] Falha ao buscar episódios do TMDB:', e);
+      } finally {
+        setIsFetchingTmdbEpisodes(false);
+      }
+    };
+
+    fetchTmdbEpisodes();
+  }, [isSeries, movie.id, movie.episodes]);
 
   const handlePlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
     onPlay(movie, episodeUrl, startTime, playerStyle, episodeIndex);
@@ -262,31 +314,34 @@ const MovieDetailsModal = React.memo(({
     return null;
   }, [movie, savedUrl]);
 
+  // Usa episódios locais se disponíveis, caso contrário usa os buscados do TMDB
+  const effectiveEpisodes = useMemo(() => {
+    if (movie.episodes && movie.episodes.length > 0) return movie.episodes;
+    return tmdbFetchedEpisodes;
+  }, [movie.episodes, tmdbFetchedEpisodes]);
+
   // Organizar episódios por temporada e ordenar por número do episódio
   const episodesBySeason = useMemo(() => {
-    const bySeason = movie.episodes?.reduce((acc, ep) => {
+    const bySeason = effectiveEpisodes.reduce((acc: any, ep: any) => {
       const s = ep.season || 1;
       if (!acc[s]) acc[s] = [];
       acc[s].push(ep);
       return acc;
-    }, {} as Record<number, typeof movie.episodes>) || {};
-    // Sort episodes within each season by episode number ascending
-    Object.values(bySeason).forEach(eps => eps?.sort((a: any, b: any) => (a.episode || 0) - (b.episode || 0)));
+    }, {} as Record<number, any[]>);
+    // Ordenar episódios dentro de cada temporada pelo número do episódio
+    Object.values(bySeason).forEach((eps: any) => eps?.sort((a: any, b: any) => (a.episode || 0) - (b.episode || 0)));
     return bySeason;
-  }, [movie.episodes]);
+  }, [effectiveEpisodes]);
 
   const seasons = useMemo(() => Object.keys(episodesBySeason).map(Number).sort((a, b) => a - b), [episodesBySeason]);
 
-  // Flat list of ALL episodes sorted by season then episode number.
-  // This sorted index is passed to the player so it aligns with how Terabox
-  // folder files are returned (alphabetically sorted), avoiding random episode selection.
+  // Lista flat de TODOS os episódios ordenada por temporada e número do episódio.
   const sortedEpisodesFlat = useMemo(() => {
-    if (!movie.episodes) return [];
-    return [...movie.episodes].sort((a: any, b: any) => {
+    return [...effectiveEpisodes].sort((a: any, b: any) => {
       const sa = (a.season || 1) - (b.season || 1);
       return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
     });
-  }, [movie.episodes]);
+  }, [effectiveEpisodes]);
 
   useEffect(() => {
     // Reset states when movie changes
@@ -1130,6 +1185,23 @@ const MovieDetailsModal = React.memo(({
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
+                {/* Loading enquanto busca episódios do TMDB */}
+                {isFetchingTmdbEpisodes && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-4">
+                    <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-gray-400 text-sm font-bold uppercase tracking-widest">Carregando episódios...</p>
+                  </div>
+                )}
+
+                {/* Aviso quando não há episódios e não está carregando */}
+                {!isFetchingTmdbEpisodes && effectiveEpisodes.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <p className="text-gray-500 text-sm font-bold uppercase tracking-widest">Nenhum episódio disponível</p>
+                  </div>
+                )}
+
+                {!isFetchingTmdbEpisodes && effectiveEpisodes.length > 0 && (
+                <>
                 <div className="flex items-center justify-between">
                   <div className="relative group">
                     <select 
@@ -1143,11 +1215,17 @@ const MovieDetailsModal = React.memo(({
                     </select>
                     <Plus size={20} className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 rotate-45" />
                   </div>
-                  <span className="text-gray-500 font-black uppercase tracking-widest text-xs">{episodesBySeason[selectedSeason]?.length || 0} Episódios</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-gray-500 font-black uppercase tracking-widest text-xs">{episodesBySeason[selectedSeason]?.length || 0} Episódios</span>
+                    {tmdbFetchedEpisodes.length > 0 && (
+                      <span className="text-gray-600 text-[10px] uppercase tracking-widest">Informações via TMDB</span>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 md:gap-6">
-                  {episodesBySeason[selectedSeason]?.map((ep, idx) => {
+                  {episodesBySeason[selectedSeason]?.map((ep: any, idx: number) => {
+                    const isTmdbOnly = !!ep._tmdbOnly || (!ep.videoUrl && !ep.videoUrl2);
                     // Robust episode comparison: ref equality → id → videoUrl → videoUrl2
                     const sameEp = (a: any, b: any) =>
                       a === b ||
@@ -1155,7 +1233,7 @@ const MovieDetailsModal = React.memo(({
                       (a.videoUrl && b.videoUrl && a.videoUrl === b.videoUrl) ||
                       (a.videoUrl2 && b.videoUrl2 && a.videoUrl2 === b.videoUrl2);
                     // Raw index used only for progress tracking (keyed by DB insertion order)
-                    const epIdxInAll = movie.episodes?.findIndex((e: any) => sameEp(e, ep)) ?? -1;
+                    const epIdxInAll = effectiveEpisodes.findIndex((e: any) => sameEp(e, ep)) ?? -1;
                     // Sorted index (season→episode order) used for Terabox folder file lookup
                     const epSortedIdx = sortedEpisodesFlat.findIndex((e: any) => sameEp(e, ep));
                     const prog = epIdxInAll >= 0 ? epProgress[epIdxInAll] : undefined;
@@ -1174,11 +1252,11 @@ const MovieDetailsModal = React.memo(({
                       </div>
                       
                       <div
-                        className="relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl group/ep z-10"
+                        className={`relative w-32 md:w-64 aspect-video rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 bg-gray-900 shadow-xl z-10 ${!isTmdbOnly ? 'group/ep cursor-pointer' : 'cursor-default'}`}
                         onClick={(e) => {
+                          if (isTmdbOnly) return;
                           e.stopPropagation();
                           const savedPos = isInProgress && prog ? prog.pos : 0;
-                          // Pass sorted index so VideoPlayer maps correctly to alphabetically-sorted folder files
                           triggerSmartPlay(ep.videoUrl || ep.videoUrl2 || '', savedPos, 'netflix', epSortedIdx >= 0 ? epSortedIdx : epIdxInAll >= 0 ? epIdxInAll : undefined);
                         }}
                       >
@@ -1188,12 +1266,21 @@ const MovieDetailsModal = React.memo(({
                           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                           referrerPolicy="no-referrer"
                         />
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/ep:opacity-100 transition-opacity">
-                          <Play size={32} className="text-white fill-white md:w-16 md:h-16" />
-                        </div>
-                        <div className="absolute bottom-1 right-1 md:bottom-2 md:right-2 bg-black/80 px-1.5 md:px-2 py-0.5 md:py-1 rounded text-[6px] md:text-[8px] font-black text-white italic">
-                           {getVideoSourceType(ep.videoUrl)}
-                        </div>
+                        {!isTmdbOnly && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/ep:opacity-100 transition-opacity">
+                            <Play size={32} className="text-white fill-white md:w-16 md:h-16" />
+                          </div>
+                        )}
+                        {isTmdbOnly && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <span className="text-[8px] md:text-[10px] text-gray-400 font-black uppercase tracking-widest text-center px-2">Sem link</span>
+                          </div>
+                        )}
+                        {!isTmdbOnly && (
+                          <div className="absolute bottom-1 right-1 md:bottom-2 md:right-2 bg-black/80 px-1.5 md:px-2 py-0.5 md:py-1 rounded text-[6px] md:text-[8px] font-black text-white italic">
+                            {getVideoSourceType(ep.videoUrl)}
+                          </div>
+                        )}
                         {/* Progress bar */}
                         {(isInProgress || isWatched) && (
                           <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
@@ -1251,6 +1338,8 @@ const MovieDetailsModal = React.memo(({
                     );
                   })}
                 </div>
+                </>
+                )}
               </motion.div>
             )}
             {activeInfoTab === 'similar' && (
