@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link as LinkIcon, Settings, User, LogOut, ShieldCheck, ChevronDown, Users, Search, Bell, PlusCircle, Sparkles, Home, TrendingUp, Bookmark, CloudDownload, Play, ChevronLeft, Cpu, X } from 'lucide-react';
+import { Link as LinkIcon, Settings, User, LogOut, ShieldCheck, ChevronDown, Users, Search, Bell, PlusCircle, Sparkles, Home, TrendingUp, Bookmark, CloudDownload, Play, ChevronLeft, Cpu, X, Tv2 } from 'lucide-react';
 import AdminModal from './AdminModal';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
@@ -213,8 +213,8 @@ const Navbar = React.memo(({
         {[
           { id: 'home', label: 'Início', icon: Home, path: '/menu' },
           { id: 'trending', label: 'Em Alta', icon: TrendingUp, path: '/trending' },
+          { id: 'canais', label: 'Canais TV', icon: Tv2, path: '/canais' },
           { id: 'novos-eps', label: 'Novos Ep.', icon: Bell, path: '/novos-episodios' },
-          { id: 'universe', label: 'Explorar', icon: Sparkles, path: '/universe' },
           { id: 'profile', label: 'Perfil', icon: User, path: '/perfil' },
         ].map((item) => {
           const isActive = activeTab === item.id && !isOnSearchPage;

@@ -1026,30 +1026,58 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const isBetterFlixUrl = url.includes('betterflix.click');
   if (isBetterFlixUrl || playerStyle === 'betterflix') {
     const bfSrc = isBetterFlixUrl ? url : (movie.videoUrl || '');
+    const bfTitle = movie.title || movie.name || 'Ao Vivo';
+    const bfYear = movie.release_date
+      ? new Date(movie.release_date).getFullYear()
+      : movie.first_air_date
+      ? new Date(movie.first_air_date).getFullYear()
+      : null;
+    const bfIsTV = movie.type === 'series';
     return (
       <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col">
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 bg-black/60 px-2 py-1 rounded-lg border border-orange-500/30">
-            API Flix
-          </span>
+        {/* Top bar */}
+        <div className="relative z-10 flex items-center gap-3 px-4 py-2.5 bg-gradient-to-b from-black/95 via-black/60 to-transparent shrink-0">
           <button
             onClick={onClose}
-            className="bg-black/70 hover:bg-red-600 text-white p-2 rounded-xl border border-white/10 transition-all backdrop-blur-sm"
+            className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/25 text-white flex items-center justify-center transition-all backdrop-blur-md group"
             aria-label="Fechar"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-black text-sm truncate max-w-[55vw] tracking-tight">{bfTitle}</span>
+              {bfYear && <span className="text-gray-500 text-xs shrink-0">{bfYear}</span>}
+            </div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/15 border border-orange-500/30 px-1.5 py-0.5 rounded-md">
+                API Flix
+              </span>
+              {bfIsTV && (
+                <span className="text-[9px] font-black uppercase tracking-widest text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-md">
+                  Série
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                Ao Vivo
+              </span>
+            </div>
+          </div>
         </div>
-        <iframe
-          src={bfSrc}
-          className="w-full h-full border-0"
-          allowFullScreen
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          referrerPolicy="origin"
-          title={movie.title || movie.name || 'BetterFlix Player'}
-        />
+        {/* Player iframe — fills remaining space */}
+        <div className="flex-1 relative">
+          <iframe
+            src={bfSrc}
+            className="absolute inset-0 w-full h-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
+            referrerPolicy="origin"
+            title={bfTitle}
+          />
+        </div>
       </div>
     );
   }

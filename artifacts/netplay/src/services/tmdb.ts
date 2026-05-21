@@ -89,6 +89,31 @@ export const getMovieLogo = async (id: number, type: 'movie' | 'tv' = 'movie'): 
   }
 };
 
+/**
+ * Searches TMDB by title and returns the correct TMDB numeric ID for use with
+ * external players (BetterFlix, etc.).  Falls back to null on any error.
+ */
+export const lookupTmdbId = async (
+  title: string,
+  type: 'movie' | 'tv' = 'movie',
+  year?: number | null,
+): Promise<number | null> => {
+  try {
+    const params: Record<string, string | number> = { query: title, language: 'pt-BR' };
+    if (year) params.year = year;
+    const { data } = await tmdb.get(requests.searchMulti, { params });
+    const results: any[] = data.results || [];
+    const mediaType = type === 'tv' ? 'tv' : 'movie';
+    const match =
+      results.find(r => r.media_type === mediaType) ||
+      results.find(r => r.media_type === 'movie' || r.media_type === 'tv') ||
+      null;
+    return match?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const fetchSeasonDetailsWithFallback = async (tvId: number, seasonNumber: number) => {
   const res = await tmdb.get(requests.tvSeasonDetails(tvId, seasonNumber), { params: { language: 'pt-BR' } });
   let episodes = res.data.episodes || [];

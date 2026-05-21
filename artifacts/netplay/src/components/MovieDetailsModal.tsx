@@ -8,6 +8,7 @@ import VideoPlayer from './VideoPlayer';
 import SmartPlayerSelector from './SmartPlayerSelector';
 import { isDynamicRef } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
+import { lookupTmdbId } from '../services/tmdb';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -156,6 +157,7 @@ const MovieDetailsModal = React.memo(({
   const [logoUrl, setLogoUrl] = useState<string | null>(movie.logo_path || null);
   const [selectedEpisodeDetails, setSelectedEpisodeDetails] = useState<any>(null);
   const [isResolvingUrl, setIsResolvingUrl] = useState(false);
+  const [isBfLoading, setIsBfLoading] = useState(false);
   const [showSmartSelector, setShowSmartSelector] = useState(false);
   const [pendingEpisodeUrl, setPendingEpisodeUrl] = useState<string | undefined>();
   const [pendingStartTime, setPendingStartTime] = useState(0);
@@ -719,31 +721,48 @@ const MovieDetailsModal = React.memo(({
                 </>
               )}
               
-              {/* API Flix button — always available when movie has TMDB ID */}
+              {/* API Flix button — looks up real TMDB ID before building URL */}
               {!isLocked && movie.id && (
                 <motion.button
-                  whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(251,146,60,0.25)' }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    const isMovie = movie.type !== 'series';
-                    if (isMovie) {
-                      handlePlay(buildBetterFlixUrl(movie.id, 'movie'), 0, 'betterflix');
-                    } else {
-                      const firstEp = movie.episodes && movie.episodes.length > 0
-                        ? [...movie.episodes].sort((a: any, b: any) => {
-                            const sa = (a.season || 1) - (b.season || 1);
-                            return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
-                          })[0]
+                  whileHover={{ scale: isBfLoading ? 1 : 1.05, boxShadow: '0 0 30px rgba(251,146,60,0.25)' }}
+                  whileTap={{ scale: isBfLoading ? 1 : 0.95 }}
+                  disabled={isBfLoading}
+                  onClick={async () => {
+                    setIsBfLoading(true);
+                    try {
+                      const isMovie = movie.type !== 'series';
+                      const title = movie.title || movie.name || '';
+                      const year = movie.release_date
+                        ? new Date(movie.release_date).getFullYear()
+                        : movie.first_air_date
+                        ? new Date(movie.first_air_date).getFullYear()
                         : null;
-                      const season = (firstEp as any)?.season ?? 1;
-                      const episode = (firstEp as any)?.episode ?? 1;
-                      handlePlay(buildBetterFlixUrl(movie.id, 'tv', season, episode), 0, 'betterflix');
+                      const tmdbId = await lookupTmdbId(title, isMovie ? 'movie' : 'tv', year);
+                      const id = tmdbId || movie.id;
+                      if (isMovie) {
+                        handlePlay(buildBetterFlixUrl(id, 'movie'), 0, 'betterflix');
+                      } else {
+                        const firstEp = movie.episodes && movie.episodes.length > 0
+                          ? [...movie.episodes].sort((a: any, b: any) => {
+                              const sa = (a.season || 1) - (b.season || 1);
+                              return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
+                            })[0]
+                          : null;
+                        const season = (firstEp as any)?.season ?? 1;
+                        const episode = (firstEp as any)?.episode ?? 1;
+                        handlePlay(buildBetterFlixUrl(id, 'tv', season, episode), 0, 'betterflix');
+                      }
+                    } finally {
+                      setIsBfLoading(false);
                     }
                   }}
-                  className="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/30 hover:border-orange-400/60 px-4 md:px-6 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 text-xs md:text-sm shadow-xl transition-all backdrop-blur-sm"
+                  className="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/30 hover:border-orange-400/60 px-4 md:px-6 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 text-xs md:text-sm shadow-xl transition-all backdrop-blur-sm disabled:opacity-70 disabled:cursor-wait"
                 >
-                  <Tv size={14} className="md:w-5 md:h-5" />
-                  <span className="whitespace-nowrap">API Flix</span>
+                  {isBfLoading
+                    ? <Loader2 size={14} className="md:w-5 md:h-5 animate-spin" />
+                    : <Tv size={14} className="md:w-5 md:h-5" />
+                  }
+                  <span className="whitespace-nowrap">{isBfLoading ? 'Buscando...' : 'API Flix'}</span>
                 </motion.button>
               )}
 

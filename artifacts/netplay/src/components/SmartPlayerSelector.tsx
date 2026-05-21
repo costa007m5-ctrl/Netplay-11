@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2 } from 'lucide-react';
+import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2, Loader2 } from 'lucide-react';
 import { Movie } from '../types';
 import { isDynamicRef, parseDynamicRef, makeDynamicRef, makeDynamicRefV2, makeDynamicRefV3 } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
+import { lookupTmdbId } from '../services/tmdb';
 
 export const NATIVE_API_STORAGE_KEY = 'netplay_native_terabox_api';
 
@@ -67,6 +68,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
 }) => {
   const nativeApi = getNativeTeraboxApi();
   const altApi: 'v1' | 'v3' = nativeApi === 'v1' ? 'v3' : 'v1';
+  const [isBfLoading, setIsBfLoading] = useState(false);
 
   const currentUrl = episodeUrl || movie.videoUrl || '';
   const hasTeraboxUrl = isDynamicRef(currentUrl);
@@ -228,9 +230,31 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       glowColor: 'shadow-orange-500/10',
       available: hasTmdbId,
       unavailableMsg: 'ID TMDB não disponível para este título.',
-      action: () => {
-        const bfUrl = getBetterFlixPlayerUrl();
-        onPlay(bfUrl, 0, 'betterflix');
+      action: async () => {
+        if (isBfLoading) return;
+        setIsBfLoading(true);
+        try {
+          const isMovie = movie.type !== 'series';
+          const title = movie.title || movie.name || '';
+          const releaseYear = movie.release_date
+            ? new Date(movie.release_date).getFullYear()
+            : movie.first_air_date
+            ? new Date(movie.first_air_date).getFullYear()
+            : null;
+          const tmdbId = await lookupTmdbId(title, isMovie ? 'movie' : 'tv', releaseYear);
+          const id = tmdbId || movie.id;
+          const ep = episodeUrl && movie.episodes
+            ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
+            : null;
+          const season = ep?.season ?? 1;
+          const episode = ep?.episode ?? 1;
+          const bfUrl = isMovie
+            ? buildBetterFlixUrl(id, 'movie')
+            : buildBetterFlixUrl(id, 'tv', season, episode);
+          onPlay(bfUrl, 0, 'betterflix');
+        } finally {
+          setIsBfLoading(false);
+        }
       },
     },
   ];
@@ -337,15 +361,17 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.06 + idx * 0.07, duration: 0.28 }}
-                onClick={option.available ? option.action : undefined}
-                disabled={!option.available}
+                onClick={option.available ? () => (option.action as any)() : undefined}
+                disabled={!option.available || (option.id === 'betterflix' && isBfLoading)}
                 className={`
                   relative w-full flex items-center gap-3.5 p-3.5 rounded-2xl text-left group
                   bg-gradient-to-r ${option.gradient}
                   backdrop-blur-xl border ${option.border}
                   transition-all duration-200 shadow-lg ${option.glowColor}
-                  ${option.available
+                  ${option.available && !(option.id === 'betterflix' && isBfLoading)
                     ? 'hover:scale-[1.012] active:scale-[0.988] cursor-pointer hover:shadow-xl'
+                    : option.id === 'betterflix' && isBfLoading
+                    ? 'cursor-wait opacity-80'
                     : 'opacity-30 cursor-not-allowed'}
                 `}
               >
@@ -354,7 +380,10 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
                 </span>
 
                 <div className={`w-10 h-10 rounded-xl ${option.iconBg} border border-white/10 flex items-center justify-center shrink-0 transition-transform duration-200 ${option.available ? 'group-hover:scale-110' : ''}`}>
-                  <Icon size={18} className={option.iconColor} />
+                  {option.id === 'betterflix' && isBfLoading
+                    ? <Loader2 size={18} className={`${option.iconColor} animate-spin`} />
+                    : <Icon size={18} className={option.iconColor} />
+                  }
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -375,7 +404,10 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
 
                 {option.available && (
                   <div className="w-7 h-7 rounded-full bg-white/10 border border-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-all">
-                    <Play size={11} fill="white" className="text-white ml-0.5" />
+                    {option.id === 'betterflix' && isBfLoading
+                      ? <Loader2 size={11} className="text-orange-400 animate-spin" />
+                      : <Play size={11} fill="white" className="text-white ml-0.5" />
+                    }
                   </div>
                 )}
               </motion.button>
