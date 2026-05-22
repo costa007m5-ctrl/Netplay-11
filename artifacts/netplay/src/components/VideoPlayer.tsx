@@ -73,11 +73,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [extractedQualities, setExtractedQualities] = useState<{ id: string; label: string; url: string }[]>([]);
   const [dubbingOptions, setDubbingOptions] = useState<{ id: string; label: string; url: string }[]>([]);
 
-  // BetterFlix stream resolution
-  const [bfStreamUrl, setBfStreamUrl] = useState<string | null>(null);
-  const [bfEmbedUrl, setBfEmbedUrl] = useState<string | null>(null);
-  const [bfLoading, setBfLoading] = useState(false);
-  const [bfFailed, setBfFailed] = useState(false);
+  // BetterFlix — sem resolução server-side; o embed URL é carregado direto no iframe do NetflixPlayer
 
   // Net 2.0 — dica de áudio em Português
   const [showVidsrcHint, setShowVidsrcHint] = useState(true);
@@ -360,65 +356,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     setFinalVideoUrl(getInitialFinalVideoUrl());
   }, [movie.id, movie.videoUrl]);
 
-  // Resolve BetterFlix stream URL para usar no NetflixPlayer nativo
-  useEffect(() => {
-    const currentUrl = movie.videoUrl || '';
-    const isBF = currentUrl.includes('betterflix.click') || initialPlayerStyle === 'betterflix';
-    if (!isBF) {
-      setBfStreamUrl(null);
-      setBfLoading(false);
-      setBfFailed(false);
-      return;
-    }
-
-    let id: string, type: string, season: string, episode: string;
-    if (currentUrl.includes('betterflix.click')) {
-      try {
-        const urlParams = new URLSearchParams(currentUrl.split('?')[1] || '');
-        id = urlParams.get('id') || String(movie.id);
-        type = urlParams.get('type') || (movie.type === 'series' ? 'tv' : 'movie');
-        season = urlParams.get('season') || '1';
-        episode = urlParams.get('episode') || '1';
-      } catch {
-        id = String(movie.id);
-        type = movie.type === 'series' ? 'tv' : 'movie';
-        season = '1';
-        episode = '1';
-      }
-    } else {
-      id = String(movie.id);
-      type = movie.type === 'series' ? 'tv' : 'movie';
-      season = '1';
-      episode = '1';
-    }
-
-    setBfLoading(true);
-    setBfStreamUrl(null);
-    setBfEmbedUrl(null);
-    setBfFailed(false);
-
-    const abort = new AbortController();
-    fetch(
-      `/api/betterflix/stream?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}&season=${encodeURIComponent(season)}&episode=${encodeURIComponent(episode)}`,
-      { signal: abort.signal }
-    )
-      .then(r => r.json())
-      .then(data => {
-        if (abort.signal.aborted) return;
-        if (data.streamUrl) {
-          setBfStreamUrl(data.streamUrl);
-        } else if (data.embedUrl) {
-          // Sem stream direto — usa embedUrl no NetflixPlayer como iframe
-          setBfEmbedUrl(data.embedUrl);
-        } else {
-          setBfFailed(true);
-        }
-      })
-      .catch(() => { if (!abort.signal.aborted) setBfFailed(true); })
-      .finally(() => { if (!abort.signal.aborted) setBfLoading(false); });
-
-    return () => abort.abort();
-  }, [movie.id, movie.videoUrl, initialPlayerStyle]);
 
   // Pre-warm KingX/direct HLS URLs as soon as they are loaded so CDN edges are hot
   useEffect(() => {
@@ -1164,33 +1101,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     const bfTitle = movie.title || movie.name || 'Assistindo';
     const bfIsTV = movie.type === 'series';
 
-    // Aguardando resolução do stream
-    if (bfLoading) {
-      return (
-        <div ref={containerRef} className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center gap-4">
-          <button
-            onClick={onClose}
-            className="absolute top-3 left-3 z-20 w-9 h-9 rounded-xl bg-black/60 hover:bg-black/80 border border-white/10 text-white flex items-center justify-center transition-all backdrop-blur-md group"
-            aria-label="Fechar"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-300">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-          <div className="w-12 h-12 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-          <div className="flex flex-col items-center gap-1.5">
-            <p className="text-white font-semibold text-sm">{bfTitle}</p>
-            <p className="text-white/40 text-xs">Preparando API Flix…</p>
-            <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/15 border border-orange-500/30 px-1.5 py-0.5 rounded-md mt-1">
-              API Flix
-            </span>
-          </div>
-        </div>
-      );
-    }
-
-    // Stream direto (m3u8/mp4) OU embed iframe — ambos rodam dentro do NetflixPlayer
-    const bfPlayerSrc = bfStreamUrl || bfEmbedUrl || url;
+    // Carrega o embed URL diretamente no NetflixPlayer (iframe) — sem resolução server-side
+    const bfPlayerSrc = url;
     return (
       <div className="relative w-full h-full">
         <NetflixPlayer

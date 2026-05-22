@@ -79,24 +79,26 @@ router.get("/betterflix/stream", async (req, res) => {
 router.get("/betterflix/canais", async (_req, res) => {
   try {
     const { data } = await axios.get("https://betterflix.click/api/canais.json", {
-      timeout: 10000,
-      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 15000,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
     });
     res.json(data);
   } catch (err: any) {
-    res.status(502).json({ error: "Falha ao buscar canais", detail: err.message });
+    // Retorna array vazio em vez de 502 para não travar o painel admin
+    res.json([]);
   }
 });
 
 router.get("/betterflix/jogos", async (_req, res) => {
   try {
     const { data } = await axios.get("https://betterflix.click/api/jogos.json", {
-      timeout: 10000,
-      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 15000,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
     });
     res.json(data);
   } catch (err: any) {
-    res.status(502).json({ error: "Falha ao buscar jogos", detail: err.message });
+    // Retorna array vazio em vez de 502 para não travar o painel admin
+    res.json([]);
   }
 });
 
