@@ -911,17 +911,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     }
   }, [isIframeMode, isLoading]);
 
-  // Proteção anti-anúncio: recoloca o foco na janela se o iframe tentar roubar (via popup ou redirect)
-  useEffect(() => {
-    if (!isIframeMode) return;
-    const handleBlur = () => {
-      // O iframe tentou abrir popup ou navegar — imediatamente recoloca foco aqui
-      requestAnimationFrame(() => { try { window.focus(); } catch {} });
-    };
-    window.addEventListener('blur', handleBlur);
-    return () => window.removeEventListener('blur', handleBlur);
-  }, [isIframeMode]);
-
   useEffect(() => {
     if (isIframeMode) {
        // O isLoading e afins serão gerenciados pelo onLoad do iframe
@@ -2438,7 +2427,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         <iframe
           src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
           className="relative z-[10] w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
           referrerPolicy="origin"
