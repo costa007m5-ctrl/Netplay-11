@@ -68,32 +68,36 @@ export async function findWorkingVidsrcDomain(): Promise<string> {
   return VIDSRC_DOMAINS[0];
 }
 
-function buildUrlForDomain(type: 'movie' | 'tv', tmdbId: number | string, domain: string, season?: number, episode?: number, dsLang = 'pt-BR'): string {
-  if (type === 'movie') {
-    if (domain === 'vidsrc.to') return `https://vidsrc.to/embed/movie/${tmdbId}`;
-    return `https://${domain}/embed/movie?tmdb=${tmdbId}&ds_lang=${dsLang}&autoplay=1`;
+function buildUrlForDomain(type: 'movie' | 'tv', tmdbId: number | string, domain: string, season?: number, episode?: number): string {
+  // vidsrc.to usa formato de rota em vez de query params
+  if (domain === 'vidsrc.to') {
+    if (type === 'movie') return `https://vidsrc.to/embed/movie/${tmdbId}`;
+    return `https://vidsrc.to/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`;
   }
-  if (domain === 'vidsrc.to') return `https://vidsrc.to/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`;
-  return `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${season ?? 1}&episode=${episode ?? 1}&ds_lang=${dsLang}&autoplay=1&autonext=1`;
+  // Demais domínios: lang=pt força áudio PT, sub_lang=por injeta legenda PT automaticamente
+  if (type === 'movie') {
+    return `https://${domain}/embed/movie/?id=${tmdbId}&lang=pt&sub_lang=por&autoplay=1`;
+  }
+  return `https://${domain}/embed/tv/?id=${tmdbId}&season=${season ?? 1}&episode=${episode ?? 1}&lang=pt&sub_lang=por&autoplay=1&autonext=1`;
 }
 
-export function buildVidsrcMovieUrl(tmdbId: number | string, dsLang = 'pt-BR'): string {
-  return buildUrlForDomain('movie', tmdbId, getVidsrcDomain(), undefined, undefined, dsLang);
+export function buildVidsrcMovieUrl(tmdbId: number | string): string {
+  return buildUrlForDomain('movie', tmdbId, getVidsrcDomain());
 }
 
-export function buildVidsrcTvUrl(tmdbId: number | string, season: number, episode: number, dsLang = 'pt-BR'): string {
-  return buildUrlForDomain('tv', tmdbId, getVidsrcDomain(), season, episode, dsLang);
+export function buildVidsrcTvUrl(tmdbId: number | string, season: number, episode: number): string {
+  return buildUrlForDomain('tv', tmdbId, getVidsrcDomain(), season, episode);
 }
 
 // Versão async que garante usar domínio funcional antes de construir a URL
-export async function buildVidsrcMovieUrlSafe(tmdbId: number | string, dsLang = 'pt-BR'): Promise<string> {
+export async function buildVidsrcMovieUrlSafe(tmdbId: number | string): Promise<string> {
   const domain = await findWorkingVidsrcDomain();
-  return buildUrlForDomain('movie', tmdbId, domain, undefined, undefined, dsLang);
+  return buildUrlForDomain('movie', tmdbId, domain);
 }
 
-export async function buildVidsrcTvUrlSafe(tmdbId: number | string, season: number, episode: number, dsLang = 'pt-BR'): Promise<string> {
+export async function buildVidsrcTvUrlSafe(tmdbId: number | string, season: number, episode: number): Promise<string> {
   const domain = await findWorkingVidsrcDomain();
-  return buildUrlForDomain('tv', tmdbId, domain, season, episode, dsLang);
+  return buildUrlForDomain('tv', tmdbId, domain, season, episode);
 }
 
 function CopyBtn({ text }: { text: string }) {
@@ -170,22 +174,22 @@ export function AdminNet2Tab() {
     {
       label: 'Filme (TMDB)',
       color: 'blue',
-      url: `https://${domain}/embed/movie?tmdb=385687&ds_lang=pt-BR&autoplay=1`,
+      url: `https://${domain}/embed/movie/?id=385687&lang=pt&sub_lang=por&autoplay=1`,
     },
     {
       label: 'Série (TMDB)',
       color: 'purple',
-      url: `https://${domain}/embed/tv?tmdb=1399&ds_lang=pt-BR`,
+      url: `https://${domain}/embed/tv/?id=1399&lang=pt&sub_lang=por`,
     },
     {
       label: 'Episódio (TMDB)',
       color: 'green',
-      url: `https://${domain}/embed/tv?tmdb=1399&season=1&episode=1&ds_lang=pt-BR&autoplay=1&autonext=1`,
+      url: `https://${domain}/embed/tv/?id=1399&season=1&episode=1&lang=pt&sub_lang=por&autoplay=1&autonext=1`,
     },
     {
       label: 'Filme (IMDB)',
       color: 'orange',
-      url: `https://${domain}/embed/movie?imdb=tt5433140&ds_lang=pt-BR&autoplay=1`,
+      url: `https://${domain}/embed/movie/?id=tt5433140&lang=pt&sub_lang=por&autoplay=1`,
     },
   ];
 
@@ -272,7 +276,8 @@ export function AdminNet2Tab() {
             <div className="bg-black/30 rounded-xl p-3 border border-white/5">
               <p className="text-gray-400 font-bold mb-1">Parâmetros opcionais</p>
               <ul className="space-y-1">
-                <li><code className="text-gray-500">ds_lang=pt-BR</code> — Legenda padrão (Português Brasil)</li>
+                <li><code className="text-gray-500">lang=pt</code> — Força áudio em Português (dublagem)</li>
+                <li><code className="text-gray-500">sub_lang=por</code> — Injeta legenda PT automaticamente</li>
                 <li><code className="text-gray-500">autoplay=1</code> — Reprodução automática</li>
                 <li><code className="text-gray-500">autonext=1</code> — Próximo episódio automático</li>
                 <li><code className="text-gray-500">sub_url=...</code> — URL de legenda externa (.srt/.vtt)</li>
