@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Tv2, Film, Play, ExternalLink, RefreshCw, Globe, List, CheckCircle2, Copy, ChevronRight } from 'lucide-react';
 
-// Versão v3 da chave — garante que caches antigos com domínios quebrados sejam ignorados
-export const VIDSRC_DOMAIN_KEY = 'netplay_vidsrc_domain_v3';
+// Versão v4 — vidsrc.to é prioridade pois usa rota de caminho (mais estável)
+export const VIDSRC_DOMAIN_KEY = 'netplay_vidsrc_domain_v4';
 export const VIDSRC_DOMAINS = [
-  'vidsrc.me',
   'vidsrc.to',
+  'vidsrc.me',
+  'vidsrc.pm',
   'vidsrc.xyz',
   'vidsrc.cc',
   'vidsrc.rip',
   'vidsrc.net',
-  'vidsrc.pm',
   'vidsrc.icu',
 ];
 
@@ -69,16 +69,24 @@ export async function findWorkingVidsrcDomain(): Promise<string> {
 }
 
 function buildUrlForDomain(type: 'movie' | 'tv', tmdbId: number | string, domain: string, season?: number, episode?: number): string {
-  // vidsrc.to usa formato de rota em vez de query params
+  const s = season ?? 1;
+  const e = episode ?? 1;
+
+  // vidsrc.to — formato de rota (o mais estável, confirmado funcionando)
   if (domain === 'vidsrc.to') {
     if (type === 'movie') return `https://vidsrc.to/embed/movie/${tmdbId}`;
-    return `https://vidsrc.to/embed/tv/${tmdbId}/${season ?? 1}/${episode ?? 1}`;
+    return `https://vidsrc.to/embed/tv/${tmdbId}/${s}/${e}`;
   }
-  // Demais domínios: lang=pt força áudio PT, sub_lang=por injeta legenda PT automaticamente
-  if (type === 'movie') {
-    return `https://${domain}/embed/movie/?id=${tmdbId}&lang=pt&sub_lang=por&autoplay=1`;
+
+  // vidsrc.pm — usa ?id= em vez de ?tmdb=
+  if (domain === 'vidsrc.pm') {
+    if (type === 'movie') return `https://vidsrc.pm/embed/movie/?id=${tmdbId}&lang=pt&sub_lang=por&autoplay=1`;
+    return `https://vidsrc.pm/embed/tv/?id=${tmdbId}&season=${s}&episode=${e}&lang=pt&sub_lang=por&autoplay=1&autonext=1`;
   }
-  return `https://${domain}/embed/tv/?id=${tmdbId}&season=${season ?? 1}&episode=${episode ?? 1}&lang=pt&sub_lang=por&autoplay=1&autonext=1`;
+
+  // Demais domínios (vidsrc.me, .xyz, .cc, .rip, .net, .icu) — usam ?tmdb=
+  if (type === 'movie') return `https://${domain}/embed/movie?tmdb=${tmdbId}&lang=pt&sub_lang=por&autoplay=1`;
+  return `https://${domain}/embed/tv?tmdb=${tmdbId}&season=${s}&episode=${e}&lang=pt&sub_lang=por&autoplay=1&autonext=1`;
 }
 
 export function buildVidsrcMovieUrl(tmdbId: number | string): string {
@@ -174,22 +182,22 @@ export function AdminNet2Tab() {
     {
       label: 'Filme (TMDB)',
       color: 'blue',
-      url: `https://${domain}/embed/movie/?id=385687&lang=pt&sub_lang=por&autoplay=1`,
+      url: buildUrlForDomain('movie', '385687', domain),
     },
     {
       label: 'Série (TMDB)',
       color: 'purple',
-      url: `https://${domain}/embed/tv/?id=1399&lang=pt&sub_lang=por`,
+      url: buildUrlForDomain('tv', '1399', domain, 1, 1),
     },
     {
       label: 'Episódio (TMDB)',
       color: 'green',
-      url: `https://${domain}/embed/tv/?id=1399&season=1&episode=1&lang=pt&sub_lang=por&autoplay=1&autonext=1`,
+      url: buildUrlForDomain('tv', '1399', domain, 2, 3),
     },
     {
       label: 'Filme (IMDB)',
       color: 'orange',
-      url: `https://${domain}/embed/movie/?id=tt5433140&lang=pt&sub_lang=por&autoplay=1`,
+      url: buildUrlForDomain('movie', 'tt5433140', domain),
     },
   ];
 
