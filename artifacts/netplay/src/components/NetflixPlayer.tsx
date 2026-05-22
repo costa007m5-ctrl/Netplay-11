@@ -1071,7 +1071,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               applyHlsAudioTracks(hls);
               
               if (video) {
-                 video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+                 video.play().catch(() => { video.muted = true; setIsMuted(true); video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); }); });
               }
             });
             hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
@@ -1243,7 +1243,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               detectNativeAudioTracks(video);
             }, { once: true });
             video.addEventListener('canplay', () => detectNativeAudioTracks(video), { once: true });
-            video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+            video.play().catch(() => { video.muted = true; setIsMuted(true); video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); }); });
           }
         } else {
           video.src = videoToPlay;
@@ -1259,7 +1259,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                detectNativeAudioTracks(video);
           }, { once: true });
           video.addEventListener('canplay', () => detectNativeAudioTracks(video), { once: true });
-          video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+          video.play().catch(() => { video.muted = true; setIsMuted(true); video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); }); });
         }
       };
 
@@ -1486,7 +1486,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
     const handleStalled = () => {
       if (video.paused && isPlaying) {
-        video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+        video.play().catch(() => { video.muted = true; setIsMuted(true); video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); }); });
       }
     };
 
@@ -1525,7 +1525,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         setTimeout(() => {
           if (video) {
             video.load();
-            video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+            video.play().catch(() => { video.muted = true; setIsMuted(true); video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); }); });
           }
         }, 2000);
         return;
@@ -1780,7 +1780,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       if (video.paused) {
         lockOrientation();
         // Allow guest to initiate playback to bypass browser autoplay blocks
-        video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); });
+        video.play().catch(() => { video.muted = true; setIsMuted(true); video.play().catch(e => { console.warn("Autoplay block", e); setAutoplayBlocked(true); setShowControls(true); setIsPlaying(false); }); });
         if (isHost && channelRef.current && roomId) {
           channelRef.current.send({
             type: 'broadcast',
@@ -2142,7 +2142,6 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       className={isBackgroundMode ? "absolute inset-0 z-0 bg-black flex items-center justify-center select-none overflow-hidden scale-105 pointer-events-auto" : "fixed inset-0 bg-black z-[3000] flex items-center justify-center select-none group overflow-hidden"}
       onMouseMove={handleMouseMove}
       onClick={handleContainerClick}
-      onTouchStart={handleMouseMove}
     >
       {/* Backdrop de fundo enquanto carrega ou como papel de parede */}
       
@@ -2427,7 +2426,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         <iframe
           src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
           className="relative z-[10] w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
           referrerPolicy="origin"
