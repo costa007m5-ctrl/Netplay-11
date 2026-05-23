@@ -115,14 +115,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     if (!isBF || movie.type !== 'series') { setBfEpisodes([]); return; }
     if (sortedEpisodes.length > 0) { setBfEpisodes(sortedEpisodes); return; }
     let cancelled = false;
-    const numSeasons = (movie as any).number_of_seasons || (movie as any).seasons_count || 1;
+
+    // Extrai o ID do TMDB da URL do BetterFlix (ex: ?id=12345&type=tv)
+    const extractTmdbIdFromBfUrl = (bfUrl: string): number | null => {
+      try {
+        const u = new URL(bfUrl);
+        const id = u.searchParams.get('id');
+        return id ? Number(id) : null;
+      } catch { return null; }
+    };
+
     const load = async () => {
       try {
-        const { default: tmdb, requests } = await import('../services/tmdb');
+        const { default: tmdb, requests, lookupTmdbId, fetchSeasonDetailsWithFallback } = await import('../services/tmdb');
+
+        // 1. Resolve o ID correto do TMDB: primeiro tenta extrair da URL BetterFlix,
+        //    depois faz busca por título como fallback.
+        let tmdbId: number = extractTmdbIdFromBfUrl(movie.videoUrl || '') || 0;
+        if (!tmdbId) {
+          const title = (movie as any).title || (movie as any).name || '';
+          const year = movie.release_date
+            ? new Date(movie.release_date).getFullYear()
+            : (movie as any).first_air_date
+            ? new Date((movie as any).first_air_date).getFullYear()
+            : null;
+          tmdbId = (await lookupTmdbId(title, 'tv', year)) || movie.id;
+        }
+
+        // 2. Busca detalhes da série para saber quantas temporadas existem
+        const detailsRes = await tmdb.get(requests.tvDetails(tmdbId), { params: { language: 'pt-BR' } });
+        const numSeasons: number = detailsRes.data.number_of_seasons || 1;
+
+        // 3. Busca episódios de todas as temporadas com fallback en-US para sinopses
         const allEps: any[] = [];
         for (let s = 1; s <= numSeasons; s++) {
           try {
-            const res = await tmdb.get(requests.tvSeasonDetails(movie.id, s), { params: { language: 'pt-BR' } });
+            const res = await fetchSeasonDetailsWithFallback(tmdbId, s);
             const eps: any[] = res.data.episodes || [];
             eps.forEach((ep: any) => {
               allEps.push({
@@ -133,7 +161,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                 overview: ep.overview,
                 still_path: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : undefined,
                 runtime: ep.runtime,
-                videoUrl: buildBetterFlixUrl(movie.id, 'tv', ep.season_number, ep.episode_number),
+                // URL já usa o tmdbId correto (não o ID do banco)
+                videoUrl: buildBetterFlixUrl(tmdbId, 'tv', ep.season_number, ep.episode_number),
               });
             });
           } catch {}
@@ -1172,7 +1201,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           onSelectEpisode={(ep: any) => {
             const s = ep.season ?? 1;
             const e = ep.episode ?? 1;
-            const newUrl = buildBetterFlixUrl(movie.id, 'tv', s, e);
+            // Usa ep.videoUrl diretamente (já tem o tmdbId correto embutido).
+            // Reconstrói só se o episódio não tiver videoUrl próprio.
+            const newUrl = ep.videoUrl || buildBetterFlixUrl(movie.id, 'tv', s, e);
             const newIdx = bfAllEpisodes.findIndex(
               (se: any) => (se.season ?? 1) === s && (se.episode ?? 1) === e
             );
@@ -1184,7 +1215,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             const nextEp = bfAllEpisodes[activeEpIndex + 1] as any;
             const s = nextEp.season ?? 1;
             const e = nextEp.episode ?? 1;
-            setBfCurrentUrl(buildBetterFlixUrl(movie.id, 'tv', s, e));
+            // Usa ep.videoUrl diretamente se disponível (já tem tmdbId correto)
+            setBfCurrentUrl(nextEp.videoUrl || buildBetterFlixUrl(movie.id, 'tv', s, e));
             setBfCurrentEpisodeIndex(activeEpIndex + 1);
           }}
           recommendations={recommendations}
