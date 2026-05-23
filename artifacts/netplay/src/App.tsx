@@ -23,7 +23,7 @@ const Top10Row = React.lazy(() => import('./components/Top10Row'));
 const AppInfo = React.lazy(() => import('./components/AppInfo'));
 const UniverseView = React.lazy(() => import('./components/UniverseView'));
 import { CATEGORIES } from './constants';
-import { isDynamicRef } from './services/terabox';
+import { isDynamicRef, parseDynamicRef } from './services/terabox';
 import { getSelectedServer, convertTeraboxToApi } from './components/SmartPlayerSelector';
 import tmdb, { requests, getMovieLogo } from './services/tmdb';
 import { notificationService } from './services/notificationService';
@@ -2954,7 +2954,7 @@ const MovieDetailRouteWrapper = ({
              nextPlayerStyle = 'netflix';
            } else if (saved.id === 'alternative') {
              nextUrl = convertTeraboxToApi(url, saved.altApi);
-             nextPlayerStyle = 'netflix';
+             nextPlayerStyle = 'netflix-cascade';
            } else if (saved.id === 'auto') {
              nextUrl = convertTeraboxToApi(url, saved.nativeApi);
              nextPlayerStyle = 'netflix-cascade';
@@ -5808,7 +5808,19 @@ export default function App() {
       const sa = (a.season || 1) - (b.season || 1);
       return sa !== 0 ? sa : (a.episode || 0) - (b.episode || 0);
     });
-    const currentEpIndex = sortedEpsForNext.findIndex((ep: any) => ep.videoUrl === currentMovie.videoUrl || ep.videoUrl2 === currentMovie.videoUrl);
+    const mv = currentMovie.videoUrl || '';
+    const currentEpIndex = sortedEpsForNext.findIndex((ep: any) => {
+      if (ep.videoUrl === mv || ep.videoUrl2 === mv) return true;
+      // Correspondência por nome de arquivo para modo cascata (URL convertida não bate direto)
+      if (isDynamicRef(mv) && ep.videoUrl && isDynamicRef(ep.videoUrl)) {
+        try {
+          const { filename: epFn } = parseDynamicRef(ep.videoUrl);
+          const { filename: mvFn } = parseDynamicRef(mv);
+          if (epFn && mvFn && epFn === mvFn) return true;
+        } catch {}
+      }
+      return false;
+    });
     
     if (currentEpIndex !== -1 && currentEpIndex < sortedEpsForNext.length - 1) {
       const nextEp = sortedEpsForNext[currentEpIndex + 1];
@@ -5823,7 +5835,7 @@ export default function App() {
           nextPlayerStyle = 'netflix';
         } else if (saved.id === 'alternative') {
           nextUrl = convertTeraboxToApi(rawUrl, saved.altApi);
-          nextPlayerStyle = 'netflix';
+          nextPlayerStyle = 'netflix-cascade';
         } else if (saved.id === 'auto') {
           nextUrl = convertTeraboxToApi(rawUrl, saved.nativeApi);
           nextPlayerStyle = 'netflix-cascade';

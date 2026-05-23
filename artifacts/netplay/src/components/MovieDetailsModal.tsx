@@ -296,8 +296,21 @@ const MovieDetailsModal = React.memo(({
   useEffect(() => {
     if (movie.id && !logoUrl) {
       async function fetchLogo() {
-        const logo = await getMovieLogo(movie.id, (movie as any).name ? 'tv' : 'movie');
-        if (logo) setLogoUrl(logo);
+        const type: 'tv' | 'movie' = (movie as any).name ? 'tv' : 'movie';
+        const title = (movie as any).title || (movie as any).name || '';
+        const year = movie.release_date
+          ? new Date(movie.release_date).getFullYear()
+          : (movie as any).first_air_date
+          ? new Date((movie as any).first_air_date).getFullYear()
+          : null;
+        const tmdbId = await lookupTmdbId(title, type, year);
+        const idToUse = tmdbId || null;
+        if (!idToUse) return;
+        const logo = await getMovieLogo(idToUse, type);
+        if (logo) { setLogoUrl(logo); return; }
+        const fallbackType: 'tv' | 'movie' = type === 'tv' ? 'movie' : 'tv';
+        const logo2 = await getMovieLogo(idToUse, fallbackType);
+        if (logo2) setLogoUrl(logo2);
       }
       fetchLogo();
     }

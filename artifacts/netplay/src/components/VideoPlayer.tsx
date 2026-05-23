@@ -180,17 +180,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
 
   useEffect(() => {
     if (!movieLogo && movie.id) {
-       // Tenta buscar o logo (como é para TMDB, verificamos primeiro tv, depois movie)
-       import('../services/tmdb').then(({ getMovieLogo }) => {
-         getMovieLogo(movie.id, (movie as any).name ? 'tv' : 'movie').then(logo => {
-           if (logo) setMovieLogo(logo);
-           else {
-             getMovieLogo(movie.id, (movie as any).name ? 'movie' : 'tv').then(logo2 => {
-               if (logo2) setMovieLogo(logo2);
-             });
-           }
-         });
-       });
+      import('../services/tmdb').then(({ getMovieLogo, lookupTmdbId }) => {
+        const type: 'tv' | 'movie' = (movie as any).name ? 'tv' : 'movie';
+        const title = (movie as any).title || (movie as any).name || '';
+        const year = movie.release_date
+          ? new Date(movie.release_date).getFullYear()
+          : (movie as any).first_air_date
+          ? new Date((movie as any).first_air_date).getFullYear()
+          : null;
+        lookupTmdbId(title, type, year).then(tmdbId => {
+          if (!tmdbId) return;
+          getMovieLogo(tmdbId, type).then(logo => {
+            if (logo) { setMovieLogo(logo); return; }
+            getMovieLogo(tmdbId, type === 'tv' ? 'movie' : 'tv').then(logo2 => {
+              if (logo2) setMovieLogo(logo2);
+            });
+          });
+        });
+      });
     }
   }, [movie.id, movieLogo]);
 
