@@ -173,9 +173,15 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
 
      const externals: any[] = [];
 
+     const normalizeTitle = (s: string) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+
      externalResults.forEach((ext: any) => {
-        // Se o item externo já está na biblioteca (por ID), mostra como local com dados corretos
-        const existingInLibrary = myMovies.find(m => m.id == ext.id);
+        // Se o item externo já está na biblioteca (por ID ou por título), mostra como local com dados corretos
+        const existingInLibrary = myMovies.find(m =>
+          m.id == ext.id ||
+          (normalizeTitle(m.title || (m as any).name || '') === normalizeTitle(ext.title || ext.name || '') &&
+           normalizeTitle(m.title || (m as any).name || '').length > 0)
+        );
 
         if (existingInLibrary) {
           // Garante que aparece com dados completos da biblioteca (type, episodes, etc.)

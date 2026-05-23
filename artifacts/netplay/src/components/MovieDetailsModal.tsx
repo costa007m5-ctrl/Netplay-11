@@ -318,8 +318,6 @@ const MovieDetailsModal = React.memo(({
 
   useEffect(() => {
     const fetchWatchProviders = async () => {
-      // Skip if movie already has watch_providers data stored (avoids unnecessary TMDB call)
-      if (movie.watch_providers) return;
       try {
         const isTv = isSeries || !!movie.first_air_date;
         const url = isTv ? requests.tvWatchProviders(movie.id) : requests.movieWatchProviders(movie.id);

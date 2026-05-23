@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link as LinkIcon, Settings, User, LogOut, ShieldCheck, ChevronDown, Users, Search, Bell, PlusCircle, Sparkles, Home, TrendingUp, Bookmark, CloudDownload, Play, ChevronLeft, Cpu, X, Tv2 } from 'lucide-react';
+import { Link as LinkIcon, Settings, User, LogOut, ShieldCheck, ChevronDown, Users, Search, Bell, PlusCircle, Sparkles, Home, TrendingUp, Bookmark, CloudDownload, Play, ChevronLeft, Cpu, X, Tv2, Film, Tv } from 'lucide-react';
 import AdminModal from './AdminModal';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
@@ -139,18 +139,20 @@ const Navbar = React.memo(({
           <ul className={`hidden md:flex items-center gap-2 bg-white/5 p-1.5 rounded-full border border-white/10 shadow-2xl backdrop-blur-xl ${isOnSearchPage ? 'md:hidden lg:flex' : ''}`}>
             {[
               { id: 'home', label: 'Início', icon: Home },
+              { id: 'filmes', label: 'Filmes', icon: Film },
+              { id: 'series', label: 'Séries', icon: Tv },
               { id: 'trending', label: 'Em Alta', icon: TrendingUp },
               { id: 'novos-eps', label: 'Novos Ep.', icon: Bell },
-              { id: 'universe', label: 'Explorar', icon: Sparkles },
               { id: 'profile', label: 'Perfil', icon: User },
             ].map((item) => (
               <li 
                 key={item.id}
                 onClick={() => {
                    if(item.id === 'home') navigate('/menu');
+                   else if(item.id === 'filmes') navigate('/filmes');
+                   else if(item.id === 'series') navigate('/series');
                    else if(item.id === 'trending') navigate('/trending');
                    else if(item.id === 'novos-eps') navigate('/novos-episodios');
-                   else if(item.id === 'universe') navigate('/universe');
                    else if(item.id === 'profile') navigate('/perfil');
                    onTabChange(item.id);
                 }}
@@ -212,8 +214,8 @@ const Navbar = React.memo(({
       <div className="fixed bottom-4 left-4 right-4 h-16 bg-black/80 backdrop-blur-[40px] border border-white/10 rounded-full flex justify-between items-center z-50 md:hidden px-2 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
         {[
           { id: 'home', label: 'Início', icon: Home, path: '/menu' },
-          { id: 'trending', label: 'Em Alta', icon: TrendingUp, path: '/trending' },
-          { id: 'canais', label: 'Canais TV', icon: Tv2, path: '/canais' },
+          { id: 'filmes', label: 'Filmes', icon: Film, path: '/filmes' },
+          { id: 'series', label: 'Séries', icon: Tv, path: '/series' },
           { id: 'novos-eps', label: 'Novos Ep.', icon: Bell, path: '/novos-episodios' },
           { id: 'profile', label: 'Perfil', icon: User, path: '/perfil' },
         ].map((item) => {

@@ -112,8 +112,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   // BetterFlix — episódios carregados do TMDB quando movie.episodes está vazio
   const [bfEpisodes, setBfEpisodes] = useState<any[]>([]);
   useEffect(() => {
+    const isRedeflix = (movie.videoUrl || '').includes('redeflixapi.store') || playerStyle === 'redeflix';
     const isBF = (movie.videoUrl || '').includes('betterflix.click') || playerStyle === 'betterflix';
-    if (!isBF || movie.type !== 'series') { setBfEpisodes([]); return; }
+    if ((!isBF && !isRedeflix) || movie.type !== 'series') { setBfEpisodes([]); return; }
     if (sortedEpisodes.length > 0) { setBfEpisodes(sortedEpisodes); return; }
     let cancelled = false;
 
@@ -163,7 +164,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
                 still_path: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : undefined,
                 runtime: ep.runtime,
                 // URL já usa o tmdbId correto (não o ID do banco)
-                videoUrl: buildBetterFlixUrl(tmdbId, 'tv', ep.season_number, ep.episode_number),
+                videoUrl: isRedeflix
+                  ? buildRedeFlixSerieUrl(tmdbId, ep.season_number, ep.episode_number)
+                  : buildBetterFlixUrl(tmdbId, 'tv', ep.season_number, ep.episode_number),
               });
             });
           } catch {}

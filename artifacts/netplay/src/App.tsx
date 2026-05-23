@@ -886,6 +886,118 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
   );
 });
 
+const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void }) => {
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [selectedGenre, setSelectedGenre] = React.useState('');
+
+  const filtered = React.useMemo(() => {
+    let items = type === 'series'
+      ? myMovies.filter((m: any) => m.type === 'series')
+      : myMovies.filter((m: any) => m.type !== 'series');
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      items = items.filter((m: any) => ((m.title || m.name || '')).toLowerCase().includes(q));
+    }
+    if (selectedGenre) {
+      items = items.filter((m: any) => (m.genres || '').toLowerCase().includes(selectedGenre.toLowerCase()));
+    }
+    return items;
+  }, [myMovies, type, searchQuery, selectedGenre]);
+
+  const genres = React.useMemo(() => {
+    const all = myMovies
+      .filter((m: any) => type === 'series' ? m.type === 'series' : m.type !== 'series')
+      .flatMap((m: any) => (m.genres || '').split(',').map((g: string) => g.trim()))
+      .filter(Boolean);
+    return [...new Set(all)].sort().slice(0, 14) as string[];
+  }, [myMovies, type]);
+
+  const label = type === 'series' ? 'Séries' : 'Filmes';
+
+  return (
+    <div className="min-h-screen bg-[#111] text-white pb-32 pt-20 md:pt-28">
+      <div className="px-5 md:px-12 max-w-[1920px] mx-auto">
+        <div className="flex items-end gap-4 mb-8">
+          <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter text-white leading-none">{label}</h1>
+          <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-2">{filtered.length} títulos</span>
+        </div>
+
+        <div className="flex flex-col gap-3 mb-8">
+          <div className="relative max-w-lg">
+            <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={`Buscar ${label.toLowerCase()}...`}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-10 pr-10 text-sm font-bold text-white placeholder-gray-600 outline-none focus:border-red-600 transition-colors"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          {genres.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {genres.map((genre: string) => (
+                <button
+                  key={genre}
+                  onClick={() => setSelectedGenre(selectedGenre === genre ? '' : genre)}
+                  className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${selectedGenre === genre ? 'bg-red-600 border-red-600 text-white' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                >
+                  {genre}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {filtered.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+            {filtered.map((m: any, idx: number) => (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(idx * 0.025, 0.4) }}
+                className="group cursor-pointer"
+                onClick={() => onSelectMovie(m)}
+              >
+                <div className="aspect-[2/3] rounded-2xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
+                  <img
+                    src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w342${m.backdrop_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster')}
+                    alt={m.title || m.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
+                    <p className="text-white font-black text-xs uppercase leading-tight truncate">{m.title || m.name}</p>
+                    {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
+                  </div>
+                  {m.type === 'series' && type === 'series' && (
+                    <div className="absolute top-2 right-2 bg-red-600/80 px-1.5 py-0.5 rounded text-[7px] font-black text-white uppercase tracking-widest">Série</div>
+                  )}
+                </div>
+                <p className="text-gray-400 text-[10px] font-bold mt-2 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-32 text-center">
+            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
+              <Search size={40} className="text-gray-700" />
+            </div>
+            <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum conteúdo encontrado</p>
+            {searchQuery && <button onClick={() => setSearchQuery('')} className="mt-6 px-8 py-3 bg-red-600 rounded-full font-black uppercase text-[10px] tracking-widest">Limpar busca</button>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 const HomeView = React.memo(({ 
   myMovies, 
   streamingProviders, 
@@ -6257,6 +6369,8 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
+          <Route path="/filmes" element={<ContentFilteredPage myMovies={myMovies} type="filmes" onSelectMovie={handleSelectMovie} />} />
+          <Route path="/series" element={<ContentFilteredPage myMovies={myMovies} type="series" onSelectMovie={handleSelectMovie} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
