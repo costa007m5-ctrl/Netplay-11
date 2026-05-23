@@ -76,6 +76,98 @@ router.get("/betterflix/stream", async (req, res) => {
   }
 });
 
+const VIDSRC_LATEST_DOMAINS = [
+  "vidsrc-embed.ru",
+  "vidsrc-embed.su",
+  "vidsrcme.su",
+  "vsrc.su",
+];
+
+async function fetchVidsrcLatest(
+  type: "movies" | "tvshows",
+  page: number
+): Promise<any[]> {
+  for (const domain of VIDSRC_LATEST_DOMAINS) {
+    try {
+      const { data } = await axios.get(
+        `https://${domain}/${type}/latest/page-${page}.json`,
+        {
+          timeout: 10000,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          },
+        }
+      );
+      const results = Array.isArray(data) ? data : data?.result || [];
+      return results
+        .filter((i: any) => i.tmdb_id)
+        .map((i: any) => ({
+          tmdb_id: i.tmdb_id,
+          contentType: type === "movies" ? "movie" : "series",
+        }));
+    } catch {
+      // tenta próximo domínio
+    }
+  }
+  return [];
+}
+
+router.get("/betterflix/latest", async (req, res) => {
+  const page = Number(req.query.page) || 1;
+  const typeFilter = (req.query.type as string) || "all";
+
+  try {
+    const [movies, tvshows] = await Promise.all([
+      typeFilter !== "tvshows" ? fetchVidsrcLatest("movies", page) : [],
+      typeFilter !== "movies" ? fetchVidsrcLatest("tvshows", page) : [],
+    ]);
+
+    const combined = [...movies, ...tvshows].slice(0, 24);
+
+    if (combined.length === 0) {
+      res.json({ results: [] });
+      return;
+    }
+
+    const TMDB_KEY = process.env.VITE_TMDB_API_KEY;
+    if (!TMDB_KEY) {
+      res.json({ results: combined });
+      return;
+    }
+
+    // Enriquece com metadados TMDB em paralelo (máx 24 itens)
+    const enriched = await Promise.all(
+      combined.map(async (item: any) => {
+        try {
+          const mediaType = item.contentType === "series" ? "tv" : "movie";
+          const { data } = await axios.get(
+            `https://api.themoviedb.org/3/${mediaType}/${item.tmdb_id}?api_key=${TMDB_KEY}&language=pt-BR`,
+            { timeout: 6000 }
+          );
+          return {
+            tmdb_id: item.tmdb_id,
+            type: item.contentType,
+            title: data.title || data.name,
+            poster_path: data.poster_path || null,
+            backdrop_path: data.backdrop_path || null,
+            vote_average: data.vote_average || 0,
+            release_date: data.release_date || data.first_air_date || null,
+            overview: data.overview || "",
+            genres: data.genres?.map((g: any) => g.name).join(", ") || "",
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    res.json({ results: enriched.filter((i) => i && i.title) });
+  } catch (err: any) {
+    res.status(502).json({ error: "Falha ao buscar últimos da API Flix", detail: err.message });
+  }
+});
+
 router.get("/betterflix/canais", async (_req, res) => {
   try {
     const { data } = await axios.get("https://betterflix.click/api/canais.json", {

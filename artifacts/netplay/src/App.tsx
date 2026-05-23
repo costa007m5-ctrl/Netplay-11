@@ -16,6 +16,7 @@ const StreamingHub = React.lazy(() => import('./components/StreamingHub'));
 const CollectionsCarousel = React.lazy(() => import('./components/CollectionsCarousel'));
 const ContinueWatchingRow = React.lazy(() => import('./components/ContinueWatchingRow'));
 const NewReleasesRow = React.lazy(() => import('./components/NewReleasesRow'));
+const FlixLatestRow = React.lazy(() => import('./components/FlixLatestRow'));
 const CinemaRow = React.lazy(() => import('./components/CinemaRow'));
 const Top10Row = React.lazy(() => import('./components/Top10Row'));
 const AppInfo = React.lazy(() => import('./components/AppInfo'));
@@ -1438,6 +1439,10 @@ const HomeView = React.memo(({
                 onSelectMovie={handleSelectMovie}
               />
             )}
+
+            <Suspense fallback={null}>
+              <FlixLatestRow onSelectMovie={handleSelectMovie} />
+            </Suspense>
 
             {Object.entries(optimizedGenreMovies).map(([genre, genreMovies]: [string, any]) => (
               <Row 
