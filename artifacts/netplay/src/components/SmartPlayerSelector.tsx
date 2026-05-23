@@ -5,6 +5,7 @@ import { Movie } from '../types';
 import { isDynamicRef, parseDynamicRef, makeDynamicRef, makeDynamicRefV2, makeDynamicRefV3 } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 import { buildVidsrcMovieUrlSafe, buildVidsrcTvUrlSafe } from './admin/AdminNet2Tab';
+import { buildRedeFlixMovieUrl, buildRedeFlixSerieUrl } from './admin/AdminFlix3Tab';
 import { lookupTmdbId } from '../services/tmdb';
 
 export const NATIVE_API_STORAGE_KEY = 'netplay_native_terabox_api';
@@ -82,6 +83,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
   const altApi: 'v1' | 'v3' = nativeApi === 'v1' ? 'v3' : 'v1';
   const [isBfLoading, setIsBfLoading] = useState(false);
   const [isVidsrcLoading, setIsVidsrcLoading] = useState(false);
+  const [isFlix3Loading, setIsFlix3Loading] = useState(false);
 
   const currentUrl = episodeUrl || movie.videoUrl || '';
   const hasTeraboxUrl = isDynamicRef(currentUrl);
@@ -321,6 +323,50 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         }
       },
     },
+    {
+      id: 'redeflix',
+      num: '07',
+      title: 'Flix 3.0',
+      subtitle: 'RedeFlixApi · Player Externo',
+      desc: 'Reproduz via RedeFlixApi com embed direto por ID TMDB. Sem chave de API — acesso público.',
+      icon: Tv2,
+      gradient: 'from-emerald-600/12 to-cyan-900/5',
+      border: 'border-emerald-500/20 hover:border-emerald-400/50',
+      iconBg: 'bg-emerald-500/15',
+      iconColor: 'text-emerald-400',
+      badgeBg: 'bg-emerald-500/20',
+      badgeColor: 'text-emerald-300',
+      badge: 'FLIX 3.0',
+      glowColor: 'shadow-emerald-500/10',
+      available: hasTmdbId,
+      unavailableMsg: 'ID TMDB não disponível para este título.',
+      action: async () => {
+        if (isFlix3Loading) return;
+        setIsFlix3Loading(true);
+        try {
+          const isMovie = movie.type !== 'series';
+          const title = movie.title || movie.name || '';
+          const releaseYear = movie.release_date
+            ? new Date(movie.release_date).getFullYear()
+            : movie.first_air_date
+            ? new Date(movie.first_air_date).getFullYear()
+            : null;
+          const tmdbId = await lookupTmdbId(title, isMovie ? 'movie' : 'tv', releaseYear);
+          const id = tmdbId || movie.id;
+          const ep = episodeUrl && movie.episodes
+            ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
+            : null;
+          const season = ep?.season ?? 1;
+          const episode = ep?.episode ?? 1;
+          const rfUrl = isMovie
+            ? buildRedeFlixMovieUrl(id)
+            : buildRedeFlixSerieUrl(id, season, episode);
+          onPlay(rfUrl, 0, 'redeflix');
+        } finally {
+          setIsFlix3Loading(false);
+        }
+      },
+    },
   ];
 
   const visibleOptions = options.filter(o => o.available);
@@ -459,7 +505,8 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
             const Icon = option.icon;
             const isLoading =
               (option.id === 'betterflix' && isBfLoading) ||
-              (option.id === 'vidsrc' && isVidsrcLoading);
+              (option.id === 'vidsrc' && isVidsrcLoading) ||
+              (option.id === 'redeflix' && isFlix3Loading);
             return (
               <motion.button
                 key={option.id}

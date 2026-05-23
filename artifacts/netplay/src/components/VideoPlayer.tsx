@@ -5,6 +5,7 @@ import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
 import { isDynamicRef, parseDynamicRef } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
+import { buildRedeFlixMovieUrl, buildRedeFlixSerieUrl } from './admin/AdminFlix3Tab';
 
 interface VideoPlayerProps {
   movie: Movie;
@@ -26,7 +27,7 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, profile, roomId, isHost, onPlayNext, recommendations = [], onProgress, appSettings, initialTime, initialPlayerStyle, initialEpisodeIndex, isBackgroundMode, onClickBackground }) => {
   const [orientationKey, setOrientationKey] = useState(0);
-  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'betterflix' | 'vidsrc' | null>((initialPlayerStyle as any) || 'netflix');
+  const [playerStyle, setPlayerStyle] = useState<'netflix' | 'standard' | 'special' | 'betterflix' | 'vidsrc' | 'redeflix' | null>((initialPlayerStyle as any) || 'netflix');
   const [drivePlayMethod, setDrivePlayMethod] = useState<'api' | 'uc' | 'iframe'>('api');
   const [isAutoProCascade, setIsAutoProCascade] = useState(initialPlayerStyle === 'netflix-cascade');
   const getInitialExtracted = (type: 'video' | 'subtitle') => {
@@ -1227,6 +1228,64 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             // Usa ep.videoUrl diretamente se disponível (já tem tmdbId correto)
             setBfCurrentUrl(nextEp.videoUrl || buildBetterFlixUrl(movie.id, 'tv', s, e));
             setBfCurrentEpisodeIndex(activeEpIndex + 1);
+          }}
+          recommendations={recommendations}
+          onSelectRecommendation={(rec) => {
+            const recUrl = rec.type === 'series' && rec.episodes?.length ? rec.episodes[0].videoUrl : rec.videoUrl;
+            if (onPlayNext) onPlayNext(rec, recUrl || '');
+          }}
+          videoUrlOptions={[]}
+          isHost={isHost}
+          roomId={roomId}
+          profile={profile}
+          maxQualityHeight={appSettings?.subscription_plan === 'hub' ? 720 : 1080}
+          onProgress={async (time, duration) => {
+            currentTimeRef.current = time;
+            if (duration !== undefined) durationRef.current = duration;
+            if (onProgress) onProgress(movie.id, time, movie.videoUrl);
+          }}
+          isBackgroundMode={isBackgroundMode}
+          onClickBackground={onClickBackground}
+        />
+      </div>
+    );
+  }
+
+  // Flix 3.0 (RedeFlixApi) — iframe por ID TMDB
+  const isRedeFlixUrl = url.includes('redeflixapi.store');
+  if (isRedeFlixUrl || playerStyle === 'redeflix') {
+    const rfTitle = movie.title || movie.name || 'Assistindo';
+    const rfIsTV = movie.type === 'series';
+
+    const rfInitialEpIndex = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0)
+      ? initialEpisodeIndex
+      : (() => {
+          if (!rfIsTV || sortedEpisodes.length === 0) return -1;
+          const idx = sortedEpisodes.findIndex(ep => ep.videoUrl === url || ep.videoUrl2 === url);
+          return idx >= 0 ? idx : 0;
+        })();
+
+    const activeRfEpIndex = rfInitialEpIndex;
+
+    return (
+      <div className="relative w-full h-full">
+        <NetflixPlayer
+          src={url}
+          title={rfTitle}
+          seriesTitle={rfIsTV ? (movie.title || movie.name || '') : undefined}
+          backdropUrl={movie.backdrop_path}
+          posterUrl={movie.poster_path}
+          logoUrl={movieLogo || undefined}
+          onClose={onClose}
+          initialTime={0}
+          isMovie={!rfIsTV}
+          hasNextEpisode={rfIsTV && activeRfEpIndex >= 0 && activeRfEpIndex < sortedEpisodes.length - 1}
+          onNextEpisode={() => {
+            if (!rfIsTV || activeRfEpIndex < 0 || activeRfEpIndex >= sortedEpisodes.length - 1) return;
+            const nextEp = sortedEpisodes[activeRfEpIndex + 1] as any;
+            const s = nextEp.season ?? 1;
+            const e = nextEp.episode ?? 1;
+            if (onPlayNext) onPlayNext(movie, buildRedeFlixSerieUrl(movie.id, s, e), activeRfEpIndex + 1);
           }}
           recommendations={recommendations}
           onSelectRecommendation={(rec) => {

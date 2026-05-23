@@ -25,6 +25,7 @@ import AdminQuenteTab from './AdminQuenteTab';
 import AdminEpisodeSettingsTab from './AdminEpisodeSettingsTab';
 import AdminFlixAPITab from './AdminFlixAPITab';
 import AdminNet2Tab from './AdminNet2Tab';
+import AdminFlix3Tab from './AdminFlix3Tab';
 import QualitySelect from './QualitySelect';
 import MigrateBatchPanel from './MigrateBatchPanel';
 
@@ -56,7 +57,7 @@ interface AdminPanelProps {
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1694,6 +1695,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               { id: 'quente', label: 'Quente', icon: Activity },
               { id: 'net2', label: 'Net 2.0', icon: Tv },
               { id: 'flixapi', label: 'API Flix', icon: Tv },
+              { id: 'flix3', label: 'Flix 3.0', icon: Tv },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
               { id: 'terabox', label: 'Terabox API', icon: Database },
@@ -2273,6 +2275,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminNet2Tab />
             ) : activeTab === 'flixapi' ? (
               <AdminFlixAPITab />
+            ) : activeTab === 'flix3' ? (
+              <AdminFlix3Tab />
             ) : activeTab === 'apis' ? (
               <AdminAPIsTab />
             ) : activeTab === 'terabox' ? (
