@@ -35,7 +35,7 @@ export default defineConfig(async () => {
       alias: {
         "@": path.resolve(import.meta.dirname, "src"),
       },
-      dedupe: ["react", "react-dom"],
+      dedupe: ["react", "react-dom", "framer-motion", "motion"],
     },
     root: path.resolve(import.meta.dirname),
     build: {
@@ -61,7 +61,8 @@ export default defineConfig(async () => {
       },
     },
     optimizeDeps: {
-      include: ["react", "react-dom", "react-router-dom", "motion/react"],
+      include: ["react", "react-dom", "react-router-dom"],
+      exclude: ["framer-motion", "motion", "motion/react"],
     },
     server: {
       port,
