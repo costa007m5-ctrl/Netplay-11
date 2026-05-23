@@ -673,8 +673,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
             }
           }
 
-          // Vídeo Automático: ativa cascata apenas para API 1 Pro sem qualidade fixada
-          setIsAutoProCascade(!v2 && !v3 && !preferred && qualityList.length > 1);
+          // Vídeo Automático: ativa cascata para API 1 Pro.
+          // Se o player já estava em modo cascata (escolha explícita), mantém ativo independente de
+          // qualidade preferida ou do número de qualidades retornadas pela API.
+          setIsAutoProCascade(prev => prev || (!v2 && !v3 && !preferred && qualityList.length > 1));
 
           setExtractedVideoUrl(initial.url);
           setFinalVideoUrl(initial.url);

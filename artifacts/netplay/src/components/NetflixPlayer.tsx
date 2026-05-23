@@ -314,7 +314,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   // Cada qualidade tem `cascadeDelaySecs` segundos para iniciar o vídeo; se não iniciar, passa para a próxima.
   // Se TODAS as qualidades falharem e teraboxV1Ref estiver disponível, tenta fallback automático para API 3.0.
   useEffect(() => {
-    if (!autoQualityCascade || !activeSrc || !videoUrlOptions || videoUrlOptions.length <= 1) return;
+    if (!autoQualityCascade || !activeSrc || !videoUrlOptions || videoUrlOptions.length === 0) return;
+    // Com apenas 1 qualidade só continua se houver fallback API 3.0 — caso contrário não há nada a tentar
+    if (videoUrlOptions.length <= 1 && !teraboxV1Ref) return;
 
     const currentIdx = videoUrlOptions.findIndex(o => o.url === activeSrc);
     const hasNext = videoUrlOptions.some((o, i) => i > currentIdx && !failedSourcesRef.current.has(o.url));
