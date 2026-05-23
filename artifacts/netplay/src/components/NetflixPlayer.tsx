@@ -412,6 +412,17 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [sandboxDisabled, setSandboxDisabled] = useState(() => {
+    try { return localStorage.getItem('netplay_disable_sandbox') === '1'; } catch { return false; }
+  });
+  const toggleSandbox = () => {
+    setSandboxDisabled(prev => {
+      const next = !prev;
+      try { localStorage.setItem('netplay_disable_sandbox', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
+
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(isBackgroundMode);
   const [showControls, setShowControls] = useState(false); // Hidden by default on entry
@@ -2426,7 +2437,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         <iframe
           src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
           className="relative z-[10] w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          {...(!sandboxDisabled && { sandbox: "allow-scripts allow-same-origin allow-presentation allow-forms" })}
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share"
           referrerPolicy="origin"
@@ -3544,12 +3555,28 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
       {/* Botão de Fechar Dedicado para Iframe Mode */}
       {isIframeMode && (
-         <button 
-           onClick={onClose} 
-           className="absolute top-6 left-6 z-[400] bg-black/60 backdrop-blur-md p-3 rounded-full text-white hover:bg-red-600 transition-colors pointer-events-auto shadow-2xl border border-white/10"
-         >
+        <div className="absolute top-6 left-6 z-[400] flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={onClose}
+            className="bg-black/60 backdrop-blur-md p-3 rounded-full text-white hover:bg-red-600 transition-colors shadow-2xl border border-white/10"
+          >
             <ChevronLeft size={32} strokeWidth={3} />
-         </button>
+          </button>
+          <button
+            onClick={toggleSandbox}
+            title={sandboxDisabled ? 'Sandbox desativado — clique para ativar' : 'Sandbox ativo — clique para desativar (ajuda com bloqueadores de anúncio)'}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-black uppercase tracking-widest shadow-2xl border transition-all ${
+              sandboxDisabled
+                ? 'bg-orange-500/80 border-orange-400/60 text-white hover:bg-orange-600/90'
+                : 'bg-black/60 border-white/10 text-gray-300 hover:bg-white/10'
+            }`}
+          >
+            {sandboxDisabled ? <Unlock size={13} /> : <Lock size={13} />}
+            <span className="hidden sm:inline">
+              {sandboxDisabled ? 'Sandbox OFF' : 'Sandbox ON'}
+            </span>
+          </button>
+        </div>
       )}
     </div>
   );
