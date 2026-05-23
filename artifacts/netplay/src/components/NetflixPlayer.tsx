@@ -222,7 +222,8 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       lowerSrc.includes('vidsrc-embed.su') ||
       lowerSrc.includes('vidsrcme.su') ||
       lowerSrc.includes('vsrc.su') ||
-      lowerSrc.includes('betterflix.click')
+      lowerSrc.includes('betterflix.click') ||
+      lowerSrc.includes('redeflixapi.store')
     ) {
       return true;
     }
