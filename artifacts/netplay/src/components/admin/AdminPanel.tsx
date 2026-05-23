@@ -55,6 +55,7 @@ interface AdminPanelProps {
   categories?: any[];
   onRefreshCategoryImages?: (categoryId?: number) => Promise<void>;
   onUpdateCategoryImage?: (categoryId: number, backdrop: string) => Promise<void>;
+  onRefresh?: () => void;
 }
 
 type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3';
@@ -84,7 +85,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   collectionAutomationState,
   categories,
   onRefreshCategoryImages,
-  onUpdateCategoryImage
+  onUpdateCategoryImage,
+  onRefresh
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('all');
   const [logoScope, setLogoScope] = useState<LogoScanScope>('all');
@@ -2276,7 +2278,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             ) : activeTab === 'flixapi' ? (
               <AdminFlixAPITab />
             ) : activeTab === 'flix3' ? (
-              <AdminFlix3Tab />
+              <AdminFlix3Tab onRefresh={onRefresh} />
             ) : activeTab === 'apis' ? (
               <AdminAPIsTab />
             ) : activeTab === 'terabox' ? (

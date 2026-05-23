@@ -41,7 +41,7 @@ function makeIdle(): JobState {
   return { jobId: null, status: 'idle', total: 0, existing: 0, inserted: 0, skipped: 0, errors: 0, log: [] };
 }
 
-function AdminFlix3Tab() {
+function AdminFlix3Tab({ onRefresh }: { onRefresh?: () => void }) {
   const [testMovieId, setTestMovieId] = useState('19995');
   const [testSerieId, setTestSerieId] = useState('387');
   const [testSeason, setTestSeason] = useState('1');
@@ -88,6 +88,9 @@ function AdminFlix3Tab() {
         }));
         if (data.status !== 'running') {
           stopPoll(type);
+          if (data.status === 'done') {
+            onRefresh?.();
+          }
         }
       } catch {}
     }, POLL_INTERVAL);
