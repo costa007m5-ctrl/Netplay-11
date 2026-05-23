@@ -661,76 +661,71 @@ function ChannelPlayerView({
   }, [allChannels]);
 
   return (
-    <div className="fixed inset-0 z-[150] flex bg-black">
-      {/* Player */}
-      <div className={`flex-1 relative transition-all duration-300 ${showSidebar ? 'mr-[320px]' : ''}`}>
-        <VideoPlayer
-          key={String(channel.id)}
-          movie={fakeMovie}
-          onClose={onClose}
-          initialPlayerStyle="betterflix"
-        />
+    <>
+      {/* Player ocupa toda a tela (fixed inset-0 z-[3000] internamente) */}
+      <VideoPlayer
+        key={String(channel.id)}
+        movie={fakeMovie}
+        onClose={onClose}
+        initialPlayerStyle="betterflix"
+      />
 
-        {/* ── Botões Prev / Next nas laterais do player ── */}
+      {/* ── Overlay de controles: fixed acima do player (z-[3100]) ── */}
+      <div className={`fixed inset-0 z-[3100] pointer-events-none transition-all duration-300 ${showSidebar ? 'right-[320px]' : ''}`}>
+
+        {/* Botão Prev — lateral esquerda */}
         <button
           onClick={handlePrev}
           title="Canal anterior (← ↓)"
-          className="absolute left-3 top-1/2 -translate-y-1/2 z-[160] w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 border border-white/15 hover:border-white/30 flex items-center justify-center text-white/70 hover:text-white transition-all backdrop-blur-sm shadow-xl opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
-          style={{ opacity: undefined }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={e => (e.currentTarget.style.opacity = '')}
+          className="pointer-events-auto absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 border border-white/15 hover:border-white/30 flex items-center justify-center text-white/70 hover:text-white transition-all backdrop-blur-sm shadow-xl"
         >
           <SkipBack size={16} />
         </button>
+
+        {/* Botão Next — lateral direita */}
         <button
           onClick={handleNext}
           title="Próximo canal (→ ↑)"
-          className="absolute right-3 top-1/2 -translate-y-1/2 z-[160] w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 border border-white/15 hover:border-white/30 flex items-center justify-center text-white/70 hover:text-white transition-all backdrop-blur-sm shadow-xl"
-          style={{ opacity: undefined }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={e => (e.currentTarget.style.opacity = '')}
+          className="pointer-events-auto absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 border border-white/15 hover:border-white/30 flex items-center justify-center text-white/70 hover:text-white transition-all backdrop-blur-sm shadow-xl"
         >
           <SkipForward size={16} />
         </button>
 
         {/* ── Barra de controles superior ── */}
-        <div className="absolute top-4 right-4 z-[160] flex items-center gap-2">
-          {/* Botões prev/next compactos */}
+        <div className="pointer-events-auto absolute top-4 right-4 flex items-center gap-2">
           <button
             onClick={handlePrev}
             title="Canal anterior"
-            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/60 backdrop-blur-xl border border-white/15 text-white hover:bg-white/10 hover:border-white/30 transition-all shadow-xl"
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/70 backdrop-blur-xl border border-white/20 text-white hover:bg-white/10 hover:border-white/30 transition-all shadow-xl"
           >
             <SkipBack size={13} />
           </button>
           <button
             onClick={handleNext}
             title="Próximo canal"
-            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/60 backdrop-blur-xl border border-white/15 text-white hover:bg-white/10 hover:border-white/30 transition-all shadow-xl"
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/70 backdrop-blur-xl border border-white/20 text-white hover:bg-white/10 hover:border-white/30 transition-all shadow-xl"
           >
             <SkipForward size={13} />
           </button>
 
-          {/* Toggle strip */}
           <button
             onClick={() => { setShowStrip(v => !v); if (stripTimerRef.current) clearTimeout(stripTimerRef.current); }}
             title="Canais próximos"
             className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl backdrop-blur-xl border transition-all shadow-xl ${
               showStrip
-                ? 'bg-orange-600/30 border-orange-500/50 text-orange-300'
-                : 'bg-black/60 border-white/15 text-white hover:bg-white/10'
+                ? 'bg-orange-600/40 border-orange-500/60 text-orange-300'
+                : 'bg-black/70 border-white/20 text-white hover:bg-white/10'
             }`}
           >
             <Tv2 size={13} />
           </button>
 
-          {/* Toggle sidebar */}
           <button
             onClick={() => setShowSidebar(v => !v)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl backdrop-blur-xl border transition-all shadow-xl ${
               showSidebar
-                ? 'bg-red-600/30 border-red-600/50 text-red-300'
-                : 'bg-black/60 border-white/15 text-white hover:bg-white/10'
+                ? 'bg-red-600/40 border-red-600/60 text-red-300'
+                : 'bg-black/70 border-white/20 text-white hover:bg-white/10'
             }`}
           >
             <List size={14} />
@@ -740,14 +735,14 @@ function ChannelPlayerView({
           </button>
         </div>
 
-        {/* ── Indicador do canal atual (exibido ao trocar) ── */}
+        {/* ── Indicador do canal atual ── */}
         <AnimatePresence>
           {showStrip && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-16 left-1/2 -translate-x-1/2 z-[160] flex items-center gap-2 bg-black/70 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-2 pointer-events-none"
+              className="absolute top-16 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/75 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-2 pointer-events-none"
             >
               {getImage(channel) && (
                 <img src={getImage(channel)} alt="" className="w-7 h-7 object-contain rounded-lg bg-black/40 p-0.5" />
@@ -774,13 +769,13 @@ function ChannelPlayerView({
           visible={showStrip}
         />
 
-        {/* Dica de atalhos (aparece uma vez) */}
-        <div className="absolute bottom-4 left-4 z-[160] pointer-events-none">
-          <p className="text-[9px] text-white/20 font-mono">← → trocar canal • L lista</p>
+        {/* Dica de atalhos */}
+        <div className="absolute bottom-4 left-4 pointer-events-none">
+          <p className="text-[9px] text-white/25 font-mono select-none">← → trocar canal • L lista</p>
         </div>
       </div>
 
-      {/* ── Sidebar de canais + programação ── */}
+      {/* ── Sidebar de canais + programação (z-[3200]) ── */}
       <AnimatePresence>
         {showSidebar && (
           <motion.aside
@@ -788,7 +783,7 @@ function ChannelPlayerView({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 320, opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 bottom-0 w-[320px] bg-[#0d0d0d] border-l border-white/10 flex flex-col z-[155] shadow-2xl"
+            className="fixed right-0 top-0 bottom-0 w-[320px] bg-[#0d0d0d] border-l border-white/10 flex flex-col z-[3200] shadow-2xl"
           >
             {/* Header sidebar */}
             <div className="flex-none p-4 border-b border-white/5">
@@ -948,7 +943,7 @@ function ChannelPlayerView({
           </motion.aside>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }
 
