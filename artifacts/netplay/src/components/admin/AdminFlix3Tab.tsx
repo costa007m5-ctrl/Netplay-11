@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { Tv2, ExternalLink, Film, PlayCircle, List, CheckCircle2, AlertCircle, RefreshCcw, Download, Loader2, X, ChevronDown, ChevronUp, ShieldCheck, ShieldOff } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 import tmdb, { requests } from '../../services/tmdb';
 
 export function buildRedeFlixMovieUrl(tmdbId: number | string): string {
@@ -88,8 +87,15 @@ function AdminFlix3Tab() {
       const existingIds = new Set<number>();
       for (let i = 0; i < ids.length; i += CHUNK) {
         const chunk = ids.slice(i, i + CHUNK);
-        const { data } = await supabase.from('movies').select('id').in('id', chunk);
-        (data || []).forEach((r: any) => existingIds.add(Number(r.id)));
+        const checkRes = await fetch('/api/movies/check-existing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: chunk }),
+        });
+        if (checkRes.ok) {
+          const { existingIds: found } = await checkRes.json() as { existingIds: number[] };
+          (found || []).forEach((id: number) => existingIds.add(id));
+        }
       }
 
       const newIds = ids.filter(id => !existingIds.has(id));
@@ -150,16 +156,17 @@ function AdminFlix3Tab() {
                 created_at: new Date().toISOString(),
               };
 
-              const { error } = await supabase.from('movies').insert([movieData]);
-              if (error) {
-                if (error.code === '23505') {
-                  skipped++;
-                } else {
-                  errors++;
-                  appendLog(type, `⚠️ ID ${tmdbId}: ${error.message}`);
-                }
-              } else {
+              const upsertRes = await fetch('/api/movies/upsert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(movieData),
+              });
+              if (upsertRes.ok) {
                 inserted++;
+              } else {
+                const errBody = await upsertRes.json().catch(() => ({}));
+                errors++;
+                appendLog(type, `⚠️ ID ${tmdbId}: ${errBody.error || 'erro ao inserir'}`);
               }
             } catch (err: any) {
               errors++;
