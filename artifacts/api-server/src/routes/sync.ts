@@ -47,15 +47,15 @@ async function supabaseCheckExisting(
   anonKey: string,
   authToken: string,
   tmdbIds: number[]
-): Promise<Set<number>> {
-  const existingSet = new Set<number>();
+): Promise<Map<number, string>> {
+  const existingMap = new Map<number, string>();
   const CHUNK = 500;
 
   for (let i = 0; i < tmdbIds.length; i += CHUNK) {
     const chunk = tmdbIds.slice(i, i + CHUNK);
     try {
       const res = await fetch(
-        `${supabaseUrl}/rest/v1/movies?select=tmdb_id&tmdb_id=in.(${chunk.join(",")})`,
+        `${supabaseUrl}/rest/v1/movies?select=tmdb_id,video_url&tmdb_id=in.(${chunk.join(",")})`,
         {
           headers: {
             apikey: anonKey,
@@ -64,12 +64,37 @@ async function supabaseCheckExisting(
         }
       );
       if (res.ok) {
-        const rows: { tmdb_id: number }[] = await res.json();
-        rows.forEach((r) => { if (r.tmdb_id) existingSet.add(r.tmdb_id); });
+        const rows: { tmdb_id: number; video_url: string | null }[] = await res.json();
+        rows.forEach((r) => { if (r.tmdb_id) existingMap.set(r.tmdb_id, r.video_url || ""); });
       }
     } catch {}
   }
-  return existingSet;
+  return existingMap;
+}
+
+async function supabasePatch(
+  supabaseUrl: string,
+  anonKey: string,
+  authToken: string,
+  tmdbId: number,
+  patch: Record<string, any>
+): Promise<void> {
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/movies?tmdb_id=eq.${tmdbId}`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Supabase patch failed: ${res.status} — ${body}`);
+  }
 }
 
 async function supabaseUpsert(
@@ -134,12 +159,13 @@ async function runSync(job: SyncJob, type: string, userToken?: string) {
       return;
     }
 
-    const existingSet = await supabaseCheckExisting(supabaseUrl, anonKey, authToken, ids);
-    job.existing = existingSet.size;
-    const newIds = ids.filter((id) => !existingSet.has(id));
+    const existingMap = await supabaseCheckExisting(supabaseUrl, anonKey, authToken, ids);
+    job.existing = existingMap.size;
+    const newIds = ids.filter((id) => !existingMap.has(id));
+    const emptyUrlIds = ids.filter((id) => existingMap.has(id) && !existingMap.get(id));
     appendLog(
       job,
-      `📦 Já cadastrados: ${existingSet.size} | Novos: ${newIds.length}`
+      `📦 Já cadastrados: ${existingMap.size} | Novos: ${newIds.length} | Sem URL (corrigir): ${emptyUrlIds.length}`
     );
 
     if (!TMDB_KEY) {
@@ -184,6 +210,10 @@ async function runSync(job: SyncJob, type: string, userToken?: string) {
               ? details.release_date || null
               : details.first_air_date || null;
 
+            const videoUrl = isMovie
+              ? `https://redeflixapi.store/filme/${tmdbId}`
+              : `https://redeflixapi.store/serie/${tmdbId}/1/1`;
+
             const record: Record<string, any> = {
               tmdb_id: tmdbId,
               title: isMovie
@@ -200,7 +230,7 @@ async function runSync(job: SyncJob, type: string, userToken?: string) {
                 ? details.runtime || null
                 : details.episode_run_time?.[0] || null,
               genres: genreNames || null,
-              video_url: "",
+              video_url: videoUrl,
             };
 
             await supabaseUpsert(supabaseUrl, anonKey, authToken, record);
@@ -220,6 +250,30 @@ async function runSync(job: SyncJob, type: string, userToken?: string) {
       }
 
       await new Promise((r) => setTimeout(r, DELAY));
+    }
+
+    if (!job.cancelFlag && emptyUrlIds.length > 0) {
+      appendLog(job, `🔧 Corrigindo URLs de ${emptyUrlIds.length} registros existentes...`);
+      let fixed = 0;
+      const FIX_BATCH = 10;
+      for (let i = 0; i < emptyUrlIds.length; i += FIX_BATCH) {
+        if (job.cancelFlag) break;
+        const batch = emptyUrlIds.slice(i, i + FIX_BATCH);
+        await Promise.allSettled(
+          batch.map(async (tmdbId) => {
+            try {
+              const isMovie = cfg.tmdbType === "movie";
+              const videoUrl = isMovie
+                ? `https://redeflixapi.store/filme/${tmdbId}`
+                : `https://redeflixapi.store/serie/${tmdbId}/1/1`;
+              await supabasePatch(supabaseUrl, anonKey, authToken, tmdbId, { video_url: videoUrl });
+              fixed++;
+            } catch {}
+          })
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      appendLog(job, `✅ URLs corrigidas: ${fixed}/${emptyUrlIds.length}`);
     }
 
     if (!job.cancelFlag) {
