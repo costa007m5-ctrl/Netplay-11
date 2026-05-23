@@ -108,6 +108,43 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     });
   }, [movie.episodes]);
 
+  // BetterFlix — episódios carregados do TMDB quando movie.episodes está vazio
+  const [bfEpisodes, setBfEpisodes] = useState<any[]>([]);
+  useEffect(() => {
+    const isBF = (movie.videoUrl || '').includes('betterflix.click') || playerStyle === 'betterflix';
+    if (!isBF || movie.type !== 'series') { setBfEpisodes([]); return; }
+    if (sortedEpisodes.length > 0) { setBfEpisodes(sortedEpisodes); return; }
+    let cancelled = false;
+    const numSeasons = (movie as any).number_of_seasons || (movie as any).seasons_count || 1;
+    const load = async () => {
+      try {
+        const { default: tmdb, requests } = await import('../services/tmdb');
+        const allEps: any[] = [];
+        for (let s = 1; s <= numSeasons; s++) {
+          try {
+            const res = await tmdb.get(requests.tvSeasonDetails(movie.id, s), { params: { language: 'pt-BR' } });
+            const eps: any[] = res.data.episodes || [];
+            eps.forEach((ep: any) => {
+              allEps.push({
+                id: `tmdb_bf_s${ep.season_number}e${ep.episode_number}`,
+                season: ep.season_number,
+                episode: ep.episode_number,
+                title: ep.name || `Episódio ${ep.episode_number}`,
+                overview: ep.overview,
+                still_path: ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : undefined,
+                runtime: ep.runtime,
+                videoUrl: buildBetterFlixUrl(movie.id, 'tv', ep.season_number, ep.episode_number),
+              });
+            });
+          } catch {}
+        }
+        if (!cancelled && allEps.length > 0) setBfEpisodes(allEps);
+      } catch {}
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [movie.id, movie.type, movie.videoUrl, playerStyle, sortedEpisodes.length]);
+
   const driveApiKey = import.meta.env.VITE_GOOGLE_DRIVE_API_KEY;
 
   const [movieLogo, setMovieLogo] = useState<string | null>(movie.logo_path || null);
@@ -1115,6 +1152,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
 
     const activeBfUrl = bfCurrentUrl || url;
     const activeEpIndex = bfCurrentEpisodeIndex >= 0 ? bfCurrentEpisodeIndex : bfInitialEpIndex;
+    // Usa episódios carregados do TMDB quando não há episódios locais
+    const bfAllEpisodes = bfEpisodes.length > 0 ? bfEpisodes : sortedEpisodes;
 
     return (
       <div className="relative w-full h-full">
@@ -1122,27 +1161,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           src={activeBfUrl}
           title={bfTitle}
           seriesTitle={bfIsTV ? (movie.title || movie.name || '') : undefined}
-          episodes={bfIsTV && (movie.episodes?.length ?? 0) > 0 ? movie.episodes : undefined}
+          episodes={bfIsTV && bfAllEpisodes.length > 0 ? bfAllEpisodes : undefined}
           currentEpisodeIndex={activeEpIndex >= 0 ? activeEpIndex : undefined}
           backdropUrl={movie.backdrop_path}
           logoUrl={movieLogo || undefined}
           onClose={onClose}
           initialTime={initialTime ?? movie.last_position ?? 0}
           isMovie={!bfIsTV}
-          hasNextEpisode={bfIsTV && activeEpIndex >= 0 && activeEpIndex < sortedEpisodes.length - 1}
+          hasNextEpisode={bfIsTV && activeEpIndex >= 0 && activeEpIndex < bfAllEpisodes.length - 1}
           onSelectEpisode={(ep: any) => {
             const s = ep.season ?? 1;
             const e = ep.episode ?? 1;
             const newUrl = buildBetterFlixUrl(movie.id, 'tv', s, e);
-            const newIdx = sortedEpisodes.findIndex(
+            const newIdx = bfAllEpisodes.findIndex(
               (se: any) => (se.season ?? 1) === s && (se.episode ?? 1) === e
             );
             setBfCurrentUrl(newUrl);
             setBfCurrentEpisodeIndex(newIdx >= 0 ? newIdx : -1);
           }}
           onNextEpisode={() => {
-            if (!bfIsTV || activeEpIndex < 0 || activeEpIndex >= sortedEpisodes.length - 1) return;
-            const nextEp = sortedEpisodes[activeEpIndex + 1] as any;
+            if (!bfIsTV || activeEpIndex < 0 || activeEpIndex >= bfAllEpisodes.length - 1) return;
+            const nextEp = bfAllEpisodes[activeEpIndex + 1] as any;
             const s = nextEp.season ?? 1;
             const e = nextEp.episode ?? 1;
             setBfCurrentUrl(buildBetterFlixUrl(movie.id, 'tv', s, e));

@@ -2485,7 +2485,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       {isIframeMode ? (
         <>
           <iframe
-            src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
+            src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || activeSrc || src) : (activeSrc || src)}
             className="relative z-[10] w-full h-full border-0"
             {...(!sandboxDisabled && { sandbox: "allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox" })}
             allowFullScreen
@@ -2502,7 +2502,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
           {/* Botões flutuantes sempre visíveis no modo iframe */}
           {!showEpisodesSidebar && (
-            <div className="absolute bottom-4 right-4 z-[200] flex flex-col items-end gap-2 pointer-events-auto">
+            <div className="absolute bottom-20 right-4 z-[350] flex flex-col items-end gap-2 pointer-events-auto">
               {/* Botão Episódios */}
               {episodes && episodes.length > 0 && (
                 <button
