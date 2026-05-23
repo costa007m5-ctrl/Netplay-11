@@ -49,10 +49,12 @@ const getCat   = (ch: Channel) => ch.categoria || ch.category || '';
 function buildChannelUrl(ch: Channel): string {
   if (ch.url) {
     const key = getBetterFlixKey();
-    return key && !ch.url.includes('key=') ? `${ch.url}&key=${encodeURIComponent(key)}` : ch.url;
+    let u = key && !ch.url.includes('key=') ? `${ch.url}&key=${encodeURIComponent(key)}` : ch.url;
+    if (!u.includes('autoplay=')) u += '&autoplay=1';
+    return u;
   }
   const key = getBetterFlixKey();
-  let url = `https://betterflix.click/api/player?id=${ch.id}&type=channel`;
+  let url = `https://betterflix.click/api/player?id=${ch.id}&type=channel&autoplay=1`;
   if (key) url += `&key=${encodeURIComponent(key)}`;
   return url;
 }
