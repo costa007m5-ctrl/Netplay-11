@@ -2501,53 +2501,27 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           />
 
           {/* Botões flutuantes sempre visíveis no modo iframe */}
-          {!showEpisodesSidebar && (
-            <div className="absolute bottom-20 right-4 z-[350] flex flex-col items-end gap-2 pointer-events-auto">
-              {/* Botão Episódios */}
-              {episodes && episodes.length > 0 && (
-                <button
-                  onClick={() => { setShowEpisodesSidebar(true); }}
-                  className="flex items-center gap-2 bg-black/80 hover:bg-red-600 border border-white/20 hover:border-red-500 text-white text-xs font-bold px-3 py-2 rounded-full shadow-2xl backdrop-blur-md transition-all duration-200"
-                >
-                  <Tv size={14} />
-                  <span>Episódios</span>
-                </button>
-              )}
-
-              {/* Contador auto-próximo episódio */}
-              {hasNextEpisode && iframeAutoNextEnabled && !iframeAutoNextDismissed && iframeAutoNextSecondsLeft !== null && iframeAutoNextSecondsLeft > 0 && (
-                <div className="flex items-center gap-2 bg-black/80 border border-white/10 text-white text-xs px-3 py-2 rounded-full shadow-2xl backdrop-blur-md">
-                  {(() => {
-                    const mins = Math.floor(iframeAutoNextSecondsLeft / 60);
-                    const secs = iframeAutoNextSecondsLeft % 60;
-                    return (
-                      <>
-                        <FastForward size={12} className="text-red-400 shrink-0" />
-                        <span className="text-white/70">Próximo em</span>
-                        <span className="font-black text-white tabular-nums">{mins}:{String(secs).padStart(2, '0')}</span>
-                        <button
-                          onClick={() => { setIframeAutoNextDismissed(true); if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current); }}
-                          className="text-white/40 hover:text-white ml-1 transition-colors"
-                          title="Cancelar auto-próximo"
-                        >
-                          <X size={12} />
-                        </button>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Botão Pular para Próximo Episódio imediato */}
-              {hasNextEpisode && onNextEpisode && (
-                <button
-                  onClick={onNextEpisode}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-full shadow-2xl transition-all duration-200"
-                >
-                  <FastForward size={14} fill="currentColor" />
-                  <span>Próximo Ep.</span>
-                </button>
-              )}
+          {/* Contador de auto-próximo episódio (canto inferior direito) */}
+          {hasNextEpisode && iframeAutoNextEnabled && !iframeAutoNextDismissed && iframeAutoNextSecondsLeft !== null && iframeAutoNextSecondsLeft > 0 && (
+            <div className="absolute bottom-6 right-4 z-[400] flex items-center gap-2 bg-black/80 border border-white/10 text-white text-xs px-3 py-2 rounded-full shadow-2xl backdrop-blur-md pointer-events-auto">
+              {(() => {
+                const mins = Math.floor(iframeAutoNextSecondsLeft / 60);
+                const secs = iframeAutoNextSecondsLeft % 60;
+                return (
+                  <>
+                    <FastForward size={12} className="text-red-400 shrink-0" />
+                    <span className="text-white/70">Próximo em</span>
+                    <span className="font-black text-white tabular-nums">{mins}:{String(secs).padStart(2, '0')}</span>
+                    <button
+                      onClick={() => { setIframeAutoNextDismissed(true); if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current); }}
+                      className="text-white/40 hover:text-white ml-1 transition-colors"
+                      title="Cancelar auto-próximo"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -3683,30 +3657,55 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Botão de Fechar Dedicado para Iframe Mode */}
+      {/* Controles do Iframe Mode */}
       {isIframeMode && (
-        <div className="absolute top-6 left-6 z-[400] flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={onClose}
-            className="bg-black/60 backdrop-blur-md p-3 rounded-full text-white hover:bg-red-600 transition-colors shadow-2xl border border-white/10"
-          >
-            <ChevronLeft size={32} strokeWidth={3} />
-          </button>
-          <button
-            onClick={toggleSandbox}
-            title={sandboxDisabled ? 'Sandbox desativado — clique para ativar' : 'Sandbox ativo — clique para desativar (ajuda com bloqueadores de anúncio)'}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-black uppercase tracking-widest shadow-2xl border transition-all ${
-              sandboxDisabled
-                ? 'bg-orange-500/80 border-orange-400/60 text-white hover:bg-orange-600/90'
-                : 'bg-black/60 border-white/10 text-gray-300 hover:bg-white/10'
-            }`}
-          >
-            {sandboxDisabled ? <Unlock size={13} /> : <Lock size={13} />}
-            <span className="hidden sm:inline">
-              {sandboxDisabled ? 'Sandbox OFF' : 'Sandbox ON'}
-            </span>
-          </button>
-        </div>
+        <>
+          {/* Barra superior esquerda: Voltar + Sandbox */}
+          <div className="absolute top-6 left-6 z-[400] flex items-center gap-2 pointer-events-auto">
+            <button
+              onClick={onClose}
+              className="bg-black/60 backdrop-blur-md p-3 rounded-full text-white hover:bg-red-600 transition-colors shadow-2xl border border-white/10"
+            >
+              <ChevronLeft size={32} strokeWidth={3} />
+            </button>
+            <button
+              onClick={toggleSandbox}
+              title={sandboxDisabled ? 'Sandbox desativado — clique para ativar' : 'Sandbox ativo — clique para desativar (ajuda com bloqueadores de anúncio)'}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-black uppercase tracking-widest shadow-2xl border transition-all ${
+                sandboxDisabled
+                  ? 'bg-orange-500/80 border-orange-400/60 text-white hover:bg-orange-600/90'
+                  : 'bg-black/60 border-white/10 text-gray-300 hover:bg-white/10'
+              }`}
+            >
+              {sandboxDisabled ? <Unlock size={13} /> : <Lock size={13} />}
+              <span className="hidden sm:inline">
+                {sandboxDisabled ? 'Sandbox OFF' : 'Sandbox ON'}
+              </span>
+            </button>
+          </div>
+
+          {/* Barra superior direita: Episódios + Próximo (para séries) */}
+          {!isMovie && !showEpisodesSidebar && (
+            <div className="absolute top-6 right-6 z-[400] flex items-center gap-2 pointer-events-auto">
+              {hasNextEpisode && onNextEpisode && (
+                <button
+                  onClick={onNextEpisode}
+                  className="flex items-center gap-1.5 bg-black/60 hover:bg-red-600 border border-white/10 hover:border-red-500 text-white text-xs font-bold px-3 py-2 rounded-full backdrop-blur-md shadow-2xl transition-all duration-200"
+                >
+                  <FastForward size={13} fill="currentColor" />
+                  <span>Próximo</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowEpisodesSidebar(true)}
+                className="flex items-center gap-1.5 bg-black/60 hover:bg-red-600 border border-white/10 hover:border-red-500 text-white text-xs font-bold px-3 py-2 rounded-full backdrop-blur-md shadow-2xl transition-all duration-200"
+              >
+                <Tv size={13} />
+                <span>{episodes && episodes.length > 0 ? `Episódios (${episodes.length})` : 'Episódios'}</span>
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
