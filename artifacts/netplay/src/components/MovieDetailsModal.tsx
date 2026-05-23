@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Play, Plus, ThumbsUp, Volume2, VolumeX, Users, Sparkles, Calendar, Star, Clock, Info, ChevronDown, Monitor, Smartphone, Cast, Share2, Tv, RotateCcw, Loader2, Lock } from 'lucide-react';
+import { X, Play, Plus, ThumbsUp, Volume2, VolumeX, Users, Sparkles, Calendar, Star, Clock, Info, ChevronDown, Monitor, Smartphone, Cast, Share2, Tv, RotateCcw, Loader2, Lock, RefreshCcw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Movie } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import tmdb, { requests, getMovieLogo, lookupTmdbId, fetchSeasonDetailsWithFallback } from '../services/tmdb';
 import VideoPlayer from './VideoPlayer';
-import SmartPlayerSelector from './SmartPlayerSelector';
+import SmartPlayerSelector, { getSavedServerPref } from './SmartPlayerSelector';
 import { isDynamicRef } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 
@@ -167,6 +167,7 @@ const MovieDetailsModal = React.memo(({
   const [pendingEpisodeUrl, setPendingEpisodeUrl] = useState<string | undefined>();
   const [pendingStartTime, setPendingStartTime] = useState(0);
   const [pendingEpisodeIndex, setPendingEpisodeIndex] = useState<number | undefined>();
+  const [pendingAutoSelectId, setPendingAutoSelectId] = useState<string | undefined>();
   const [epProgress, setEpProgress] = useState<Record<number, { pos: number; dur: number }>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -274,10 +275,11 @@ const MovieDetailsModal = React.memo(({
     onPlay(movie, episodeUrl, startTime, playerStyle, episodeIndex);
   };
 
-  const triggerSmartPlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
+  const triggerSmartPlay = (episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number, autoSelectId?: string) => {
     setPendingEpisodeUrl(episodeUrl);
     setPendingStartTime(startTime || 0);
     setPendingEpisodeIndex(episodeIndex);
+    setPendingAutoSelectId(autoSelectId);
     setShowSmartSelector(true);
   };
 
@@ -656,193 +658,129 @@ const MovieDetailsModal = React.memo(({
             </motion.div>
             
             <div className="flex flex-wrap items-center gap-3 md:gap-8">
-              {/* Botão Play Principal ou Resume/Restart */}
+              {/* Botão Play Principal — sempre um único botão "Assistir" */}
               {savedProgress > 5 && !isLocked ? (
-                <div className="flex flex-wrap items-center gap-3 md:gap-8 w-full md:w-auto">
-                  <motion.button 
-                    whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255,255,255,0.3)' }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      if (isSeries && movie.episodes && movie.episodes.length > 0) {
-                        const firstSortedEp = sortedEpisodesFlat[0];
-                        const savedEpEntry = savedUrl ? sortedEpisodesFlat.find((e: any) => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl) : null;
-                        const urlToPlay = savedUrl || firstSortedEp?.videoUrl || firstSortedEp?.videoUrl2 || '';
-                        const savedEpSortedIdx = savedEpEntry ? sortedEpisodesFlat.indexOf(savedEpEntry) : 0;
-                        triggerSmartPlay(urlToPlay, savedProgress, 'netflix', savedEpSortedIdx);
-                      } else if (isYouTube || isKingX) {
-                        const defaultUrl = movie.videoUrl;
-                        handlePlay(savedUrl || defaultUrl || undefined, savedProgress);
-                      } else {
-                        const movieUrl = movie.videoUrl || '';
-                        if (isDynamicRef(movieUrl)) {
-                          triggerSmartPlay(movieUrl, savedProgress, 'netflix');
+                <div className="flex flex-col gap-2 w-full md:w-auto">
+                  <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                    <motion.button
+                      whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255,255,255,0.3)' }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        const savedPref = getSavedServerPref(movie.id);
+                        if (isSeries && movie.episodes && movie.episodes.length > 0) {
+                          const savedEpEntry = savedUrl ? sortedEpisodesFlat.find((e: any) => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl) : null;
+                          const urlToPlay = savedUrl || sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
+                          const savedEpSortedIdx = savedEpEntry ? sortedEpisodesFlat.indexOf(savedEpEntry) : 0;
+                          triggerSmartPlay(urlToPlay, savedProgress, undefined, savedEpSortedIdx, savedPref || undefined);
                         } else {
-                          setShowVideo(true); setIsPlayingFullscreen(true);
+                          const movieUrl = movie.videoUrl || '';
+                          triggerSmartPlay(movieUrl, savedProgress, undefined, undefined, savedPref || undefined);
                         }
-                      }
-                    }}
-                    className="bg-white text-black hover:bg-gray-200 flex-1 md:flex-none px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl relative overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-black/10 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-                    <Play fill="currentColor" size={14} className="md:w-6 md:h-6" /> 
-                    <span className="whitespace-nowrap relative z-10">Continuar {savedEpisodeInfo ? `(${savedEpisodeInfo})` : `(${formatProgressTime(savedProgress)})`}</span>
-                  </motion.button>
+                      }}
+                      className="bg-white text-black hover:bg-gray-200 flex-1 md:flex-none px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center justify-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl relative overflow-hidden group"
+                    >
+                      <div className="absolute inset-0 bg-black/10 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+                      <Play fill="currentColor" size={14} className="md:w-6 md:h-6" />
+                      <span className="whitespace-nowrap relative z-10">Continuar {savedEpisodeInfo ? `(${savedEpisodeInfo})` : `(${formatProgressTime(savedProgress)})`}</span>
+                    </motion.button>
 
-                  <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      localStorage.removeItem(`netplay_progress_${movie.id}`);
-                      setUserResetProgress(true);
-                      if (isSeries && movie.episodes && movie.episodes.length > 0) {
-                        const firstSortedEp2 = sortedEpisodesFlat[0];
-                        const urlToPlay = firstSortedEp2?.videoUrl || firstSortedEp2?.videoUrl2 || '';
-                        triggerSmartPlay(urlToPlay, 0, 'netflix', 0);
-                      } else if (isYouTube || isKingX) {
-                        handlePlay(movie.videoUrl, 0);
-                      } else {
-                        const movieUrl = movie.videoUrl || '';
-                        if (isDynamicRef(movieUrl)) {
-                          triggerSmartPlay(movieUrl, 0, 'netflix');
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        localStorage.removeItem(`netplay_progress_${movie.id}`);
+                        setUserResetProgress(true);
+                        const savedPref = getSavedServerPref(movie.id);
+                        if (isSeries && movie.episodes && movie.episodes.length > 0) {
+                          const urlToPlay = sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
+                          triggerSmartPlay(urlToPlay, 0, undefined, 0, savedPref || undefined);
                         } else {
-                          setShowVideo(true); setIsPlayingFullscreen(true);
+                          triggerSmartPlay(movie.videoUrl || '', 0, undefined, undefined, savedPref || undefined);
                         }
-                      }
-                    }}
-                    className="bg-white/10 text-white border-2 border-white/20 hover:bg-white/20 px-6 md:px-8 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl backdrop-blur-md transition-all"
-                  >
-                    <RotateCcw size={14} className="md:w-5 md:h-5" />
-                    <span className="whitespace-nowrap">Reiniciar</span>
-                  </motion.button>
+                      }}
+                      className="bg-white/10 text-white border-2 border-white/20 hover:bg-white/20 px-6 md:px-8 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl backdrop-blur-md transition-all"
+                    >
+                      <RotateCcw size={14} className="md:w-5 md:h-5" />
+                      <span className="whitespace-nowrap">Reiniciar</span>
+                    </motion.button>
+                  </div>
+
+                  {/* Mudar servidor */}
+                  {getSavedServerPref(movie.id) && (
+                    <button
+                      onClick={() => {
+                        if (isSeries && movie.episodes && movie.episodes.length > 0) {
+                          const savedEpEntry = savedUrl ? sortedEpisodesFlat.find((e: any) => e.videoUrl === savedUrl || e.videoUrl2 === savedUrl) : null;
+                          const urlToPlay = savedUrl || sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
+                          triggerSmartPlay(urlToPlay, savedProgress, undefined, savedEpEntry ? sortedEpisodesFlat.indexOf(savedEpEntry) : 0);
+                        } else {
+                          triggerSmartPlay(movie.videoUrl || '', savedProgress);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-gray-600 hover:text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-colors self-start"
+                    >
+                      <RefreshCcw size={10} />
+                      <span>Mudar servidor</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
                   {movie.videoUrl || movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0) ? (
-                    <div className="flex flex-wrap gap-3 md:gap-4">
-                      <motion.button 
+                    <div className="flex flex-col gap-2">
+                      <motion.button
                         whileHover={{ scale: 1.05, boxShadow: isLocked ? '0 0 40px rgba(220,38,38,0.3)' : '0 0 40px rgba(255,255,255,0.3)' }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => {
-                          if (isLocked) {
-                            document.dispatchEvent(new CustomEvent('open-plans'));
-                            return;
-                          }
+                          if (isLocked) { document.dispatchEvent(new CustomEvent('open-plans')); return; }
+                          const savedPref = getSavedServerPref(movie.id);
                           if (isSeries && movie.episodes && movie.episodes.length > 0) {
-                            const firstSortedEp3 = sortedEpisodesFlat[0];
-                            const urlToPlay = firstSortedEp3?.videoUrl || firstSortedEp3?.videoUrl2 || '';
-                            triggerSmartPlay(urlToPlay, 0, 'netflix', 0);
-                          } else if (isYouTube || isKingX) {
-                            handlePlay(movie.videoUrl, 0, 'netflix');
+                            const urlToPlay = sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
+                            triggerSmartPlay(urlToPlay, 0, undefined, 0, savedPref || undefined);
                           } else {
                             const movieUrl = movie.videoUrl || '';
-                            if (isDynamicRef(movieUrl)) {
-                              triggerSmartPlay(movieUrl, 0, 'netflix');
-                            } else {
-                              setShowVideo(true); setIsPlayingFullscreen(true);
-                            }
+                            triggerSmartPlay(movieUrl, 0, undefined, undefined, savedPref || undefined);
                           }
                         }}
                         className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
                       >
                         {isLocked ? (
-                          <>
-                             <Lock size={14} className="md:w-6 md:h-6 text-yellow-500" />
-                             <span className="whitespace-nowrap text-yellow-500">Upgrade (Plus/Max)</span>
-                          </>
+                          <><Lock size={14} className="md:w-6 md:h-6 text-yellow-500" /><span className="whitespace-nowrap text-yellow-500">Upgrade (Plus/Max)</span></>
                         ) : (
-                          <>
-                            <Play fill="currentColor" size={14} className="md:w-6 md:h-6" /> 
-                            <span className="whitespace-nowrap">{isKingX ? 'Play Netflix' : 'Assistir'}</span>
-                          </>
+                          <><Play fill="currentColor" size={14} className="md:w-6 md:h-6" /><span className="whitespace-nowrap">Assistir</span></>
                         )}
                       </motion.button>
-                      
-                      {isKingX && !isLocked && (
-                        <motion.button 
-                          whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(147,51,234,0.3)' }}
-                          whileTap={{ scale: 0.95 }}
+
+                      {/* Mudar servidor */}
+                      {!isLocked && getSavedServerPref(movie.id) && (
+                        <button
                           onClick={() => {
-                            const urlToPlay = isSeries && movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : movie.videoUrl;
-                            handlePlay(urlToPlay, 0, 'special');
+                            if (isSeries && movie.episodes && movie.episodes.length > 0) {
+                              const urlToPlay = sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
+                              triggerSmartPlay(urlToPlay, 0, undefined, 0);
+                            } else {
+                              triggerSmartPlay(movie.videoUrl || '', 0);
+                            }
                           }}
-                          className={`bg-purple-600 text-white hover:bg-purple-500 px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-all`}
+                          className="flex items-center gap-1.5 text-gray-600 hover:text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-colors"
                         >
-                          <Play fill="currentColor" size={14} className="md:w-6 md:h-6" />
-                          <span className="whitespace-nowrap">Play Terabox</span>
-                        </motion.button>
+                          <RefreshCcw size={10} />
+                          <span>Mudar servidor</span>
+                        </button>
                       )}
                     </div>
                   ) : (
-                    <motion.button 
+                    <motion.button
                       whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(220,38,38,0.3)' }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => onRequestMovie?.(movie)}
                       className="bg-white/10 text-white border-2 border-white/20 px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-all hover:bg-white hover:text-black"
                     >
-                      <Sparkles size={14} className="md:w-6 md:h-6" /> 
+                      <Sparkles size={14} className="md:w-6 md:h-6" />
                       <span className="whitespace-nowrap">Indicar Filme</span>
                     </motion.button>
                   )}
-
-                  {!isLocked && (movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.some(e => e.videoUrl2))) && (
-                    <motion.button 
-                      whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(255,255,255,0.3)' }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        const urlToPlay = isSeries && movie.episodes && movie.episodes.length > 0 ? (movie.episodes[0].videoUrl2 || movie.episodes[0].videoUrl) : movie.videoUrl2;
-                        handlePlay(urlToPlay, 0);
-                      }}
-                      className={`bg-white text-black hover:bg-gray-200 px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-all`}
-                    >
-                      <Play fill="currentColor" size={14} className="md:w-6 md:h-6" />
-                      <span className="whitespace-nowrap">Opção 2</span>
-                    </motion.button>
-                  )}
                 </>
-              )}
-              
-              {/* API Flix button — looks up real TMDB ID before building URL */}
-              {!isLocked && movie.id && (
-                <motion.button
-                  whileHover={{ scale: isBfLoading ? 1 : 1.05, boxShadow: '0 0 30px rgba(251,146,60,0.25)' }}
-                  whileTap={{ scale: isBfLoading ? 1 : 0.95 }}
-                  disabled={isBfLoading}
-                  onClick={async () => {
-                    setIsBfLoading(true);
-                    try {
-                      const isMovie = !isSeries;
-                      const title = movie.title || movie.name || '';
-                      const year = movie.release_date
-                        ? new Date(movie.release_date).getFullYear()
-                        : movie.first_air_date
-                        ? new Date(movie.first_air_date).getFullYear()
-                        : null;
-                      // Usa o ID do TMDB já resolvido, ou faz lookup se necessário
-                      const resolvedId = tmdbResolvedId || await lookupTmdbId(title, isMovie ? 'movie' : 'tv', year) || movie.id;
-                      if (!tmdbResolvedId) setTmdbResolvedId(resolvedId);
-                      const id = resolvedId;
-                      if (isMovie) {
-                        handlePlay(buildBetterFlixUrl(id, 'movie'), 0, 'betterflix');
-                      } else {
-                        // Usa a temporada selecionada e o primeiro episódio dela
-                        const firstEpInSeason = sortedEpisodesFlat.find((e: any) => (e.season || 1) === selectedSeason)
-                          || sortedEpisodesFlat[0];
-                        const season = (firstEpInSeason as any)?.season ?? selectedSeason ?? 1;
-                        const episode = (firstEpInSeason as any)?.episode ?? 1;
-                        handlePlay(buildBetterFlixUrl(id, 'tv', season, episode), 0, 'betterflix');
-                      }
-                    } finally {
-                      setIsBfLoading(false);
-                    }
-                  }}
-                  className="bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 border border-orange-500/30 hover:border-orange-400/60 px-4 md:px-6 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 text-xs md:text-sm shadow-xl transition-all backdrop-blur-sm disabled:opacity-70 disabled:cursor-wait"
-                >
-                  {isBfLoading
-                    ? <Loader2 size={14} className="md:w-5 md:h-5 animate-spin" />
-                    : <Tv size={14} className="md:w-5 md:h-5" />
-                  }
-                  <span className="whitespace-nowrap">{isBfLoading ? 'Buscando...' : 'API Flix'}</span>
-                </motion.button>
               )}
 
               <div className="flex bg-black/20 rounded-full items-center gap-3 md:gap-4 p-1">
@@ -1540,9 +1478,11 @@ const MovieDetailsModal = React.memo(({
           episodeUrl={pendingEpisodeUrl}
           startTime={pendingStartTime}
           logoUrl={logoUrl || undefined}
-          onClose={() => setShowSmartSelector(false)}
+          autoSelectId={pendingAutoSelectId}
+          onClose={() => { setShowSmartSelector(false); setPendingAutoSelectId(undefined); }}
           onPlay={(url, startTime, playerStyle) => {
             setShowSmartSelector(false);
+            setPendingAutoSelectId(undefined);
             handlePlay(url, startTime, playerStyle, pendingEpisodeIndex);
           }}
         />

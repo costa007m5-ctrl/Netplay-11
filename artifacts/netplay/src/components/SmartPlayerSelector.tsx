@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2, Loader2 } from 'lucide-react';
+import { Play, X, Server, RefreshCcw, Zap, Star, Clock, Tv2, Loader2, ExternalLink } from 'lucide-react';
 import { Movie } from '../types';
 import { isDynamicRef, parseDynamicRef, makeDynamicRef, makeDynamicRefV2, makeDynamicRefV3 } from '../services/terabox';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
@@ -30,6 +30,7 @@ export function convertTeraboxToApi(url: string, api: 'v1' | 'v2' | 'v3'): strin
 }
 
 export const SELECTED_SERVER_KEY = 'netplay_selected_server_mode';
+const SERVER_PREF_KEY = (id: number | string) => `netplay_server_pref_${id}`;
 
 export interface SelectedServerPreference {
   id: 'admin' | 'alternative' | 'auto';
@@ -50,11 +51,20 @@ export function saveSelectedServer(data: SelectedServerPreference) {
   try { localStorage.setItem(SELECTED_SERVER_KEY, JSON.stringify(data)); } catch {}
 }
 
+export function getSavedServerPref(movieId: number | string): string | null {
+  try { return localStorage.getItem(SERVER_PREF_KEY(movieId)); } catch { return null; }
+}
+
+export function clearSavedServerPref(movieId: number | string) {
+  try { localStorage.removeItem(SERVER_PREF_KEY(movieId)); } catch {}
+}
+
 interface SmartPlayerSelectorProps {
   movie: Movie;
   episodeUrl?: string;
   startTime?: number;
   logoUrl?: string;
+  autoSelectId?: string;
   onClose: () => void;
   onPlay: (url: string, startTime: number, playerStyle: string) => void;
 }
@@ -64,24 +74,24 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
   episodeUrl,
   startTime = 0,
   logoUrl,
+  autoSelectId,
   onClose,
   onPlay,
 }) => {
   const nativeApi = getNativeTeraboxApi();
   const altApi: 'v1' | 'v3' = nativeApi === 'v1' ? 'v3' : 'v1';
   const [isBfLoading, setIsBfLoading] = useState(false);
+  const [isVidsrcLoading, setIsVidsrcLoading] = useState(false);
 
   const currentUrl = episodeUrl || movie.videoUrl || '';
   const hasTeraboxUrl = isDynamicRef(currentUrl);
+  const hasKingxUrl = currentUrl.includes('player.kingx.dev') || currentUrl.includes('teradl.kingx.dev');
 
-  // Para episódios: hasAdminUrl só é verdadeiro se o episódio específico tem videoUrl2 próprio.
-  // Isso evita usar o videoUrl2 da série (nível global) como URL do episódio errado.
   const hasAdminUrl = (() => {
     if (episodeUrl && movie.type === 'series' && movie.episodes) {
       const ep = (movie.episodes as any[]).find(
         (e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl
       );
-      // Só considera admin se o episódio tem videoUrl2 diferente do episodeUrl em si
       return !!(ep?.videoUrl2 && ep.videoUrl2 !== episodeUrl);
     }
     return !!movie.videoUrl2;
@@ -104,17 +114,14 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     : null;
 
   const nativeLabel = nativeApi === 'v3' ? 'API 03' : 'API 01';
-  const altLabel = altApi === 'v3' ? 'API 03' : 'API 01';
   const isResuming = startTime > 5;
 
-  // Retorna o URL admin do episódio específico (nunca cai no videoUrl2 da série)
   const getAdminUrl = (): string => {
     if (episodeUrl && movie.type === 'series' && movie.episodes) {
       const ep = (movie.episodes as any[]).find(
         (e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl
       );
       if (ep?.videoUrl2 && ep.videoUrl2 !== episodeUrl) return ep.videoUrl2;
-      // Episódio sem videoUrl2 próprio → usa o próprio episodeUrl convertido para a API nativa
       return convertTeraboxToApi(episodeUrl, nativeApi);
     }
     return movie.videoUrl2 || convertTeraboxToApi(currentUrl, nativeApi);
@@ -125,33 +132,11 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     ? 'Link configurado manualmente pelo admin. Melhor estabilidade garantida.'
     : `Reproduz com a API nativa (${nativeLabel}) e a qualidade configurada ao adicionar o título.`;
 
-  const getDefaultUrl = (): string => {
-    return getAdminUrl();
-  };
-
   const hasTmdbId = !!movie.id;
-
-  const getBetterFlixPlayerUrl = (): string => {
-    const isMovie = movie.type !== 'series';
-    if (isMovie) {
-      return buildBetterFlixUrl(movie.id, 'movie');
-    }
-    // For series, find the current episode's season/episode numbers
-    const ep = episodeUrl && movie.episodes
-      ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
-      : null;
-    const season = ep?.season ?? 1;
-    const episode = ep?.episode ?? 1;
-    return buildBetterFlixUrl(movie.id, 'tv', season, episode);
-  };
-
-  const [isVidsrcLoading, setIsVidsrcLoading] = useState(false);
 
   const resolveVidsrcUrl = async (): Promise<string> => {
     const isMovie = movie.type !== 'series';
     const type = isMovie ? 'movie' : 'tv';
-
-    // Tenta pelo título principal, depois pelo nome original como fallback
     const primaryTitle = movie.title || movie.name || '';
     const originalTitle = movie.original_name || '';
     const releaseYear = movie.release_date
@@ -159,18 +144,11 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       : movie.first_air_date
       ? new Date(movie.first_air_date).getFullYear()
       : null;
-
     let tmdbId = await lookupTmdbId(primaryTitle, type, releaseYear);
-
-    // Se não encontrou, tenta com o nome original (ex: título em inglês armazenado como original_name)
     if (!tmdbId && originalTitle && originalTitle !== primaryTitle) {
       tmdbId = await lookupTmdbId(originalTitle, type, releaseYear);
     }
-
-    if (!tmdbId) {
-      throw new Error(`Não foi possível encontrar o ID TMDB para "${primaryTitle}". Verifique o título no painel admin.`);
-    }
-
+    if (!tmdbId) throw new Error(`Não foi possível encontrar o ID TMDB para "${primaryTitle}".`);
     const ep = episodeUrl && movie.episodes
       ? (movie.episodes as any[]).find((e: any) => e.videoUrl === episodeUrl || e.videoUrl2 === episodeUrl)
       : null;
@@ -201,15 +179,15 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       unavailableMsg: 'Nenhum link configurado para este título.',
       action: () => {
         saveSelectedServer({ id: 'admin', playerStyle: 'netflix', altApi, nativeApi });
-        onPlay(getDefaultUrl(), startTime, 'netflix');
+        onPlay(getAdminUrl(), startTime, 'netflix');
       },
     },
     {
       id: 'alternative',
       num: '02',
-      title: `Servidor API 01`,
+      title: 'Servidor API 01',
       subtitle: 'Cascata Automática',
-      desc: `Testa cada qualidade da API 01 (Pro) em cascata. Se todas falharem, muda automaticamente para API 3.0.`,
+      desc: 'Testa cada qualidade da API 01 (Pro) em cascata. Se todas falharem, muda automaticamente para API 3.0.',
       icon: RefreshCcw,
       gradient: 'from-purple-600/12 to-purple-900/5',
       border: 'border-purple-500/20 hover:border-purple-400/50',
@@ -223,8 +201,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       unavailableMsg: 'Não disponível para este tipo de link.',
       action: () => {
         saveSelectedServer({ id: 'alternative', playerStyle: 'netflix-cascade', altApi, nativeApi });
-        const converted = convertTeraboxToApi(currentUrl, 'v1');
-        onPlay(converted, startTime, 'netflix-cascade');
+        onPlay(convertTeraboxToApi(currentUrl, 'v1'), startTime, 'netflix-cascade');
       },
     },
     {
@@ -246,13 +223,33 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       unavailableMsg: 'Não disponível para este tipo de link.',
       action: () => {
         saveSelectedServer({ id: 'auto', playerStyle: 'netflix-cascade', altApi, nativeApi });
-        const nativeUrl = convertTeraboxToApi(currentUrl, nativeApi);
-        onPlay(nativeUrl, startTime, 'netflix-cascade');
+        onPlay(convertTeraboxToApi(currentUrl, nativeApi), startTime, 'netflix-cascade');
+      },
+    },
+    {
+      id: 'kingx',
+      num: '04',
+      title: 'Player KingX',
+      subtitle: 'KingX · Player Externo',
+      desc: 'Reproduz via player externo KingX com alta qualidade e legendas automáticas integradas.',
+      icon: ExternalLink,
+      gradient: 'from-violet-600/12 to-violet-900/5',
+      border: 'border-violet-500/20 hover:border-violet-400/50',
+      iconBg: 'bg-violet-500/15',
+      iconColor: 'text-violet-400',
+      badgeBg: 'bg-violet-500/20',
+      badgeColor: 'text-violet-300',
+      badge: 'KINGX',
+      glowColor: 'shadow-violet-500/10',
+      available: hasKingxUrl,
+      unavailableMsg: 'Não disponível para este conteúdo.',
+      action: () => {
+        onPlay(currentUrl, startTime, 'special');
       },
     },
     {
       id: 'betterflix',
-      num: '04',
+      num: '05',
       title: 'API Flix',
       subtitle: 'BetterFlix · Player Externo',
       desc: 'Reproduz via player externo BetterFlix. Ideal quando os servidores internos falham. Suporta filmes, séries e canais.',
@@ -296,7 +293,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     },
     {
       id: 'vidsrc',
-      num: '05',
+      num: '06',
       title: 'Net 2.0',
       subtitle: 'Vidsrc · Player Externo',
       desc: 'Reproduz via Vidsrc com embed integrado. Alternativa confiável com legendas automáticas em português.',
@@ -325,6 +322,44 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
       },
     },
   ];
+
+  const visibleOptions = options.filter(o => o.available);
+
+  const savePref = useCallback((optionId: string) => {
+    try { localStorage.setItem(SERVER_PREF_KEY(movie.id), optionId); } catch {}
+  }, [movie.id]);
+
+  const executeOption = useCallback((option: typeof options[0], save = true) => {
+    if (save) savePref(option.id);
+    (option.action as any)();
+  }, [savePref]);
+
+  useEffect(() => {
+    if (!autoSelectId) return;
+    const option = visibleOptions.find(o => o.id === autoSelectId);
+    if (option) {
+      executeOption(option, false);
+    } else {
+      // saved option no longer available for this content — show selector normally
+    }
+  }, []);
+
+  if (autoSelectId) {
+    const matched = visibleOptions.find(o => o.id === autoSelectId);
+    if (matched) {
+      return (
+        <div className="fixed inset-0 z-[350] bg-black/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex items-center gap-3 bg-black/80 rounded-2xl px-6 py-4 border border-white/10 shadow-2xl">
+            <Loader2 size={18} className="animate-spin text-white" />
+            <div>
+              <p className="text-white text-sm font-black">Iniciando reprodução...</p>
+              <p className="text-gray-500 text-[10px] mt-0.5">{matched.title}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
 
   return (
     <motion.div
@@ -420,34 +455,35 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          {options.filter(o => o.available).map((option, idx) => {
+          {visibleOptions.map((option, idx) => {
             const Icon = option.icon;
+            const isLoading =
+              (option.id === 'betterflix' && isBfLoading) ||
+              (option.id === 'vidsrc' && isVidsrcLoading);
             return (
               <motion.button
                 key={option.id}
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.06 + idx * 0.07, duration: 0.28 }}
-                onClick={option.available ? () => (option.action as any)() : undefined}
-                disabled={!option.available || (option.id === 'betterflix' && isBfLoading) || (option.id === 'vidsrc' && isVidsrcLoading)}
+                onClick={() => !isLoading && executeOption(option)}
+                disabled={isLoading}
                 className={`
                   relative w-full flex items-center gap-3.5 p-3.5 rounded-2xl text-left group
                   bg-gradient-to-r ${option.gradient}
                   backdrop-blur-xl border ${option.border}
                   transition-all duration-200 shadow-lg ${option.glowColor}
-                  ${option.available && !(option.id === 'betterflix' && isBfLoading) && !(option.id === 'vidsrc' && isVidsrcLoading)
-                    ? 'hover:scale-[1.012] active:scale-[0.988] cursor-pointer hover:shadow-xl'
-                    : (option.id === 'betterflix' && isBfLoading) || (option.id === 'vidsrc' && isVidsrcLoading)
+                  ${isLoading
                     ? 'cursor-wait opacity-80'
-                    : 'opacity-30 cursor-not-allowed'}
+                    : 'hover:scale-[1.012] active:scale-[0.988] cursor-pointer hover:shadow-xl'}
                 `}
               >
                 <span className="absolute top-2 right-2.5 text-[8px] font-black text-white/8 tracking-widest select-none">
                   {option.num}
                 </span>
 
-                <div className={`w-10 h-10 rounded-xl ${option.iconBg} border border-white/10 flex items-center justify-center shrink-0 transition-transform duration-200 ${option.available ? 'group-hover:scale-110' : ''}`}>
-                  {(option.id === 'betterflix' && isBfLoading) || (option.id === 'vidsrc' && isVidsrcLoading)
+                <div className={`w-10 h-10 rounded-xl ${option.iconBg} border border-white/10 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110`}>
+                  {isLoading
                     ? <Loader2 size={18} className={`${option.iconColor} animate-spin`} />
                     : <Icon size={18} className={option.iconColor} />
                   }
@@ -465,18 +501,16 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
                   <p className="text-[10px] font-medium text-gray-500 leading-snug">
                     <span className="text-gray-600 font-bold">{option.subtitle}</span>
                     {' — '}
-                    {option.available ? option.desc : option.unavailableMsg}
+                    {option.desc}
                   </p>
                 </div>
 
-                {option.available && (
-                  <div className="w-7 h-7 rounded-full bg-white/10 border border-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-all">
-                    {option.id === 'betterflix' && isBfLoading
-                      ? <Loader2 size={11} className="text-orange-400 animate-spin" />
-                      : <Play size={11} fill="white" className="text-white ml-0.5" />
-                    }
-                  </div>
-                )}
+                <div className="w-7 h-7 rounded-full bg-white/10 border border-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-all">
+                  {isLoading
+                    ? <Loader2 size={11} className={`${option.iconColor} animate-spin`} />
+                    : <Play size={11} fill="white" className="text-white ml-0.5" />
+                  }
+                </div>
               </motion.button>
             );
           })}
