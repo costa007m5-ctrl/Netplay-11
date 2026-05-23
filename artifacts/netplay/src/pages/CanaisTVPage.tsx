@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Radio, Search, X, RefreshCcw, Tv2, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import {
+  Radio, Search, X, RefreshCcw, Tv2, ChevronLeft, ChevronRight,
+  Play, List, ArrowLeft, Info, Zap, Grid3X3, ChevronDown, ChevronUp,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
 import { getBetterFlixKey } from '../components/admin/AdminFlixAPITab';
@@ -13,154 +16,583 @@ interface Channel {
   image?: string;
   categoria?: string;
   category?: string;
+  url?: string;
 }
 
-const CATEGORY_META: Record<string, { gradient: string; accent: string; icon: string }> = {
-  Esportes:       { gradient: 'from-green-900/40 to-black', accent: 'text-green-400', icon: '⚽' },
-  Notícias:       { gradient: 'from-blue-900/40 to-black',  accent: 'text-blue-400',  icon: '📰' },
-  Entretenimento: { gradient: 'from-purple-900/40 to-black',accent: 'text-purple-400',icon: '🎬' },
-  Filmes:         { gradient: 'from-red-900/40 to-black',   accent: 'text-red-400',   icon: '🎥' },
-  Séries:         { gradient: 'from-orange-900/40 to-black',accent: 'text-orange-400',icon: '📺' },
-  Infantil:       { gradient: 'from-yellow-900/40 to-black',accent: 'text-yellow-400',icon: '🧒' },
-  Música:         { gradient: 'from-pink-900/40 to-black',  accent: 'text-pink-400',  icon: '🎵' },
-  Documentários:  { gradient: 'from-teal-900/40 to-black',  accent: 'text-teal-400',  icon: '🔭' },
+const CATEGORY_META: Record<string, { gradient: string; accent: string; border: string; icon: string }> = {
+  Esportes:       { gradient: 'from-green-900/30',  accent: 'text-green-400',  border: 'border-green-500/30', icon: '⚽' },
+  Notícias:       { gradient: 'from-blue-900/30',   accent: 'text-blue-400',   border: 'border-blue-500/30',  icon: '📰' },
+  Entretenimento: { gradient: 'from-purple-900/30', accent: 'text-purple-400', border: 'border-purple-500/30',icon: '🎬' },
+  Filmes:         { gradient: 'from-red-900/30',    accent: 'text-red-400',    border: 'border-red-500/30',   icon: '🎥' },
+  Séries:         { gradient: 'from-orange-900/30', accent: 'text-orange-400', border: 'border-orange-500/30',icon: '📺' },
+  Infantil:       { gradient: 'from-yellow-900/30', accent: 'text-yellow-400', border: 'border-yellow-500/30',icon: '🧒' },
+  Música:         { gradient: 'from-pink-900/30',   accent: 'text-pink-400',   border: 'border-pink-500/30',  icon: '🎵' },
+  Documentários:  { gradient: 'from-teal-900/30',   accent: 'text-teal-400',   border: 'border-teal-500/30',  icon: '🔭' },
+  Variedades:     { gradient: 'from-indigo-900/30', accent: 'text-indigo-400', border: 'border-indigo-500/30',icon: '🎭' },
+  Desenhos:       { gradient: 'from-lime-900/30',   accent: 'text-lime-400',   border: 'border-lime-500/30',  icon: '🖌️' },
+  Realitys:       { gradient: 'from-rose-900/30',   accent: 'text-rose-400',   border: 'border-rose-500/30',  icon: '⭐' },
 };
 
 function getCatMeta(cat?: string) {
-  if (!cat) return { gradient: 'from-gray-900/40 to-black', accent: 'text-gray-400', icon: '📡' };
+  if (!cat) return { gradient: 'from-gray-900/30', accent: 'text-gray-400', border: 'border-gray-500/30', icon: '📡' };
   for (const [key, val] of Object.entries(CATEGORY_META)) {
     if (cat.toLowerCase().includes(key.toLowerCase())) return val;
   }
-  return { gradient: 'from-gray-900/40 to-black', accent: 'text-gray-400', icon: '📡' };
+  return { gradient: 'from-gray-900/30', accent: 'text-gray-400', border: 'border-gray-500/30', icon: '📡' };
 }
 
 const getName  = (ch: Channel) => ch.nome  || ch.name     || 'Canal';
 const getImage = (ch: Channel) => ch.imagem || ch.image   || '';
 const getCat   = (ch: Channel) => ch.categoria || ch.category || '';
 
-function buildChannelPlayerUrl(ch: Channel): string {
+function buildChannelUrl(ch: Channel): string {
+  if (ch.url) {
+    const key = getBetterFlixKey();
+    return key && !ch.url.includes('key=') ? `${ch.url}&key=${encodeURIComponent(key)}` : ch.url;
+  }
   const key = getBetterFlixKey();
   let url = `https://betterflix.click/api/player?id=${ch.id}&type=channel`;
   if (key) url += `&key=${encodeURIComponent(key)}`;
   return url;
 }
 
-function ChannelCard({ ch, onClick }: { ch: Channel; onClick: () => void }) {
+// ─── Logo card pequeño (para sidebar do player) ───────────────────────────────
+function MiniChannelCard({
+  ch,
+  active,
+  onClick,
+}: {
+  ch: Channel;
+  active?: boolean;
+  onClick: () => void;
+}) {
   const [imgErr, setImgErr] = useState(false);
   const img = getImage(ch);
+  const meta = getCatMeta(getCat(ch));
   return (
-    <motion.button
-      whileHover={{ scale: 1.04, y: -2 }}
-      whileTap={{ scale: 0.97 }}
+    <button
       onClick={onClick}
-      className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden hover:border-white/20 transition-colors shadow-lg text-left shrink-0"
-      style={{ width: 148 }}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left group ${
+        active
+          ? 'bg-red-600/20 border border-red-600/40'
+          : 'hover:bg-white/5 border border-transparent'
+      }`}
     >
-      <div className="w-full aspect-[16/9] bg-black/50 flex items-center justify-center relative overflow-hidden">
+      <div className="w-10 h-10 rounded-lg bg-black/50 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
         {img && !imgErr ? (
-          <img
-            src={img}
-            alt={getName(ch)}
-            className="w-full h-full object-contain p-2.5 group-hover:scale-105 transition-transform duration-300"
-            onError={() => setImgErr(true)}
-          />
+          <img src={img} alt={getName(ch)} className="w-8 h-8 object-contain" onError={() => setImgErr(true)} />
         ) : (
-          <Radio size={26} className="text-gray-700" />
+          <Radio size={14} className="text-gray-600" />
         )}
-        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600/90 backdrop-blur-sm px-1.5 py-0.5 rounded-md pointer-events-none">
-          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse inline-block" />
-          <span className="text-[7px] font-black text-white uppercase tracking-widest">Live</span>
-        </div>
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex items-center justify-center">
-          <div className="w-9 h-9 rounded-full bg-white/0 group-hover:bg-white/90 flex items-center justify-center scale-0 group-hover:scale-100 transition-all duration-200 shadow-2xl">
-            <Play size={13} fill="black" className="text-black ml-0.5" />
-          </div>
-        </div>
       </div>
-      <div className="px-2.5 py-2">
-        <p className="text-white text-[11px] font-bold truncate leading-tight">{getName(ch)}</p>
-      </div>
-    </motion.button>
-  );
-}
-
-function SearchResultCard({ ch, onClick }: { ch: Channel; onClick: () => void }) {
-  const [imgErr, setImgErr] = useState(false);
-  const img = getImage(ch);
-  return (
-    <motion.button
-      whileHover={{ scale: 1.03 }}
-      whileTap={{ scale: 0.97 }}
-      onClick={onClick}
-      className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden hover:border-white/20 transition-colors text-left"
-    >
-      <div className="aspect-[16/9] bg-black/50 flex items-center justify-center relative overflow-hidden">
-        {img && !imgErr ? (
-          <img src={img} alt={getName(ch)} className="w-full h-full object-contain p-2.5 group-hover:scale-105 transition-transform duration-300" onError={() => setImgErr(true)} />
-        ) : (
-          <Radio size={24} className="text-gray-700" />
-        )}
-        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600/90 px-1.5 py-0.5 rounded-md">
-          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse inline-block" />
-          <span className="text-[7px] font-black text-white uppercase tracking-widest">Live</span>
-        </div>
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-          <div className="w-9 h-9 rounded-full bg-white/0 group-hover:bg-white/90 flex items-center justify-center scale-0 group-hover:scale-100 transition-all">
-            <Play size={13} fill="black" className="ml-0.5" />
-          </div>
-        </div>
-      </div>
-      <div className="px-2.5 py-2">
-        <p className="text-white text-[11px] font-bold truncate">{getName(ch)}</p>
+      <div className="flex-1 min-w-0">
+        <p className={`text-xs font-bold truncate ${active ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
+          {getName(ch)}
+        </p>
         {getCat(ch) && (
-          <p className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${getCatMeta(getCat(ch)).accent}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest truncate ${meta.accent} opacity-70`}>
             {getCat(ch)}
           </p>
         )}
       </div>
-    </motion.button>
+      {active && (
+        <div className="shrink-0 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+          <span className="text-[7px] font-black text-red-400 uppercase">Ao Vivo</span>
+        </div>
+      )}
+    </button>
   );
 }
 
-function CategoryRow({ category, channels, onPlay }: { category: string; channels: Channel[]; onPlay: (ch: Channel) => void }) {
-  const meta = getCatMeta(category);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const scroll = (dir: 'left' | 'right') => {
-    scrollRef.current?.scrollBy({ left: dir === 'left' ? -320 : 320, behavior: 'smooth' });
-  };
+// ─── Card principal (grid/carrossel) ─────────────────────────────────────────
+function ChannelCard({
+  ch,
+  onPlay,
+  onInfo,
+}: {
+  ch: Channel;
+  onPlay: () => void;
+  onInfo: () => void;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const img = getImage(ch);
+  const meta = getCatMeta(getCat(ch));
 
   return (
-    <div className="mb-10">
-      <div className="flex items-center gap-3 px-4 md:px-10 mb-4">
-        <span className="text-2xl">{meta.icon}</span>
-        <h2 className={`text-base font-black uppercase tracking-tighter italic ${meta.accent}`}>{category}</h2>
-        <div className="flex-1 h-px bg-white/5 ml-1" />
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-700">{channels.length} canais</span>
-        <button
-          onClick={() => scroll('left')}
-          className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
-        >
-          <ChevronLeft size={14} />
-        </button>
-        <button
-          onClick={() => scroll('right')}
-          className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
-        >
-          <ChevronRight size={14} />
-        </button>
-      </div>
-      <div
-        ref={scrollRef}
-        className="flex gap-3 overflow-x-auto scrollbar-none px-4 md:px-10 pb-1"
-        style={{ scrollbarWidth: 'none' }}
+    <div
+      className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden hover:border-white/15 transition-all shadow-lg shrink-0"
+      style={{ width: 152 }}
+    >
+      {/* Thumbnail — click = info */}
+      <button
+        onClick={onInfo}
+        className="block w-full"
       >
-        {channels.map(ch => (
-          <ChannelCard key={ch.id} ch={ch} onClick={() => onPlay(ch)} />
-        ))}
+        <div className="w-full aspect-[16/9] bg-black/50 flex items-center justify-center relative overflow-hidden">
+          {img && !imgErr ? (
+            <img
+              src={img}
+              alt={getName(ch)}
+              className="w-full h-full object-contain p-2.5 group-hover:scale-105 transition-transform duration-300"
+              onError={() => setImgErr(true)}
+            />
+          ) : (
+            <Radio size={26} className="text-gray-700" />
+          )}
+          {/* LIVE badge */}
+          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600/90 backdrop-blur-sm px-1.5 py-0.5 rounded-md pointer-events-none">
+            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse inline-block" />
+            <span className="text-[7px] font-black text-white uppercase tracking-widest">Live</span>
+          </div>
+          {/* Info hint */}
+          <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="w-5 h-5 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center">
+              <Info size={10} className="text-white/70" />
+            </div>
+          </div>
+        </div>
+      </button>
+
+      {/* Footer */}
+      <div className="px-2.5 pt-2 pb-2.5 flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-[11px] font-bold truncate leading-tight">{getName(ch)}</p>
+          {getCat(ch) && (
+            <p className={`text-[8px] font-black uppercase tracking-widest mt-0.5 ${meta.accent} opacity-70 truncate`}>
+              {getCat(ch)}
+            </p>
+          )}
+        </div>
+        {/* Play button */}
+        <button
+          onClick={e => { e.stopPropagation(); onPlay(); }}
+          className="shrink-0 w-8 h-8 rounded-full bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-600 flex items-center justify-center transition-all group/play"
+        >
+          <Play size={11} fill="currentColor" className="text-white ml-0.5" />
+        </button>
       </div>
     </div>
   );
 }
+
+// ─── Modal de detalhes do canal ───────────────────────────────────────────────
+function ChannelDetailModal({
+  ch,
+  onClose,
+  onPlay,
+}: {
+  ch: Channel;
+  onClose: () => void;
+  onPlay: () => void;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const img = getImage(ch);
+  const meta = getCatMeta(getCat(ch));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-xl p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 60, opacity: 0, scale: 0.97 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 40, opacity: 0, scale: 0.97 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="bg-[#141414] rounded-[2rem] border border-white/10 shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Banner */}
+        <div className={`relative bg-gradient-to-br ${meta.gradient} to-[#141414] p-6 flex flex-col items-center gap-4`}>
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+          >
+            <X size={14} />
+          </button>
+
+          {/* Logo grande */}
+          <div className="w-24 h-24 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden shadow-2xl">
+            {img && !imgErr ? (
+              <img src={img} alt={getName(ch)} className="w-20 h-20 object-contain" onError={() => setImgErr(true)} />
+            ) : (
+              <Radio size={36} className="text-gray-600" />
+            )}
+          </div>
+
+          {/* Nome */}
+          <div className="text-center">
+            <h2 className="text-white text-xl font-black italic uppercase tracking-tighter leading-none">
+              {getName(ch)}
+            </h2>
+            {getCat(ch) && (
+              <p className={`text-[11px] font-black uppercase tracking-widest mt-1 ${meta.accent}`}>
+                {meta.icon} {getCat(ch)}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Informações */}
+        <div className="p-5 space-y-4">
+          {/* Status ao vivo */}
+          <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3 border border-white/5">
+            <div className="w-8 h-8 rounded-full bg-red-600/20 flex items-center justify-center shrink-0">
+              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+            </div>
+            <div>
+              <p className="text-white text-xs font-black">Transmissão ao Vivo</p>
+              <p className="text-gray-500 text-[10px]">Canal transmitindo agora 24 horas</p>
+            </div>
+            <div className="ml-auto bg-red-600/20 border border-red-600/30 text-red-400 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+              LIVE
+            </div>
+          </div>
+
+          {/* ID do canal */}
+          <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3 border border-white/5">
+            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center shrink-0">
+              <Tv2 size={14} className="text-gray-400" />
+            </div>
+            <div>
+              <p className="text-gray-500 text-[10px] uppercase tracking-widest font-bold">ID do Canal</p>
+              <p className="text-white text-xs font-mono font-bold">{ch.id}</p>
+            </div>
+          </div>
+
+          {/* Botões de ação */}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-black uppercase tracking-widest transition-all"
+            >
+              Fechar
+            </button>
+            <button
+              onClick={() => { onPlay(); onClose(); }}
+              className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+            >
+              <Play size={13} fill="currentColor" />
+              Assistir
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─── Carrossel por categoria ──────────────────────────────────────────────────
+function CategoryRow({
+  category,
+  channels,
+  onPlay,
+  onInfo,
+}: {
+  category: string;
+  channels: Channel[];
+  onPlay: (ch: Channel) => void;
+  onInfo: (ch: Channel) => void;
+}) {
+  const meta = getCatMeta(category);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const scroll = (dir: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -340 : 340, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="mb-10">
+      {/* Header da categoria */}
+      <div className="flex items-center gap-3 px-4 md:px-10 mb-4">
+        <span className="text-xl">{meta.icon}</span>
+        <h2 className={`text-base font-black uppercase tracking-tighter italic ${meta.accent}`}>{category}</h2>
+        <div className="flex-1 h-px bg-white/5 ml-1" />
+        <span className="text-[9px] font-black uppercase tracking-widest text-gray-700 mr-1">{channels.length} canais</span>
+
+        {/* Ver mais */}
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
+            expanded
+              ? `bg-white/10 border-white/20 text-white`
+              : `bg-white/5 border-white/10 text-gray-500 hover:text-white hover:border-white/20`
+          }`}
+        >
+          {expanded ? (
+            <><ChevronUp size={10} /> Menos</>
+          ) : (
+            <><Grid3X3 size={10} /> Ver mais</>
+          )}
+        </button>
+
+        {/* Setas (só no carrossel) */}
+        {!expanded && (
+          <>
+            <button
+              onClick={() => scroll('left')}
+              className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
+            >
+              <ChevronLeft size={12} />
+            </button>
+            <button
+              onClick={() => scroll('right')}
+              className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
+            >
+              <ChevronRight size={12} />
+            </button>
+          </>
+        )}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {expanded ? (
+          // Grade expandida
+          <motion.div
+            key="grid"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 px-4 md:px-10 pb-2">
+              {channels.map(ch => (
+                <ChannelCard key={ch.id} ch={ch} onPlay={() => onPlay(ch)} onInfo={() => onInfo(ch)} />
+              ))}
+            </div>
+          </motion.div>
+        ) : (
+          // Carrossel
+          <motion.div
+            key="carousel"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div
+              ref={scrollRef}
+              className="flex gap-3 overflow-x-auto scrollbar-none px-4 md:px-10 pb-1"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              {channels.map(ch => (
+                <ChannelCard key={ch.id} ch={ch} onPlay={() => onPlay(ch)} onInfo={() => onInfo(ch)} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Player com sidebar para troca de canais ──────────────────────────────────
+function ChannelPlayerView({
+  channel,
+  allChannels,
+  onClose,
+  onSwitch,
+}: {
+  channel: Channel;
+  allChannels: Channel[];
+  onClose: () => void;
+  onSwitch: (ch: Channel) => void;
+}) {
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const [sidebarCategory, setSidebarCategory] = useState<string | null>(null);
+
+  const fakeMovie = {
+    id: Number(channel.id) || 0,
+    title: getName(channel),
+    backdrop_path: getImage(channel),
+    poster_path: getImage(channel),
+    overview: '',
+    vote_average: 0,
+    videoUrl: buildChannelUrl(channel),
+    type: 'movie' as const,
+  };
+
+  const searchLower = sidebarSearch.toLowerCase();
+  const filteredChannels = useMemo(() => {
+    return allChannels.filter(ch => {
+      const matchSearch = !sidebarSearch || getName(ch).toLowerCase().includes(searchLower);
+      const matchCat = !sidebarCategory || getCat(ch) === sidebarCategory;
+      return matchSearch && matchCat;
+    });
+  }, [allChannels, sidebarSearch, sidebarCategory, searchLower]);
+
+  const sidebarCategories = useMemo(() => {
+    return Array.from(new Set(allChannels.map(getCat).filter(Boolean))).sort();
+  }, [allChannels]);
+
+  return (
+    <div className="fixed inset-0 z-[150] flex bg-black">
+      {/* Player */}
+      <div className={`flex-1 relative transition-all duration-300 ${showSidebar ? 'mr-[320px]' : ''}`}>
+        <VideoPlayer
+          key={String(channel.id)}
+          movie={fakeMovie}
+          onClose={onClose}
+          initialPlayerStyle="betterflix"
+        />
+
+        {/* Botão toggle sidebar */}
+        <button
+          onClick={() => setShowSidebar(v => !v)}
+          className={`absolute top-4 right-4 z-[160] flex items-center gap-2 px-3 py-2 rounded-xl backdrop-blur-xl border transition-all shadow-xl ${
+            showSidebar
+              ? 'bg-red-600/30 border-red-600/50 text-red-300'
+              : 'bg-black/60 border-white/20 text-white hover:bg-white/10'
+          }`}
+        >
+          <List size={15} />
+          <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
+            {showSidebar ? 'Fechar' : 'Canais'}
+          </span>
+        </button>
+      </div>
+
+      {/* Sidebar de troca de canais */}
+      <AnimatePresence>
+        {showSidebar && (
+          <motion.aside
+            initial={{ x: 320, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 320, opacity: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            className="fixed right-0 top-0 bottom-0 w-[320px] bg-[#0d0d0d] border-l border-white/10 flex flex-col z-[155] shadow-2xl"
+          >
+            {/* Header sidebar */}
+            <div className="flex-none p-4 border-b border-white/5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-white text-sm font-black italic uppercase tracking-tighter flex-1">
+                  Canais ao Vivo
+                </span>
+                <button
+                  onClick={() => setShowSidebar(false)}
+                  className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+
+              {/* Busca na sidebar */}
+              <div className="relative mb-2">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
+                <input
+                  type="text"
+                  value={sidebarSearch}
+                  onChange={e => setSidebarSearch(e.target.value)}
+                  placeholder="Pesquisar canal..."
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-7 pr-7 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-white/20 transition-all"
+                />
+                {sidebarSearch && (
+                  <button
+                    onClick={() => setSidebarSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro de categoria na sidebar */}
+              {!sidebarSearch && (
+                <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+                  <button
+                    onClick={() => setSidebarCategory(null)}
+                    className={`shrink-0 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                      !sidebarCategory
+                        ? 'bg-white/15 text-white'
+                        : 'text-gray-600 hover:text-gray-400'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  {sidebarCategories.map(cat => {
+                    const m = getCatMeta(cat);
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setSidebarCategory(sidebarCategory === cat ? null : cat)}
+                        className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                          sidebarCategory === cat
+                            ? `bg-white/10 ${m.accent}`
+                            : 'text-gray-600 hover:text-gray-400'
+                        }`}
+                      >
+                        <span>{m.icon}</span>
+                        <span>{cat}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Canal atual */}
+            <div className="flex-none px-3 py-2 border-b border-white/5 bg-red-950/20">
+              <p className="text-[9px] font-black uppercase tracking-widest text-red-500/70 mb-1">Assistindo agora</p>
+              <div className="flex items-center gap-2">
+                {getImage(channel) && (
+                  <img src={getImage(channel)} alt="" className="w-8 h-8 object-contain rounded-lg bg-black/40 p-1" />
+                )}
+                <span className="text-white text-xs font-bold truncate">{getName(channel)}</span>
+                <div className="ml-auto flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-[8px] font-black text-red-400 uppercase">Live</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de canais */}
+            <div className="flex-1 overflow-y-auto py-2 px-1">
+              {filteredChannels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-32 gap-2">
+                  <Search size={20} className="text-gray-700" />
+                  <p className="text-gray-600 text-xs">Nenhum canal encontrado</p>
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {filteredChannels.map(ch => (
+                    <MiniChannelCard
+                      key={ch.id}
+                      ch={ch}
+                      active={String(ch.id) === String(channel.id)}
+                      onClick={() => {
+                        if (String(ch.id) !== String(channel.id)) {
+                          onSwitch(ch);
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-none px-4 py-3 border-t border-white/5 text-center">
+              <p className="text-gray-700 text-[9px] font-mono">{filteredChannels.length} canal{filteredChannels.length !== 1 ? 'is' : ''}</p>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+const CATEGORY_ORDER = [
+  'Esportes', '⚽ Jogos Ao Vivo', 'Notícias', 'Canais Abertos', 'Entretenimento',
+  'Filmes', 'Séries', 'Realitys', 'Documentários', 'Infantil', 'Desenhos',
+  'Música', 'Variedades', 'Geral', 'Inglês', 'MiamiTV', '24 Horas',
+  'Casa Do Patrão', 'Adulto',
+];
 
 const CanaisTVPage: React.FC = () => {
   const navigate = useNavigate();
@@ -170,6 +602,7 @@ const CanaisTVPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [playingChannel, setPlayingChannel] = useState<Channel | null>(null);
+  const [detailChannel, setDetailChannel] = useState<Channel | null>(null);
 
   const fetchChannels = useCallback(async () => {
     setLoading(true);
@@ -188,73 +621,72 @@ const CanaisTVPage: React.FC = () => {
 
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
 
-  const categories = Array.from(
-    new Set(channels.map(c => c.categoria || c.category).filter(Boolean) as string[])
-  ).sort();
+  const categories = useMemo(() => {
+    return Array.from(
+      new Set(channels.map(c => c.categoria || c.category).filter(Boolean) as string[])
+    );
+  }, [channels]);
+
+  const sortedCategories = useMemo(() => [
+    ...CATEGORY_ORDER.filter(c => categories.includes(c)),
+    ...categories.filter(c => !CATEGORY_ORDER.includes(c)),
+  ], [categories]);
 
   const searchLower = search.toLowerCase();
-  const filteredAll = channels.filter(ch => {
-    const n = getName(ch).toLowerCase();
-    return !search || n.includes(searchLower);
-  });
 
-  const channelsByCategory = (cat: string) =>
+  const filteredAll = useMemo(() =>
+    channels.filter(ch => {
+      const n = getName(ch).toLowerCase();
+      const c = getCat(ch).toLowerCase();
+      return !search || n.includes(searchLower) || c.includes(searchLower);
+    }),
+    [channels, search, searchLower]
+  );
+
+  const channelsByCategory = useCallback((cat: string) =>
     channels.filter(ch => {
       const c = getCat(ch);
       const n = getName(ch).toLowerCase();
       const matchCat = c === cat;
       const matchSearch = !search || n.includes(searchLower);
       return matchCat && matchSearch;
-    });
+    }),
+    [channels, search, searchLower]
+  );
 
+  // Player view
   if (playingChannel) {
-    const fakeMovie = {
-      id: Number(playingChannel.id) || 0,
-      title: getName(playingChannel),
-      backdrop_path: getImage(playingChannel),
-      poster_path: getImage(playingChannel),
-      overview: '',
-      vote_average: 0,
-      videoUrl: buildChannelPlayerUrl(playingChannel),
-      type: 'movie' as const,
-    };
     return (
-      <VideoPlayer
-        movie={fakeMovie}
+      <ChannelPlayerView
+        channel={playingChannel}
+        allChannels={channels}
         onClose={() => setPlayingChannel(null)}
-        initialPlayerStyle="betterflix"
+        onSwitch={setPlayingChannel}
       />
     );
   }
-
-  const CATEGORY_ORDER = ['Esportes', 'Notícias', 'Entretenimento', 'Filmes', 'Séries', 'Infantil', 'Música', 'Documentários'];
-  const sortedCategories = [
-    ...CATEGORY_ORDER.filter(c => categories.includes(c)),
-    ...categories.filter(c => !CATEGORY_ORDER.includes(c)),
-  ];
-
-  const showSearchResults = !!search;
-  const showCategoryFilter = !search;
 
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       {/* Hero Header */}
       <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-900/20 via-black to-black pointer-events-none" />
-        <div className="relative px-4 md:px-10 pt-6 pb-6">
+        <div className="absolute inset-0 bg-gradient-to-br from-orange-900/15 via-black to-black pointer-events-none" />
+        <div className="relative px-4 md:px-10 pt-6 pb-5">
           <div className="flex items-center gap-4 mb-5">
             <button
               onClick={() => navigate(-1)}
               className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all shrink-0"
             >
-              <ChevronLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-500/30 to-red-600/20 border border-orange-500/30 flex items-center justify-center shrink-0">
                 <Tv2 size={18} className="text-orange-400" />
               </div>
               <div>
-                <h1 className="text-2xl font-black text-white uppercase italic tracking-tighter leading-none">Canais de TV</h1>
+                <h1 className="text-2xl font-black text-white uppercase italic tracking-tighter leading-none">
+                  Canais de TV
+                </h1>
                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
                   {loading ? 'Carregando...' : `${channels.length} canais ao vivo`}
                 </p>
@@ -269,31 +701,34 @@ const CanaisTVPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Search bar */}
+          {/* Barra de busca */}
           <div className="relative mb-4">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar canal por nome..."
+              placeholder="Pesquisar canal por nome ou categoria..."
               className="w-full bg-white/5 border border-white/10 rounded-2xl pl-9 pr-9 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/40 focus:bg-white/8 transition-all"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors">
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors"
+              >
                 <X size={14} />
               </button>
             )}
           </div>
 
-          {/* Category pills — hidden during search */}
-          {showCategoryFilter && categories.length > 0 && (
+          {/* Filtro por categoria — oculto durante busca */}
+          {!search && categories.length > 0 && (
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
               <button
                 onClick={() => setActiveCategory(null)}
                 className={`shrink-0 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${
                   !activeCategory
-                    ? 'bg-orange-500/30 border-orange-500/50 text-orange-300'
+                    ? 'bg-orange-500/25 border-orange-500/40 text-orange-300'
                     : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20 hover:text-gray-300'
                 }`}
               >
@@ -322,20 +757,23 @@ const CanaisTVPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Conteúdo */}
       <div className="pt-2">
-        {/* Error state */}
+        {/* Erro */}
         {error && (
           <div className="mx-4 md:mx-10 bg-red-500/10 border border-red-500/20 rounded-2xl p-5 flex items-center gap-4 mb-8">
             <Radio size={22} className="text-red-500 shrink-0" />
             <div className="flex-1 text-red-400 text-sm">{error}</div>
-            <button onClick={fetchChannels} className="text-xs font-black uppercase tracking-widest text-red-400 hover:text-red-300 transition-colors">
+            <button
+              onClick={fetchChannels}
+              className="text-xs font-black uppercase tracking-widest text-red-400 hover:text-red-300 transition-colors"
+            >
               Tentar novamente
             </button>
           </div>
         )}
 
-        {/* Loading skeleton rows */}
+        {/* Skeleton */}
         {loading && (
           <div className="px-4 md:px-10">
             {[1, 2, 3].map(r => (
@@ -346,7 +784,7 @@ const CanaisTVPage: React.FC = () => {
                 </div>
                 <div className="flex gap-3">
                   {Array.from({ length: 7 }).map((_, i) => (
-                    <div key={i} className="shrink-0 w-[148px] aspect-[16/9] bg-white/5 rounded-2xl animate-pulse" />
+                    <div key={i} className="shrink-0 w-[152px] aspect-[16/9] bg-white/5 rounded-2xl animate-pulse" />
                   ))}
                 </div>
               </div>
@@ -354,17 +792,19 @@ const CanaisTVPage: React.FC = () => {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Sem canais */}
         {!loading && !error && channels.length === 0 && (
           <div className="flex flex-col items-center justify-center py-32 text-center px-4">
             <Radio size={60} className="text-gray-800 mb-4" />
-            <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-2">Nenhum canal disponível</h3>
+            <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-2">
+              Nenhum canal disponível
+            </h3>
             <p className="text-gray-600 text-sm">Verifique sua conexão e tente novamente.</p>
           </div>
         )}
 
-        {/* Search results grid */}
-        {!loading && !error && showSearchResults && (
+        {/* Resultados da busca */}
+        {!loading && !error && search && (
           <div className="px-4 md:px-10">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-4">
               {filteredAll.length} resultado{filteredAll.length !== 1 ? 's' : ''} para "{search}"
@@ -381,15 +821,20 @@ const CanaisTVPage: React.FC = () => {
                 className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
               >
                 {filteredAll.map(ch => (
-                  <SearchResultCard key={ch.id} ch={ch} onClick={() => setPlayingChannel(ch)} />
+                  <ChannelCard
+                    key={ch.id}
+                    ch={ch}
+                    onPlay={() => setPlayingChannel(ch)}
+                    onInfo={() => setDetailChannel(ch)}
+                  />
                 ))}
               </motion.div>
             )}
           </div>
         )}
 
-        {/* Category rows — shown when NOT searching */}
-        {!loading && !error && !showSearchResults && channels.length > 0 && (
+        {/* Carrosséis por categoria */}
+        {!loading && !error && !search && channels.length > 0 && (
           <AnimatePresence mode="wait">
             {activeCategory ? (
               <motion.div key={activeCategory} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -397,6 +842,7 @@ const CanaisTVPage: React.FC = () => {
                   category={activeCategory}
                   channels={channelsByCategory(activeCategory)}
                   onPlay={setPlayingChannel}
+                  onInfo={setDetailChannel}
                 />
               </motion.div>
             ) : (
@@ -405,20 +851,48 @@ const CanaisTVPage: React.FC = () => {
                   const chs = channelsByCategory(cat);
                   if (chs.length === 0) return null;
                   return (
-                    <CategoryRow key={cat} category={cat} channels={chs} onPlay={setPlayingChannel} />
+                    <CategoryRow
+                      key={cat}
+                      category={cat}
+                      channels={chs}
+                      onPlay={setPlayingChannel}
+                      onInfo={setDetailChannel}
+                    />
                   );
                 })}
-                {/* Uncategorized */}
+                {/* Sem categoria */}
                 {(() => {
-                  const uncategorized = channels.filter(ch => !getCat(ch));
-                  if (uncategorized.length === 0) return null;
-                  return <CategoryRow key="outros" category="Outros" channels={uncategorized} onPlay={setPlayingChannel} />;
+                  const uncat = channels.filter(ch => !getCat(ch));
+                  if (uncat.length === 0) return null;
+                  return (
+                    <CategoryRow
+                      key="outros"
+                      category="Outros"
+                      channels={uncat}
+                      onPlay={setPlayingChannel}
+                      onInfo={setDetailChannel}
+                    />
+                  );
                 })()}
               </motion.div>
             )}
           </AnimatePresence>
         )}
       </div>
+
+      {/* Modal de detalhes do canal */}
+      <AnimatePresence>
+        {detailChannel && (
+          <ChannelDetailModal
+            ch={detailChannel}
+            onClose={() => setDetailChannel(null)}
+            onPlay={() => {
+              setPlayingChannel(detailChannel);
+              setDetailChannel(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
