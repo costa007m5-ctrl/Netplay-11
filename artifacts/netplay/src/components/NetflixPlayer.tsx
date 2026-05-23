@@ -479,6 +479,14 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       : (hasNextEpisode !== undefined && currentTime >= 10 && currentTime <= 180)
   );
   const [autoNextCounter, setAutoNextCounter] = useState(10);
+
+  // Iframe auto-next: timer-based (iframe mode has no video time tracking)
+  const [iframeAutoNextSecondsLeft, setIframeAutoNextSecondsLeft] = useState<number | null>(null);
+  const [iframeAutoNextEnabled, setIframeAutoNextEnabled] = useState(true);
+  const [iframeAutoNextDismissed, setIframeAutoNextDismissed] = useState(false);
+  const [showIframeEpisodeHint, setShowIframeEpisodeHint] = useState(false);
+  const iframeAutoNextIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [isLandscape, setIsLandscape] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<{ id: number; height: number; bitrate: number }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<string>(() => {
@@ -540,6 +548,47 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       } catch {}
     }
   }, [showEpisodesSidebar, movieId]);
+
+  // Iframe auto-next timer: inicia/reinicia quando muda de episódio no modo iframe
+  useEffect(() => {
+    if (!isIframeMode || !hasNextEpisode) {
+      if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current);
+      setIframeAutoNextSecondsLeft(null);
+      return;
+    }
+    // Duração em segundos: usa runtime do episódio atual (em minutos) ou padrão 45min
+    let durationSecs = 45 * 60;
+    if (episodes && currentEpisodeIndex !== undefined && currentEpisodeIndex >= 0 && episodes[currentEpisodeIndex]) {
+      const epRuntime = (episodes[currentEpisodeIndex] as any).runtime;
+      if (epRuntime && epRuntime > 0) durationSecs = epRuntime * 60;
+    }
+    setIframeAutoNextDismissed(false);
+    setIframeAutoNextEnabled(true);
+    setIframeAutoNextSecondsLeft(durationSecs);
+    setShowIframeEpisodeHint(true);
+    if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current);
+    iframeAutoNextIntervalRef.current = setInterval(() => {
+      setIframeAutoNextSecondsLeft(prev => {
+        if (prev === null || prev <= 1) {
+          if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSrc, isIframeMode, hasNextEpisode]);
+
+  // Dispara próximo episódio quando o timer chega a zero
+  useEffect(() => {
+    if (isIframeMode && iframeAutoNextSecondsLeft === 0 && hasNextEpisode && iframeAutoNextEnabled && !iframeAutoNextDismissed) {
+      if (onNextEpisode) onNextEpisode();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iframeAutoNextSecondsLeft]);
 
   const isMedianApp = () => {
     if (typeof navigator === 'undefined') return false;
@@ -2434,21 +2483,102 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       </AnimatePresence>
 
       {isIframeMode ? (
-        <iframe
-          src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
-          className="relative z-[10] w-full h-full border-0"
-          {...(!sandboxDisabled && { sandbox: "allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox" })}
-          allowFullScreen
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share; clipboard-write"
-          referrerPolicy="origin"
-          onLoad={() => {
-            setIsLoading(false);
-            setLoadingProgress(100);
-            setShowLogoOverlay(false);
-            setIsPlaying(true);
-            hasStartedPlayedRef.current = true;
-          }}
-        />
+        <>
+          <iframe
+            src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || src) : src}
+            className="relative z-[10] w-full h-full border-0"
+            {...(!sandboxDisabled && { sandbox: "allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox" })}
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share; clipboard-write"
+            referrerPolicy="origin"
+            onLoad={() => {
+              setIsLoading(false);
+              setLoadingProgress(100);
+              setShowLogoOverlay(false);
+              setIsPlaying(true);
+              hasStartedPlayedRef.current = true;
+            }}
+          />
+
+          {/* Botões flutuantes sempre visíveis no modo iframe */}
+          {!showEpisodesSidebar && (
+            <div className="absolute bottom-4 right-4 z-[200] flex flex-col items-end gap-2 pointer-events-auto">
+              {/* Botão Episódios */}
+              {episodes && episodes.length > 0 && (
+                <button
+                  onClick={() => { setShowEpisodesSidebar(true); }}
+                  className="flex items-center gap-2 bg-black/80 hover:bg-red-600 border border-white/20 hover:border-red-500 text-white text-xs font-bold px-3 py-2 rounded-full shadow-2xl backdrop-blur-md transition-all duration-200"
+                >
+                  <Tv size={14} />
+                  <span>Episódios</span>
+                </button>
+              )}
+
+              {/* Contador auto-próximo episódio */}
+              {hasNextEpisode && iframeAutoNextEnabled && !iframeAutoNextDismissed && iframeAutoNextSecondsLeft !== null && iframeAutoNextSecondsLeft > 0 && (
+                <div className="flex items-center gap-2 bg-black/80 border border-white/10 text-white text-xs px-3 py-2 rounded-full shadow-2xl backdrop-blur-md">
+                  {(() => {
+                    const mins = Math.floor(iframeAutoNextSecondsLeft / 60);
+                    const secs = iframeAutoNextSecondsLeft % 60;
+                    return (
+                      <>
+                        <FastForward size={12} className="text-red-400 shrink-0" />
+                        <span className="text-white/70">Próximo em</span>
+                        <span className="font-black text-white tabular-nums">{mins}:{String(secs).padStart(2, '0')}</span>
+                        <button
+                          onClick={() => { setIframeAutoNextDismissed(true); if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current); }}
+                          className="text-white/40 hover:text-white ml-1 transition-colors"
+                          title="Cancelar auto-próximo"
+                        >
+                          <X size={12} />
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Botão Pular para Próximo Episódio imediato */}
+              {hasNextEpisode && onNextEpisode && (
+                <button
+                  onClick={onNextEpisode}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-full shadow-2xl transition-all duration-200"
+                >
+                  <FastForward size={14} fill="currentColor" />
+                  <span>Próximo Ep.</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Overlay de auto-próximo quando faltam < 30 segundos (modo iframe) */}
+          {hasNextEpisode && iframeAutoNextEnabled && !iframeAutoNextDismissed && iframeAutoNextSecondsLeft !== null && iframeAutoNextSecondsLeft <= 30 && iframeAutoNextSecondsLeft > 0 && (
+            <div className="absolute right-[5%] top-1/2 -translate-y-1/2 z-[310] w-[30%] max-w-sm flex flex-col items-center justify-center gap-6 pointer-events-auto animate-fade-in">
+              <div className="text-center">
+                <h3 className="text-white text-2xl md:text-3xl font-black mb-2 shadow-black drop-shadow-xl">Próximo Episódio</h3>
+                <p className="text-gray-300 text-sm md:text-base font-bold shadow-black drop-shadow-lg">Começando em {iframeAutoNextSecondsLeft}...</p>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); if (onNextEpisode) onNextEpisode(); }}
+                className="group relative flex items-center gap-4 bg-white text-black p-2 pr-8 rounded-full font-black hover:scale-105 transition-all shadow-2xl overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-red-600 w-0 group-hover:w-full transition-all duration-500 z-0" />
+                <div className="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-white z-10 shadow-lg group-hover:bg-white group-hover:text-red-600 transition-colors">
+                  <FastForward size={28} fill="currentColor" />
+                </div>
+                <div className="text-left z-10 group-hover:text-white transition-colors duration-500">
+                  <p className="text-lg">Assistir Agora</p>
+                </div>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setIframeAutoNextDismissed(true); if (iframeAutoNextIntervalRef.current) clearInterval(iframeAutoNextIntervalRef.current); }}
+                className="text-white/50 hover:text-white text-xs underline transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <video
           ref={videoRef}
