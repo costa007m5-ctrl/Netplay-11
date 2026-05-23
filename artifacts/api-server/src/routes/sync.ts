@@ -44,7 +44,8 @@ function getSupabaseConfig() {
 
 async function supabaseCheckExisting(
   supabaseUrl: string,
-  supabaseKey: string,
+  anonKey: string,
+  authToken: string,
   tmdbIds: number[]
 ): Promise<Set<number>> {
   const existingSet = new Set<number>();
@@ -57,8 +58,8 @@ async function supabaseCheckExisting(
         `${supabaseUrl}/rest/v1/movies?select=tmdb_id&tmdb_id=in.(${chunk.join(",")})`,
         {
           headers: {
-            apikey: supabaseKey,
-            Authorization: `Bearer ${supabaseKey}`,
+            apikey: anonKey,
+            Authorization: `Bearer ${authToken}`,
           },
         }
       );
@@ -73,14 +74,15 @@ async function supabaseCheckExisting(
 
 async function supabaseUpsert(
   supabaseUrl: string,
-  supabaseKey: string,
+  anonKey: string,
+  authToken: string,
   record: Record<string, any>
 ): Promise<void> {
   const res = await fetch(`${supabaseUrl}/rest/v1/movies`, {
     method: "POST",
     headers: {
-      apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
+      apikey: anonKey,
+      Authorization: `Bearer ${authToken}`,
       "Content-Type": "application/json",
       Prefer: "resolution=merge-duplicates",
     },
@@ -95,12 +97,12 @@ async function supabaseUpsert(
 async function runSync(job: SyncJob, type: string, userToken?: string) {
   const cfg = LISTS[type];
   const TMDB_KEY = process.env.TMDB_API_KEY || process.env.VITE_TMDB_API_KEY;
-  const { url: supabaseUrl, key: supabaseKey } = getSupabaseConfig();
-  // Use user's JWT token for writes (bypasses RLS), fall back to anon key for reads
-  const authToken = userToken || supabaseKey;
+  const { url: supabaseUrl, key: anonKey } = getSupabaseConfig();
+  // apikey header deve ser sempre a anon key; Authorization usa o JWT do usuário se disponível
+  const authToken = userToken || anonKey;
 
   try {
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !anonKey) {
       job.status = "error";
       job.errorMsg =
         "Supabase não configurado. Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nos Secrets.";
@@ -132,7 +134,7 @@ async function runSync(job: SyncJob, type: string, userToken?: string) {
       return;
     }
 
-    const existingSet = await supabaseCheckExisting(supabaseUrl, authToken, ids);
+    const existingSet = await supabaseCheckExisting(supabaseUrl, anonKey, authToken, ids);
     job.existing = existingSet.size;
     const newIds = ids.filter((id) => !existingSet.has(id));
     appendLog(
@@ -201,7 +203,7 @@ async function runSync(job: SyncJob, type: string, userToken?: string) {
               video_url: "",
             };
 
-            await supabaseUpsert(supabaseUrl, authToken, record);
+            await supabaseUpsert(supabaseUrl, anonKey, authToken, record);
             job.inserted++;
           } catch (err: any) {
             job.errors++;
