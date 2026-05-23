@@ -33,6 +33,29 @@ export function convertTeraboxToApi(url: string, api: 'v1' | 'v2' | 'v3'): strin
 export const SELECTED_SERVER_KEY = 'netplay_selected_server_mode';
 const SERVER_PREF_KEY = (id: number | string) => `netplay_server_pref_${id}`;
 
+export const DISABLED_APIS_KEY = 'netplay_disabled_player_apis';
+
+export function getDisabledPlayerApis(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISABLED_APIS_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch { return new Set(); }
+}
+
+export function setPlayerApiEnabled(id: string, enabled: boolean) {
+  try {
+    const disabled = getDisabledPlayerApis();
+    if (enabled) disabled.delete(id);
+    else disabled.add(id);
+    localStorage.setItem(DISABLED_APIS_KEY, JSON.stringify([...disabled]));
+  } catch {}
+}
+
+export function isPlayerApiEnabled(id: string): boolean {
+  return !getDisabledPlayerApis().has(id);
+}
+
 export interface SelectedServerPreference {
   id: 'admin' | 'alternative' | 'auto';
   playerStyle: string;
@@ -369,7 +392,8 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     },
   ];
 
-  const visibleOptions = options.filter(o => o.available);
+  const disabledApis = getDisabledPlayerApis();
+  const visibleOptions = options.filter(o => o.available && !disabledApis.has(o.id));
 
   const savePref = useCallback((optionId: string) => {
     try { localStorage.setItem(SERVER_PREF_KEY(movie.id), optionId); } catch {}

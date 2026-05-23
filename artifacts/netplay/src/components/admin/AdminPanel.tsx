@@ -7,7 +7,7 @@ import {
   ArrowUpDown, Download, Settings, Database, Plus, Upload,
   Sparkles, Calendar, Shield, Copy, Star, Send, Image as ImageIcon,
   Activity, Users, Heart, DollarSign, Server, Bell, RefreshCw,
-  Loader2, Zap, Film, Tv, BookOpen, Layers, StopCircle
+  Loader2, Zap, Film, Tv, BookOpen, Layers, StopCircle, ToggleRight
 } from 'lucide-react';
 import { Movie, ScannerState, ReScannerState, StreamingProvider, LogoScannerState, LogoScanScope, LogoScanMode } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -17,6 +17,7 @@ import AdminUsersTab from './AdminUsersTab';
 import AdminMercadoPagoTab from './AdminMercadoPagoTab';
 import AdminReferralsTab from './AdminReferralsTab';
 import { AdminAPIsTab } from './AdminAPIsTab';
+import { AdminPlayerAPIsTab } from './AdminPlayerAPIsTab';
 import { AdminOneSignalTab } from './AdminOneSignalTab';
 import AdminTeraboxTab from './AdminTeraboxTab';
 import AdminTeraboxV2Tab from './AdminTeraboxV2Tab';
@@ -58,7 +59,7 @@ interface AdminPanelProps {
   onRefresh?: () => void;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3' | 'player-apis';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1698,6 +1699,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               { id: 'net2', label: 'Net 2.0', icon: Tv },
               { id: 'flixapi', label: 'API Flix', icon: Tv },
               { id: 'flix3', label: 'Flix 3.0', icon: Tv },
+              { id: 'player-apis', label: 'Players Ativos', icon: ToggleRight },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
               { id: 'onesignal', label: 'OneSignal', icon: Bell },
               { id: 'terabox', label: 'Terabox API', icon: Database },
@@ -2279,6 +2281,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminFlixAPITab />
             ) : activeTab === 'flix3' ? (
               <AdminFlix3Tab onRefresh={onRefresh} />
+            ) : activeTab === 'player-apis' ? (
+              <AdminPlayerAPIsTab />
             ) : activeTab === 'apis' ? (
               <AdminAPIsTab />
             ) : activeTab === 'terabox' ? (
