@@ -41,7 +41,7 @@ const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSel
 const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
 const FranchiseCarousels = React.lazy(() => import('./components/FranchiseCarousels'));
 
-import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
+import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map as MapIcon, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
 
 // Basic title cleaner to replace AI cleaning
 const cleanTitle = (fileName: string) => {
@@ -246,14 +246,14 @@ const FRANCHISES: {
     keywords: ['matrix', 'neo', 'morpheus', 'trinity', 'agente smith', 'the one', 'o escolhido', 'ressurreições'],
   },
   {
-    id: 'pirates', name: 'Piratas do Caribe', color: '#8b6914', bg: 'bg-[#0a0800]', accent: 'text-yellow-700', icon: Map,
+    id: 'pirates', name: 'Piratas do Caribe', color: '#8b6914', bg: 'bg-[#0a0800]', accent: 'text-yellow-700', icon: MapIcon,
     description: 'Por quê é o rum que acaba sempre?',
     backdrop: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=90&fit=crop',
     logo: undefined, logoMovieId: 22, tmdbCollectionId: 295,
     keywords: ['piratas do caribe', 'pirates of the caribbean', 'jack sparrow', 'davy jones', 'black pearl'],
   },
   {
-    id: 'indiana-jones', name: 'Indiana Jones', color: '#d4a017', bg: 'bg-[#1a1000]', accent: 'text-yellow-600', icon: Map,
+    id: 'indiana-jones', name: 'Indiana Jones', color: '#d4a017', bg: 'bg-[#1a1000]', accent: 'text-yellow-600', icon: MapIcon,
     description: 'Aventuras arqueológicas no limite da história.',
     backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop',
     logo: undefined, logoMovieId: 89, tmdbCollectionId: 84,
@@ -377,7 +377,7 @@ const FRANCHISES: {
     keywords: ['cosmos', 'natureza', 'ocean', 'oceano', 'planeta', 'national geographic', 'vida selvagem', 'wildlife'],
   },
   {
-    id: 'adventure', name: 'Aventura', color: '#22c55e', bg: 'bg-[#061a0f]', accent: 'text-green-500', icon: Map,
+    id: 'adventure', name: 'Aventura', color: '#22c55e', bg: 'bg-[#061a0f]', accent: 'text-green-500', icon: MapIcon,
     description: 'Grandes jornadas em terras desconhecidas.',
     backdrop: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=90&fit=crop', logoMovieId: 89,
     keywords: ['aventura', 'adventure', 'exploração', 'expedition', 'journey', 'jumanji', 'zathura'],
@@ -5122,89 +5122,61 @@ export default function App() {
   }, [profile, activeRoomId, myMovies]);
 
   const fetchMyMovies = async () => {
-    // Tentar carregar do cache primeiro para exibição imediata
+    // Tentar carregar do cache primeiro
     const cached = localStorage.getItem('cached_my_movies');
     if (cached) {
-      try { setMyMovies(JSON.parse(cached)); } catch {}
+      setMyMovies(JSON.parse(cached));
     }
 
-    const formatMovie = (m: any): Movie => {
-      let cascadeSettings: { qualityCascadeDelay?: number; cascadeToV3OnPenultimate?: boolean } = {};
-      try {
-        const raw = localStorage.getItem(`netplay_cascade_${m.id}`);
-        if (raw) cascadeSettings = JSON.parse(raw);
-      } catch {}
-      return {
-        ...m,
-        id: m.id,
-        videoUrl: m.video_url || '',
-        videoUrl2: m.video_url_2 || '',
-        preferredQuality: m.preferred_quality || undefined,
-        vote_average: m.vote_average || m.rating || 0,
-        rating: m.rating || m.vote_average || 0,
-        release_date: m.release_date || '',
-        release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
-        runtime: m.runtime || 0,
-        actors: m.actors || '',
-        is_hidden: m.is_hidden || false,
-        watch_providers: m.watch_providers || '',
-        ...cascadeSettings,
-      };
-    };
-
-    // Sempre buscar do banco local (Replit DB) via API
-    let apiMovies: Movie[] = [];
+    if (!hasSupabase || !user) {
+      console.log('fetchMyMovies: Sem Supabase ou Usuário', { hasSupabase, user: !!user });
+      return;
+    }
+    
     try {
-      let offset = 0;
-      const limit = 2000;
-      while (true) {
-        const res = await fetch(`/api/movies?limit=${limit}&offset=${offset}`);
-        if (!res.ok) break;
-        const { movies } = await res.json();
-        if (!movies || movies.length === 0) break;
-        apiMovies = [...apiMovies, ...movies.map(formatMovie)];
-        if (movies.length < limit) break;
-        offset += limit;
+      console.log('Buscando filmes do Supabase...');
+      const { data, error } = await supabase
+        .from('movies')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro detalhado do Supabase:', error);
+        throw error;
       }
-      console.log(`Filmes da API local: ${apiMovies.length}`);
-    } catch (err) {
-      console.error('Erro ao buscar filmes da API local:', err);
-    }
 
-    // Buscar do Supabase se disponível e com usuário logado
-    let supabaseMovies: Movie[] = [];
-    if (hasSupabase && user) {
-      try {
-        console.log('Buscando filmes do Supabase...');
-        const { data, error } = await supabase
-          .from('movies')
-          .select('*')
-          .order('created_at', { ascending: false });
+      console.log(`Filmes encontrados: ${data?.length || 0}`);
 
-        if (!error && data) {
-          supabaseMovies = data.map(formatMovie);
-          console.log(`Filmes do Supabase: ${supabaseMovies.length}`);
-        }
-      } catch (err) {
-        console.error('Erro ao buscar filmes do Supabase:', err);
+      if (data) {
+        const formattedMovies: Movie[] = data.map(m => {
+          let cascadeSettings: { qualityCascadeDelay?: number; cascadeToV3OnPenultimate?: boolean } = {};
+          try {
+            const raw = localStorage.getItem(`netplay_cascade_${m.id}`);
+            if (raw) cascadeSettings = JSON.parse(raw);
+          } catch {}
+          return {
+            ...m,
+            id: m.id,
+            videoUrl: m.video_url,
+            videoUrl2: m.video_url_2,
+            preferredQuality: m.preferred_quality || undefined,
+            vote_average: m.vote_average || m.rating || 0,
+            rating: m.rating || m.vote_average || 0,
+            release_date: m.release_date || '',
+            release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
+            runtime: m.runtime || 0,
+            actors: m.actors || '',
+            is_hidden: m.is_hidden || false,
+            watch_providers: m.watch_providers || '',
+            ...cascadeSettings,
+          };
+        });
+
+        setMyMovies(formattedMovies);
+        localStorage.setItem('cached_my_movies', JSON.stringify(formattedMovies));
       }
-    }
-
-    // Mesclar: Supabase tem prioridade (dados mais completos como video_url)
-    const merged = new Map<number, Movie>();
-    apiMovies.forEach(m => merged.set(m.id, m));
-    supabaseMovies.forEach(m => merged.set(m.id, m));
-
-    const allMovies = Array.from(merged.values()).sort((a: any, b: any) => {
-      const da = new Date((b as any).created_at || 0).getTime();
-      const db = new Date((a as any).created_at || 0).getTime();
-      return da - db;
-    });
-
-    if (allMovies.length > 0) {
-      console.log(`Total de filmes mesclados: ${allMovies.length}`);
-      setMyMovies(allMovies);
-      localStorage.setItem('cached_my_movies', JSON.stringify(allMovies));
+    } catch (error) {
+      console.error('Erro ao buscar filmes do Supabase:', error);
     }
   };
 

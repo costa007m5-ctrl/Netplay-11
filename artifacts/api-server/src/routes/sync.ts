@@ -1,7 +1,5 @@
 import { Router } from "express";
 import axios from "axios";
-import { db, moviesTable } from "@workspace/db";
-import { inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -33,18 +31,91 @@ function appendLog(job: SyncJob, msg: string) {
   job.log = [...job.log.slice(-300), msg];
 }
 
-async function runSync(job: SyncJob, type: string) {
+function getSupabaseConfig() {
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+  const key =
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    "";
+  return { url, key };
+}
+
+async function supabaseCheckExisting(
+  supabaseUrl: string,
+  supabaseKey: string,
+  tmdbIds: number[]
+): Promise<Set<number>> {
+  const existingSet = new Set<number>();
+  const CHUNK = 500;
+
+  for (let i = 0; i < tmdbIds.length; i += CHUNK) {
+    const chunk = tmdbIds.slice(i, i + CHUNK);
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/movies?select=tmdb_id&tmdb_id=in.(${chunk.join(",")})`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        }
+      );
+      if (res.ok) {
+        const rows: { tmdb_id: number }[] = await res.json();
+        rows.forEach((r) => { if (r.tmdb_id) existingSet.add(r.tmdb_id); });
+      }
+    } catch {}
+  }
+  return existingSet;
+}
+
+async function supabaseUpsert(
+  supabaseUrl: string,
+  supabaseKey: string,
+  record: Record<string, any>
+): Promise<void> {
+  const res = await fetch(`${supabaseUrl}/rest/v1/movies`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(record),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Supabase insert failed: ${res.status} — ${body}`);
+  }
+}
+
+async function runSync(job: SyncJob, type: string, userToken?: string) {
   const cfg = LISTS[type];
   const TMDB_KEY = process.env.TMDB_API_KEY || process.env.VITE_TMDB_API_KEY;
+  const { url: supabaseUrl, key: supabaseKey } = getSupabaseConfig();
+  // Use user's JWT token for writes (bypasses RLS), fall back to anon key for reads
+  const authToken = userToken || supabaseKey;
 
   try {
-    appendLog(job, `🚀 Iniciando sync de ${type}...`);
+    if (!supabaseUrl || !supabaseKey) {
+      job.status = "error";
+      job.errorMsg =
+        "Supabase não configurado. Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nos Secrets.";
+      appendLog(job, `⚠️ ${job.errorMsg}`);
+      return;
+    }
+
+    appendLog(job, `🚀 Iniciando sync de ${type} → Supabase...`);
 
     const response = await fetch(cfg.url, {
       headers: { "User-Agent": "NetPlay/1.0" },
       signal: AbortSignal.timeout(25000),
     });
-    if (!response.ok) throw new Error(`Falha ao buscar lista: ${response.status}`);
+    if (!response.ok)
+      throw new Error(`Falha ao buscar lista: ${response.status}`);
 
     const text = await response.text();
     const ids = text
@@ -56,21 +127,18 @@ async function runSync(job: SyncJob, type: string) {
     job.total = ids.length;
     appendLog(job, `✅ Lista obtida: ${ids.length} IDs`);
 
-    const CHUNK = 500;
-    const existingSet = new Set<number>();
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      if (job.cancelFlag) break;
-      const chunk = ids.slice(i, i + CHUNK);
-      const rows = await db
-        .select({ id: moviesTable.id })
-        .from(moviesTable)
-        .where(inArray(moviesTable.id, chunk));
-      rows.forEach((r) => existingSet.add(r.id));
+    if (job.cancelFlag) {
+      job.status = "cancelled";
+      return;
     }
 
+    const existingSet = await supabaseCheckExisting(supabaseUrl, authToken, ids);
     job.existing = existingSet.size;
     const newIds = ids.filter((id) => !existingSet.has(id));
-    appendLog(job, `📦 Já cadastrados: ${existingSet.size} | Novos: ${newIds.length}`);
+    appendLog(
+      job,
+      `📦 Já cadastrados: ${existingSet.size} | Novos: ${newIds.length}`
+    );
 
     if (!TMDB_KEY) {
       job.status = "error";
@@ -110,36 +178,30 @@ async function runSync(job: SyncJob, type: string) {
               .map((g: any) => g.name)
               .join(", ");
 
-            await db
-              .insert(moviesTable)
-              .values({
-                id: tmdbId,
-                title: isMovie
-                  ? details.title
-                  : details.name || details.original_name,
-                type: isMovie ? "movie" : "series",
-                overview: details.overview || null,
-                poster_path: details.poster_path || null,
-                backdrop_path: details.backdrop_path || null,
-                release_date: isMovie ? details.release_date || null : null,
-                first_air_date: !isMovie ? details.first_air_date || null : null,
-                release_year: isMovie
-                  ? details.release_date
-                    ? new Date(details.release_date).getFullYear()
-                    : null
-                  : details.first_air_date
-                  ? new Date(details.first_air_date).getFullYear()
-                  : null,
-                rating: details.vote_average || null,
-                runtime: isMovie
-                  ? details.runtime || null
-                  : details.episode_run_time?.[0] || null,
-                genres: genreNames || null,
-                genre: details.genres?.[0]?.name || null,
-                video_url: "",
-              })
-              .onConflictDoNothing();
+            const airDate = isMovie
+              ? details.release_date || null
+              : details.first_air_date || null;
 
+            const record: Record<string, any> = {
+              tmdb_id: tmdbId,
+              title: isMovie
+                ? details.title
+                : details.name || details.original_name,
+              type: isMovie ? "movie" : "series",
+              overview: details.overview || null,
+              poster_path: details.poster_path || null,
+              backdrop_path: details.backdrop_path || null,
+              release_date: airDate,
+              release_year: airDate ? new Date(airDate).getFullYear() : null,
+              rating: details.vote_average || null,
+              runtime: isMovie
+                ? details.runtime || null
+                : details.episode_run_time?.[0] || null,
+              genres: genreNames || null,
+              video_url: "",
+            };
+
+            await supabaseUpsert(supabaseUrl, authToken, record);
             job.inserted++;
           } catch (err: any) {
             job.errors++;
@@ -173,7 +235,7 @@ async function runSync(job: SyncJob, type: string) {
 }
 
 router.post("/sync/flix3/start", (req, res) => {
-  const { type } = req.body as { type: string };
+  const { type, userToken } = req.body as { type: string; userToken?: string };
 
   if (!LISTS[type]) {
     res.status(400).json({ error: `Tipo inválido: ${type}` });
@@ -204,7 +266,7 @@ router.post("/sync/flix3/start", (req, res) => {
 
   jobs.set(jobId, job);
 
-  runSync(job, type).catch((err) => {
+  runSync(job, type, userToken).catch((err) => {
     job.status = "error";
     job.errorMsg = err.message;
   });

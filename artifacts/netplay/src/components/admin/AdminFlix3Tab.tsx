@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Tv2, ExternalLink, Film, PlayCircle, List, CheckCircle2, AlertCircle, RefreshCcw, Download, Loader2, X, ChevronDown, ChevronUp, ShieldCheck, ShieldOff } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export function buildRedeFlixMovieUrl(tmdbId: number | string): string {
   return `https://redeflixapi.store/filme/${tmdbId}`;
@@ -106,10 +107,13 @@ function AdminFlix3Tab() {
     stopPoll(type);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userToken = session?.access_token;
+
       const res = await fetch('/api/sync/flix3/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, userToken }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
