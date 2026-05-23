@@ -4,6 +4,7 @@ import NetflixPlayer from './NetflixPlayer';
 import { Movie, RoomEvent, AppSettings } from '../types';
 import { supabase } from '../lib/supabase';
 import { isDynamicRef, parseDynamicRef } from '../services/terabox';
+import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 
 interface VideoPlayerProps {
   movie: Movie;
@@ -73,7 +74,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [extractedQualities, setExtractedQualities] = useState<{ id: string; label: string; url: string }[]>([]);
   const [dubbingOptions, setDubbingOptions] = useState<{ id: string; label: string; url: string }[]>([]);
 
-  // BetterFlix — sem resolução server-side; o embed URL é carregado direto no iframe do NetflixPlayer
+  // BetterFlix — estado para troca de episódio sem recriar o componente
+  const [bfCurrentUrl, setBfCurrentUrl] = useState<string>('');
+  const [bfCurrentEpisodeIndex, setBfCurrentEpisodeIndex] = useState<number>(-1);
 
   // Net 2.0 — dica de áudio em Português
   const [showVidsrcHint, setShowVidsrcHint] = useState(true);
@@ -1101,27 +1104,55 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
     const bfTitle = movie.title || movie.name || 'Assistindo';
     const bfIsTV = movie.type === 'series';
 
-    // Carrega o embed URL diretamente no NetflixPlayer (iframe) — sem resolução server-side
-    const bfPlayerSrc = url;
+    // Inicializa a URL e o índice de episódio se ainda não foram definidos
+    const bfInitialEpIndex = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0)
+      ? initialEpisodeIndex
+      : (() => {
+          if (!bfIsTV || sortedEpisodes.length === 0) return -1;
+          const idx = sortedEpisodes.findIndex(ep => ep.videoUrl === url || ep.videoUrl2 === url);
+          return idx >= 0 ? idx : 0;
+        })();
+
+    const activeBfUrl = bfCurrentUrl || url;
+    const activeEpIndex = bfCurrentEpisodeIndex >= 0 ? bfCurrentEpisodeIndex : bfInitialEpIndex;
+
     return (
       <div className="relative w-full h-full">
         <NetflixPlayer
-          src={bfPlayerSrc}
+          src={activeBfUrl}
           title={bfTitle}
           seriesTitle={bfIsTV ? (movie.title || movie.name || '') : undefined}
           episodes={bfIsTV && (movie.episodes?.length ?? 0) > 0 ? movie.episodes : undefined}
+          currentEpisodeIndex={activeEpIndex >= 0 ? activeEpIndex : undefined}
           backdropUrl={movie.backdrop_path}
           logoUrl={movieLogo || undefined}
           onClose={onClose}
           initialTime={initialTime ?? movie.last_position ?? 0}
           isMovie={!bfIsTV}
-          hasNextEpisode={false}
+          hasNextEpisode={bfIsTV && activeEpIndex >= 0 && activeEpIndex < sortedEpisodes.length - 1}
+          onSelectEpisode={(ep: any) => {
+            const s = ep.season ?? 1;
+            const e = ep.episode ?? 1;
+            const newUrl = buildBetterFlixUrl(movie.id, 'tv', s, e);
+            const newIdx = sortedEpisodes.findIndex(
+              (se: any) => (se.season ?? 1) === s && (se.episode ?? 1) === e
+            );
+            setBfCurrentUrl(newUrl);
+            setBfCurrentEpisodeIndex(newIdx >= 0 ? newIdx : -1);
+          }}
+          onNextEpisode={() => {
+            if (!bfIsTV || activeEpIndex < 0 || activeEpIndex >= sortedEpisodes.length - 1) return;
+            const nextEp = sortedEpisodes[activeEpIndex + 1] as any;
+            const s = nextEp.season ?? 1;
+            const e = nextEp.episode ?? 1;
+            setBfCurrentUrl(buildBetterFlixUrl(movie.id, 'tv', s, e));
+            setBfCurrentEpisodeIndex(activeEpIndex + 1);
+          }}
           recommendations={recommendations}
           onSelectRecommendation={(rec) => {
             const recUrl = rec.type === 'series' && rec.episodes?.length ? rec.episodes[0].videoUrl : rec.videoUrl;
             if (onPlayNext) onPlayNext(rec, recUrl || '');
           }}
-          onNextEpisode={() => {}}
           videoUrlOptions={[]}
           isHost={isHost}
           roomId={roomId}
