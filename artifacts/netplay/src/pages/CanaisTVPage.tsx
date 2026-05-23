@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Radio, Search, X, RefreshCcw, Tv2, ChevronLeft, ChevronRight,
   Play, List, ArrowLeft, Info, Zap, Grid3X3, ChevronDown, ChevronUp,
+  Clock, SkipBack, SkipForward, CalendarDays, Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
@@ -54,6 +55,192 @@ function buildChannelUrl(ch: Channel): string {
   let url = `https://betterflix.click/api/player?id=${ch.id}&type=channel`;
   if (key) url += `&key=${encodeURIComponent(key)}`;
   return url;
+}
+
+// ─── Hook EPG ─────────────────────────────────────────────────────────────────
+interface EpgProgram {
+  title: string;
+  description?: string | null;
+  startMs: number;
+  stopMs: number;
+  progress: number;
+}
+interface EpgData {
+  current: EpgProgram | null;
+  next: { title: string; startMs: number } | null;
+}
+
+function useEpg(channelName: string): { data: EpgData | null; loading: boolean } {
+  const [data, setData] = useState<EpgData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!channelName) return;
+    setLoading(true);
+    setData(null);
+    const ctrl = new AbortController();
+    fetch(`/api/epg/channel?name=${encodeURIComponent(channelName)}`, { signal: ctrl.signal })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
+  }, [channelName]);
+
+  return { data, loading };
+}
+
+function fmtTime(ms: number): string {
+  const d = new Date(ms);
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── Painel EPG no sidebar ─────────────────────────────────────────────────────
+function EpgPanel({ channelName }: { channelName: string }) {
+  const { data, loading } = useEpg(channelName);
+
+  if (loading) {
+    return (
+      <div className="px-3 py-3 border-b border-white/5">
+        <div className="flex items-center gap-2 text-gray-600 text-[10px]">
+          <Loader2 size={11} className="animate-spin" />
+          <span>Carregando programação...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || (!data.current && !data.next)) return null;
+
+  const { current, next } = data;
+
+  return (
+    <div className="px-3 py-3 border-b border-white/5 space-y-2">
+      <p className="text-[9px] font-black uppercase tracking-widest text-purple-400/70 flex items-center gap-1.5">
+        <CalendarDays size={9} /> Programação
+      </p>
+
+      {current && (
+        <div className="bg-purple-900/20 border border-purple-500/20 rounded-xl p-2.5 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shrink-0" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-red-400">Agora</span>
+            <span className="ml-auto text-[8px] text-gray-500 font-mono">
+              {fmtTime(current.startMs)} – {fmtTime(current.stopMs)}
+            </span>
+          </div>
+          <p className="text-white text-[11px] font-bold leading-tight line-clamp-2">{current.title}</p>
+          {/* Barra de progresso */}
+          <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-red-500 rounded-full transition-all"
+              style={{ width: `${Math.min(100, current.progress)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {next && (
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-white/5 rounded-xl border border-white/5">
+          <Clock size={10} className="text-gray-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-gray-400 text-[10px] font-semibold truncate">{next.title}</p>
+          </div>
+          <span className="text-[8px] text-gray-600 font-mono shrink-0">{fmtTime(next.startMs)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Item individual no strip (precisa de estado próprio para erro de img) ─────
+function StripItem({
+  ch,
+  offset,
+  onSwitch,
+}: {
+  ch: Channel;
+  offset: number;
+  onSwitch: (ch: Channel) => void;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const img = getImage(ch);
+  const isCurrent = offset === 0;
+  const meta = getCatMeta(getCat(ch));
+
+  return (
+    <motion.button
+      onClick={() => !isCurrent && onSwitch(ch)}
+      whileHover={!isCurrent ? { scale: 1.08 } : {}}
+      whileTap={!isCurrent ? { scale: 0.95 } : {}}
+      className={`flex flex-col items-center gap-1.5 transition-all ${
+        isCurrent ? 'opacity-100 scale-110 cursor-default' : 'opacity-50 hover:opacity-90 cursor-pointer'
+      } ${Math.abs(offset) === 2 ? 'hidden sm:flex' : ''}`}
+    >
+      <div className={`relative w-14 h-14 rounded-xl border-2 flex items-center justify-center overflow-hidden bg-black/60 backdrop-blur-sm transition-all ${
+        isCurrent
+          ? 'border-red-500 shadow-[0_0_16px_rgba(239,68,68,0.5)]'
+          : `border-white/10 ${meta.border}`
+      }`}>
+        {img && !imgErr ? (
+          <img src={img} alt={getName(ch)} className="w-10 h-10 object-contain" onError={() => setImgErr(true)} />
+        ) : (
+          <Radio size={18} className="text-gray-600" />
+        )}
+        {isCurrent && (
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-0.5 bg-red-600/80">
+            <span className="w-1 h-1 bg-white rounded-full animate-pulse" />
+          </div>
+        )}
+      </div>
+      <span className={`text-[8px] font-bold max-w-[56px] truncate ${isCurrent ? 'text-white' : 'text-gray-500'}`}>
+        {getName(ch)}
+      </span>
+    </motion.button>
+  );
+}
+
+// ─── Strip de canais na parte inferior do player ───────────────────────────────
+function BottomChannelStrip({
+  channels,
+  currentIdx,
+  onSwitch,
+  visible,
+}: {
+  channels: Channel[];
+  currentIdx: number;
+  onSwitch: (ch: Channel) => void;
+  visible: boolean;
+}) {
+  const len = channels.length;
+  const strip = useMemo(() => {
+    return [-2, -1, 0, 1, 2].map(offset => {
+      const idx = ((currentIdx + offset) % len + len) % len;
+      return { ch: channels[idx], offset };
+    });
+  }, [channels, currentIdx, len]);
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: 80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 80, opacity: 0 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+          className="absolute bottom-0 left-0 right-0 z-[165] pointer-events-none"
+        >
+          <div className="bg-gradient-to-t from-black via-black/90 to-transparent pt-10 pb-4 px-4 pointer-events-auto">
+            <div className="flex items-center justify-center gap-3">
+              {strip.map(({ ch, offset }) => (
+                <StripItem key={`${ch.id}-${offset}`} ch={ch} offset={offset} onSwitch={onSwitch} />
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 // ─── Logo card pequeño (para sidebar do player) ───────────────────────────────
@@ -403,8 +590,51 @@ function ChannelPlayerView({
   onSwitch: (ch: Channel) => void;
 }) {
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showStrip, setShowStrip] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarCategory, setSidebarCategory] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<'canais' | 'programacao'>('canais');
+  const stripTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentIdx = useMemo(
+    () => allChannels.findIndex(ch => String(ch.id) === String(channel.id)),
+    [allChannels, channel.id]
+  );
+
+  const goNext = useCallback(() => {
+    const idx = (currentIdx + 1) % allChannels.length;
+    onSwitch(allChannels[idx]);
+  }, [currentIdx, allChannels, onSwitch]);
+
+  const goPrev = useCallback(() => {
+    const idx = (currentIdx - 1 + allChannels.length) % allChannels.length;
+    onSwitch(allChannels[idx]);
+  }, [currentIdx, allChannels, onSwitch]);
+
+  // Mostrar strip temporariamente ao trocar canal
+  const triggerStrip = useCallback(() => {
+    setShowStrip(true);
+    if (stripTimerRef.current) clearTimeout(stripTimerRef.current);
+    stripTimerRef.current = setTimeout(() => setShowStrip(false), 3500);
+  }, []);
+
+  const handleNext = useCallback(() => { goNext(); triggerStrip(); }, [goNext, triggerStrip]);
+  const handlePrev = useCallback(() => { goPrev(); triggerStrip(); }, [goPrev, triggerStrip]);
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); handleNext(); }
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown') { e.preventDefault(); handlePrev(); }
+      if (e.key === 'l' || e.key === 'L') setShowSidebar(v => !v);
+      if (e.key === 'Escape') { if (showSidebar) setShowSidebar(false); else onClose(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleNext, handlePrev, showSidebar, onClose]);
+
+  useEffect(() => () => { if (stripTimerRef.current) clearTimeout(stripTimerRef.current); }, []);
 
   const fakeMovie = {
     id: Number(channel.id) || 0,
@@ -441,23 +671,116 @@ function ChannelPlayerView({
           initialPlayerStyle="betterflix"
         />
 
-        {/* Botão toggle sidebar */}
+        {/* ── Botões Prev / Next nas laterais do player ── */}
         <button
-          onClick={() => setShowSidebar(v => !v)}
-          className={`absolute top-4 right-4 z-[160] flex items-center gap-2 px-3 py-2 rounded-xl backdrop-blur-xl border transition-all shadow-xl ${
-            showSidebar
-              ? 'bg-red-600/30 border-red-600/50 text-red-300'
-              : 'bg-black/60 border-white/20 text-white hover:bg-white/10'
-          }`}
+          onClick={handlePrev}
+          title="Canal anterior (← ↓)"
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-[160] w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 border border-white/15 hover:border-white/30 flex items-center justify-center text-white/70 hover:text-white transition-all backdrop-blur-sm shadow-xl opacity-0 hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
+          style={{ opacity: undefined }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '')}
         >
-          <List size={15} />
-          <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
-            {showSidebar ? 'Fechar' : 'Canais'}
-          </span>
+          <SkipBack size={16} />
         </button>
+        <button
+          onClick={handleNext}
+          title="Próximo canal (→ ↑)"
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-[160] w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 border border-white/15 hover:border-white/30 flex items-center justify-center text-white/70 hover:text-white transition-all backdrop-blur-sm shadow-xl"
+          style={{ opacity: undefined }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '')}
+        >
+          <SkipForward size={16} />
+        </button>
+
+        {/* ── Barra de controles superior ── */}
+        <div className="absolute top-4 right-4 z-[160] flex items-center gap-2">
+          {/* Botões prev/next compactos */}
+          <button
+            onClick={handlePrev}
+            title="Canal anterior"
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/60 backdrop-blur-xl border border-white/15 text-white hover:bg-white/10 hover:border-white/30 transition-all shadow-xl"
+          >
+            <SkipBack size={13} />
+          </button>
+          <button
+            onClick={handleNext}
+            title="Próximo canal"
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/60 backdrop-blur-xl border border-white/15 text-white hover:bg-white/10 hover:border-white/30 transition-all shadow-xl"
+          >
+            <SkipForward size={13} />
+          </button>
+
+          {/* Toggle strip */}
+          <button
+            onClick={() => { setShowStrip(v => !v); if (stripTimerRef.current) clearTimeout(stripTimerRef.current); }}
+            title="Canais próximos"
+            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl backdrop-blur-xl border transition-all shadow-xl ${
+              showStrip
+                ? 'bg-orange-600/30 border-orange-500/50 text-orange-300'
+                : 'bg-black/60 border-white/15 text-white hover:bg-white/10'
+            }`}
+          >
+            <Tv2 size={13} />
+          </button>
+
+          {/* Toggle sidebar */}
+          <button
+            onClick={() => setShowSidebar(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl backdrop-blur-xl border transition-all shadow-xl ${
+              showSidebar
+                ? 'bg-red-600/30 border-red-600/50 text-red-300'
+                : 'bg-black/60 border-white/15 text-white hover:bg-white/10'
+            }`}
+          >
+            <List size={14} />
+            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
+              {showSidebar ? 'Fechar' : 'Canais'}
+            </span>
+          </button>
+        </div>
+
+        {/* ── Indicador do canal atual (exibido ao trocar) ── */}
+        <AnimatePresence>
+          {showStrip && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-16 left-1/2 -translate-x-1/2 z-[160] flex items-center gap-2 bg-black/70 backdrop-blur-xl border border-white/15 rounded-2xl px-4 py-2 pointer-events-none"
+            >
+              {getImage(channel) && (
+                <img src={getImage(channel)} alt="" className="w-7 h-7 object-contain rounded-lg bg-black/40 p-0.5" />
+              )}
+              <div>
+                <p className="text-white text-sm font-black leading-none">{getName(channel)}</p>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                  Canal {currentIdx + 1} de {allChannels.length}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 ml-1">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-[8px] font-black text-red-400 uppercase">Ao Vivo</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Strip inferior de canais ── */}
+        <BottomChannelStrip
+          channels={allChannels}
+          currentIdx={currentIdx}
+          onSwitch={ch => { onSwitch(ch); triggerStrip(); }}
+          visible={showStrip}
+        />
+
+        {/* Dica de atalhos (aparece uma vez) */}
+        <div className="absolute bottom-4 left-4 z-[160] pointer-events-none">
+          <p className="text-[9px] text-white/20 font-mono">← → trocar canal • L lista</p>
+        </div>
       </div>
 
-      {/* Sidebar de troca de canais */}
+      {/* ── Sidebar de canais + programação ── */}
       <AnimatePresence>
         {showSidebar && (
           <motion.aside
@@ -482,57 +805,74 @@ function ChannelPlayerView({
                 </button>
               </div>
 
-              {/* Busca na sidebar */}
-              <div className="relative mb-2">
-                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
-                <input
-                  type="text"
-                  value={sidebarSearch}
-                  onChange={e => setSidebarSearch(e.target.value)}
-                  placeholder="Pesquisar canal..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-7 pr-7 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-white/20 transition-all"
-                />
-                {sidebarSearch && (
+              {/* Tabs: Canais / Programação */}
+              <div className="flex gap-1 mb-3 bg-white/5 rounded-xl p-1">
+                {(['canais', 'programacao'] as const).map(tab => (
                   <button
-                    onClick={() => setSidebarSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white"
-                  >
-                    <X size={11} />
-                  </button>
-                )}
-              </div>
-
-              {/* Filtro de categoria na sidebar */}
-              {!sidebarSearch && (
-                <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
-                  <button
-                    onClick={() => setSidebarCategory(null)}
-                    className={`shrink-0 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
-                      !sidebarCategory
+                    key={tab}
+                    onClick={() => setSidebarTab(tab)}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                      sidebarTab === tab
                         ? 'bg-white/15 text-white'
                         : 'text-gray-600 hover:text-gray-400'
                     }`}
                   >
-                    Todos
+                    {tab === 'canais' ? '📺 Canais' : '📅 Programação'}
                   </button>
-                  {sidebarCategories.map(cat => {
-                    const m = getCatMeta(cat);
-                    return (
+                ))}
+              </div>
+
+              {/* Busca na sidebar (só na aba canais) */}
+              {sidebarTab === 'canais' && (
+                <>
+                  <div className="relative mb-2">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={sidebarSearch}
+                      onChange={e => setSidebarSearch(e.target.value)}
+                      placeholder="Pesquisar canal..."
+                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-7 pr-7 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-white/20 transition-all"
+                    />
+                    {sidebarSearch && (
                       <button
-                        key={cat}
-                        onClick={() => setSidebarCategory(sidebarCategory === cat ? null : cat)}
-                        className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
-                          sidebarCategory === cat
-                            ? `bg-white/10 ${m.accent}`
-                            : 'text-gray-600 hover:text-gray-400'
+                        onClick={() => setSidebarSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filtro de categoria */}
+                  {!sidebarSearch && (
+                    <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+                      <button
+                        onClick={() => setSidebarCategory(null)}
+                        className={`shrink-0 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                          !sidebarCategory ? 'bg-white/15 text-white' : 'text-gray-600 hover:text-gray-400'
                         }`}
                       >
-                        <span>{m.icon}</span>
-                        <span>{cat}</span>
+                        Todos
                       </button>
-                    );
-                  })}
-                </div>
+                      {sidebarCategories.map(cat => {
+                        const m = getCatMeta(cat);
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => setSidebarCategory(sidebarCategory === cat ? null : cat)}
+                            className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                              sidebarCategory === cat ? `bg-white/10 ${m.accent}` : 'text-gray-600 hover:text-gray-400'
+                            }`}
+                          >
+                            <span>{m.icon}</span>
+                            <span>{cat}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -543,42 +883,68 @@ function ChannelPlayerView({
                 {getImage(channel) && (
                   <img src={getImage(channel)} alt="" className="w-8 h-8 object-contain rounded-lg bg-black/40 p-1" />
                 )}
-                <span className="text-white text-xs font-bold truncate">{getName(channel)}</span>
-                <div className="ml-auto flex items-center gap-1 shrink-0">
+                <span className="text-white text-xs font-bold truncate flex-1">{getName(channel)}</span>
+                <div className="flex items-center gap-1 shrink-0">
                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                   <span className="text-[8px] font-black text-red-400 uppercase">Live</span>
                 </div>
               </div>
             </div>
 
-            {/* Lista de canais */}
-            <div className="flex-1 overflow-y-auto py-2 px-1">
-              {filteredChannels.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-32 gap-2">
-                  <Search size={20} className="text-gray-700" />
-                  <p className="text-gray-600 text-xs">Nenhum canal encontrado</p>
+            {/* EPG do canal atual */}
+            {sidebarTab === 'programacao' ? (
+              <div className="flex-1 overflow-y-auto">
+                <EpgPanel channelName={getName(channel)} />
+                <div className="px-4 py-4 text-center">
+                  <p className="text-gray-700 text-[10px]">
+                    Programação em tempo real via EPG. Pode variar conforme o canal.
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {filteredChannels.map(ch => (
-                    <MiniChannelCard
-                      key={ch.id}
-                      ch={ch}
-                      active={String(ch.id) === String(channel.id)}
-                      onClick={() => {
-                        if (String(ch.id) !== String(channel.id)) {
-                          onSwitch(ch);
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <>
+                {/* EPG compacto no topo da lista de canais */}
+                <EpgPanel channelName={getName(channel)} />
 
-            <div className="flex-none px-4 py-3 border-t border-white/5 text-center">
-              <p className="text-gray-700 text-[9px] font-mono">{filteredChannels.length} canal{filteredChannels.length !== 1 ? 'is' : ''}</p>
-            </div>
+                {/* Lista de canais */}
+                <div className="flex-1 overflow-y-auto py-2 px-1">
+                  {filteredChannels.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 gap-2">
+                      <Search size={20} className="text-gray-700" />
+                      <p className="text-gray-600 text-xs">Nenhum canal encontrado</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {filteredChannels.map(ch => (
+                        <MiniChannelCard
+                          key={ch.id}
+                          ch={ch}
+                          active={String(ch.id) === String(channel.id)}
+                          onClick={() => {
+                            if (String(ch.id) !== String(channel.id)) {
+                              onSwitch(ch);
+                              setShowSidebar(false);
+                            }
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-none px-4 py-3 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-gray-700 text-[9px] font-mono">
+                      {filteredChannels.length} canal{filteredChannels.length !== 1 ? 'is' : ''}
+                    </p>
+                    <div className="flex items-center gap-1 text-gray-700 text-[9px]">
+                      <span>← →</span>
+                      <span>trocar canal</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </motion.aside>
         )}
       </AnimatePresence>

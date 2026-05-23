@@ -275,4 +275,83 @@ router.get("/betterflix/jogos", async (_req, res) => {
   }
 });
 
+let epgChannelsCache: any[] | null = null;
+let epgChannelsCachedAt = 0;
+const EPG_CACHE_TTL = 6 * 60 * 60 * 1000;
+
+async function getEpgChannels(): Promise<any[]> {
+  if (epgChannelsCache && Date.now() - epgChannelsCachedAt < EPG_CACHE_TTL) {
+    return epgChannelsCache;
+  }
+  try {
+    const { data } = await axios.get("https://epg.pw/api/channels.json", { timeout: 10000 });
+    epgChannelsCache = Array.isArray(data) ? data : [];
+    epgChannelsCachedAt = Date.now();
+    return epgChannelsCache;
+  } catch {
+    return epgChannelsCache || [];
+  }
+}
+
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+router.get("/epg/channel", async (req, res) => {
+  const name = String(req.query.name || "").trim();
+  if (!name) { res.json({ current: null, next: null }); return; }
+
+  try {
+    const channels = await getEpgChannels();
+    const norm = normalize(name);
+
+    const match =
+      channels.find((c: any) => normalize(c.name || "") === norm) ||
+      channels.find((c: any) => normalize(c.name || "").includes(norm)) ||
+      channels.find((c: any) => norm.includes(normalize(c.name || "").slice(0, 4) || "__"));
+
+    if (!match) { res.json({ current: null, next: null }); return; }
+
+    const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
+    const { data: epgData } = await axios.get(
+      `https://epg.pw/api/epg.json?channel_id=${encodeURIComponent(match.channel_id)}&date=${today}`,
+      { timeout: 8000 }
+    );
+
+    const programs: any[] = epgData?.epg_data || [];
+    const now = Date.now();
+
+    let current: any = null;
+    let next: any = null;
+
+    for (let i = 0; i < programs.length; i++) {
+      const startMs = new Date(programs[i].start.replace(" ", "T")).getTime();
+      const stopMs  = programs[i].stop
+        ? new Date(programs[i].stop.replace(" ", "T")).getTime()
+        : startMs + 3_600_000;
+
+      if (startMs <= now && now < stopMs) {
+        const prog = programs[i];
+        current = {
+          title: prog.title,
+          description: prog.description || null,
+          startMs,
+          stopMs,
+          progress: Math.round(((now - startMs) / (stopMs - startMs)) * 100),
+        };
+        const n = programs[i + 1];
+        if (n) {
+          const nStart = new Date(n.start.replace(" ", "T")).getTime();
+          next = { title: n.title, startMs: nStart };
+        }
+        break;
+      }
+    }
+
+    res.json({ current, next });
+  } catch {
+    res.json({ current: null, next: null });
+  }
+});
+
 export default router;
