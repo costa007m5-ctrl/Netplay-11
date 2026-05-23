@@ -5122,62 +5122,89 @@ export default function App() {
   }, [profile, activeRoomId, myMovies]);
 
   const fetchMyMovies = async () => {
-    // Tentar carregar do cache primeiro
+    // Tentar carregar do cache primeiro para exibição imediata
     const cached = localStorage.getItem('cached_my_movies');
     if (cached) {
-      setMyMovies(JSON.parse(cached));
+      try { setMyMovies(JSON.parse(cached)); } catch {}
     }
 
-    if (!hasSupabase || !user) {
-      console.log('fetchMyMovies: Sem Supabase ou Usuário', { hasSupabase, user: !!user });
-      return;
-    }
-    
+    const formatMovie = (m: any): Movie => {
+      let cascadeSettings: { qualityCascadeDelay?: number; cascadeToV3OnPenultimate?: boolean } = {};
+      try {
+        const raw = localStorage.getItem(`netplay_cascade_${m.id}`);
+        if (raw) cascadeSettings = JSON.parse(raw);
+      } catch {}
+      return {
+        ...m,
+        id: m.id,
+        videoUrl: m.video_url || '',
+        videoUrl2: m.video_url_2 || '',
+        preferredQuality: m.preferred_quality || undefined,
+        vote_average: m.vote_average || m.rating || 0,
+        rating: m.rating || m.vote_average || 0,
+        release_date: m.release_date || '',
+        release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
+        runtime: m.runtime || 0,
+        actors: m.actors || '',
+        is_hidden: m.is_hidden || false,
+        watch_providers: m.watch_providers || '',
+        ...cascadeSettings,
+      };
+    };
+
+    // Sempre buscar do banco local (Replit DB) via API
+    let apiMovies: Movie[] = [];
     try {
-      console.log('Buscando filmes do Supabase...');
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Erro detalhado do Supabase:', error);
-        throw error;
+      let offset = 0;
+      const limit = 2000;
+      while (true) {
+        const res = await fetch(`/api/movies?limit=${limit}&offset=${offset}`);
+        if (!res.ok) break;
+        const { movies } = await res.json();
+        if (!movies || movies.length === 0) break;
+        apiMovies = [...apiMovies, ...movies.map(formatMovie)];
+        if (movies.length < limit) break;
+        offset += limit;
       }
+      console.log(`Filmes da API local: ${apiMovies.length}`);
+    } catch (err) {
+      console.error('Erro ao buscar filmes da API local:', err);
+    }
 
-      console.log(`Filmes encontrados: ${data?.length || 0}`);
+    // Buscar do Supabase se disponível e com usuário logado
+    let supabaseMovies: Movie[] = [];
+    if (hasSupabase && user) {
+      try {
+        console.log('Buscando filmes do Supabase...');
+        const { data, error } = await supabase
+          .from('movies')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (data) {
-        const formattedMovies: Movie[] = data.map(m => {
-          // Mesclar configurações de cascata salvas no localStorage
-          let cascadeSettings: { qualityCascadeDelay?: number; cascadeToV3OnPenultimate?: boolean } = {};
-          try {
-            const raw = localStorage.getItem(`netplay_cascade_${m.id}`);
-            if (raw) cascadeSettings = JSON.parse(raw);
-          } catch {}
-          return {
-            ...m,
-            id: m.id,
-            videoUrl: m.video_url,
-            videoUrl2: m.video_url_2,
-            preferredQuality: m.preferred_quality || undefined,
-            vote_average: m.vote_average || m.rating || 0,
-            rating: m.rating || m.vote_average || 0,
-            release_date: m.release_date || '',
-            release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
-            runtime: m.runtime || 0,
-            actors: m.actors || '',
-            is_hidden: m.is_hidden || false,
-            watch_providers: m.watch_providers || '',
-            ...cascadeSettings,
-          };
-        });
-
-        setMyMovies(formattedMovies);
-        localStorage.setItem('cached_my_movies', JSON.stringify(formattedMovies));
+        if (!error && data) {
+          supabaseMovies = data.map(formatMovie);
+          console.log(`Filmes do Supabase: ${supabaseMovies.length}`);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar filmes do Supabase:', err);
       }
-    } catch (error) {
-      console.error('Erro ao buscar filmes do Supabase:', error);
+    }
+
+    // Mesclar: Supabase tem prioridade (dados mais completos como video_url)
+    const merged = new Map<number, Movie>();
+    apiMovies.forEach(m => merged.set(m.id, m));
+    supabaseMovies.forEach(m => merged.set(m.id, m));
+
+    const allMovies = Array.from(merged.values()).sort((a: any, b: any) => {
+      const da = new Date((b as any).created_at || 0).getTime();
+      const db = new Date((a as any).created_at || 0).getTime();
+      return da - db;
+    });
+
+    if (allMovies.length > 0) {
+      console.log(`Total de filmes mesclados: ${allMovies.length}`);
+      setMyMovies(allMovies);
+      localStorage.setItem('cached_my_movies', JSON.stringify(allMovies));
     }
   };
 

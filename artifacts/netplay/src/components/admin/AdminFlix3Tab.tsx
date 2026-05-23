@@ -1,6 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Tv2, ExternalLink, Film, PlayCircle, List, CheckCircle2, AlertCircle, RefreshCcw, Download, Loader2, X, ChevronDown, ChevronUp, ShieldCheck, ShieldOff } from 'lucide-react';
-import tmdb, { requests } from '../../services/tmdb';
 
 export function buildRedeFlixMovieUrl(tmdbId: number | string): string {
   return `https://redeflixapi.store/filme/${tmdbId}`;
@@ -16,8 +15,9 @@ export function buildRedeFlixSerieUrl(
 
 type ContentType = 'movie' | 'tv' | 'anime' | 'dorama';
 
-interface SyncState {
-  status: 'idle' | 'fetching-list' | 'checking-db' | 'syncing' | 'done' | 'error';
+interface JobState {
+  jobId: string | null;
+  status: 'idle' | 'running' | 'done' | 'error' | 'cancelled';
   total: number;
   existing: number;
   inserted: number;
@@ -27,18 +27,17 @@ interface SyncState {
   errorMsg?: string;
 }
 
-const CONTENT_TYPES: { key: ContentType; label: string; color: string; bg: string; border: string; tmdbType: 'movie' | 'tv' }[] = [
-  { key: 'movie',  label: 'Filmes',  color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', tmdbType: 'movie' },
-  { key: 'tv',     label: 'Séries',  color: 'text-cyan-400',    bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30',    tmdbType: 'tv' },
-  { key: 'anime',  label: 'Animes',  color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/30',  tmdbType: 'tv' },
-  { key: 'dorama', label: 'Doramas', color: 'text-pink-400',    bg: 'bg-pink-500/10',    border: 'border-pink-500/30',    tmdbType: 'tv' },
+const CONTENT_TYPES: { key: ContentType; label: string; color: string; bg: string; border: string }[] = [
+  { key: 'movie',  label: 'Filmes',  color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
+  { key: 'tv',     label: 'Séries',  color: 'text-cyan-400',    bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30'    },
+  { key: 'anime',  label: 'Animes',  color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/30'  },
+  { key: 'dorama', label: 'Doramas', color: 'text-pink-400',    bg: 'bg-pink-500/10',    border: 'border-pink-500/30'    },
 ];
 
-const BATCH_SIZE = 5;
-const BATCH_DELAY_MS = 300;
+const POLL_INTERVAL = 2000;
 
-async function sleep(ms: number) {
-  return new Promise(res => setTimeout(res, ms));
+function makeIdle(): JobState {
+  return { jobId: null, status: 'idle', total: 0, existing: 0, inserted: 0, skipped: 0, errors: 0, log: [] };
 }
 
 function AdminFlix3Tab() {
@@ -47,157 +46,103 @@ function AdminFlix3Tab() {
   const [testSeason, setTestSeason] = useState('1');
   const [testEpisode, setTestEpisode] = useState('1');
 
-  const [syncStates, setSyncStates] = useState<Record<ContentType, SyncState>>(() =>
-    Object.fromEntries(
-      CONTENT_TYPES.map(t => [t.key, { status: 'idle', total: 0, existing: 0, inserted: 0, skipped: 0, errors: 0, log: [] }])
-    ) as Record<ContentType, SyncState>
+  const [jobs, setJobs] = useState<Record<ContentType, JobState>>(() =>
+    Object.fromEntries(CONTENT_TYPES.map(t => [t.key, makeIdle()])) as Record<ContentType, JobState>
   );
   const [showLog, setShowLog] = useState<Record<ContentType, boolean>>({
     movie: false, tv: false, anime: false, dorama: false,
   });
-  const abortRefs = useRef<Record<ContentType, boolean>>({ movie: false, tv: false, anime: false, dorama: false });
 
-  const updateSync = (type: ContentType, patch: Partial<SyncState>) => {
-    setSyncStates(prev => ({ ...prev, [type]: { ...prev[type], ...patch } }));
+  const pollTimers = useRef<Record<ContentType, ReturnType<typeof setInterval> | null>>({
+    movie: null, tv: null, anime: null, dorama: null,
+  });
+
+  const stopPoll = (type: ContentType) => {
+    if (pollTimers.current[type]) {
+      clearInterval(pollTimers.current[type]!);
+      pollTimers.current[type] = null;
+    }
   };
 
-  const appendLog = (type: ContentType, msg: string) => {
-    setSyncStates(prev => ({
-      ...prev,
-      [type]: { ...prev[type], log: [...prev[type].log.slice(-200), msg] },
-    }));
+  const startPoll = (type: ContentType, jobId: string) => {
+    stopPoll(type);
+    pollTimers.current[type] = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sync/flix3/status/${jobId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setJobs(prev => ({
+          ...prev,
+          [type]: {
+            jobId,
+            status: data.status,
+            total: data.total ?? 0,
+            existing: data.existing ?? 0,
+            inserted: data.inserted ?? 0,
+            skipped: data.skipped ?? 0,
+            errors: data.errors ?? 0,
+            log: data.log ?? [],
+            errorMsg: data.errorMsg,
+          },
+        }));
+        if (data.status !== 'running') {
+          stopPoll(type);
+        }
+      } catch {}
+    }, POLL_INTERVAL);
   };
+
+  useEffect(() => {
+    return () => {
+      CONTENT_TYPES.forEach(t => stopPoll(t.key));
+    };
+  }, []);
 
   const syncType = async (type: ContentType) => {
-    const cfg = CONTENT_TYPES.find(t => t.key === type)!;
-    abortRefs.current[type] = false;
-    updateSync(type, { status: 'fetching-list', total: 0, existing: 0, inserted: 0, skipped: 0, errors: 0, log: [], errorMsg: undefined });
+    setJobs(prev => ({
+      ...prev,
+      [type]: { ...makeIdle(), status: 'running' },
+    }));
+    stopPoll(type);
 
     try {
-      const res = await fetch(`/api/flix3/ids/${type}`);
+      const res = await fetch('/api/sync/flix3/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
-      const { ids, total } = await res.json() as { ids: number[]; total: number };
-      updateSync(type, { status: 'checking-db', total });
-      appendLog(type, `✅ Lista obtida: ${total} IDs`);
-
-      const CHUNK = 500;
-      const existingIds = new Set<number>();
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const chunk = ids.slice(i, i + CHUNK);
-        const checkRes = await fetch('/api/movies/check-existing', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: chunk }),
-        });
-        if (checkRes.ok) {
-          const { existingIds: found } = await checkRes.json() as { existingIds: number[] };
-          (found || []).forEach((id: number) => existingIds.add(id));
-        }
-      }
-
-      const newIds = ids.filter(id => !existingIds.has(id));
-      updateSync(type, {
-        status: 'syncing',
-        existing: existingIds.size,
-        total,
-      });
-      appendLog(type, `📦 Já cadastrados: ${existingIds.size} | Novos: ${newIds.length}`);
-
-      let inserted = 0;
-      let skipped = 0;
-      let errors = 0;
-
-      for (let i = 0; i < newIds.length; i += BATCH_SIZE) {
-        if (abortRefs.current[type]) {
-          appendLog(type, '⛔ Sincronização cancelada pelo usuário.');
-          break;
-        }
-
-        const batch = newIds.slice(i, i + BATCH_SIZE);
-        await Promise.allSettled(
-          batch.map(async (tmdbId) => {
-            try {
-              const endpoint = cfg.tmdbType === 'movie'
-                ? requests.movieDetails(tmdbId)
-                : requests.tvDetails(tmdbId);
-
-              const { data: details } = await tmdb.get(endpoint, { params: { language: 'pt-BR' } });
-              if (!details || (!details.title && !details.name)) {
-                skipped++;
-                return;
-              }
-
-              const isMovie = cfg.tmdbType === 'movie';
-              const genreNames = (details.genres || []).map((g: any) => g.name).join(', ');
-              const primaryGenre = (details.genres || [])[0]?.name || null;
-
-              const movieData = {
-                id: tmdbId,
-                title: isMovie ? details.title : (details.name || details.original_name),
-                type: isMovie ? 'movie' : 'series',
-                overview: details.overview || null,
-                poster_path: details.poster_path || null,
-                backdrop_path: details.backdrop_path || null,
-                release_date: isMovie ? (details.release_date || null) : null,
-                first_air_date: !isMovie ? (details.first_air_date || null) : null,
-                release_year: isMovie
-                  ? (details.release_date ? new Date(details.release_date).getFullYear() : null)
-                  : (!isMovie && details.first_air_date ? new Date(details.first_air_date).getFullYear() : null),
-                rating: details.vote_average || null,
-                runtime: isMovie
-                  ? (details.runtime || null)
-                  : (details.episode_run_time?.[0] || null),
-                genres: genreNames || null,
-                genre: primaryGenre,
-                video_url: '',
-                created_at: new Date().toISOString(),
-              };
-
-              const upsertRes = await fetch('/api/movies/upsert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(movieData),
-              });
-              if (upsertRes.ok) {
-                inserted++;
-              } else {
-                const errBody = await upsertRes.json().catch(() => ({}));
-                errors++;
-                appendLog(type, `⚠️ ID ${tmdbId}: ${errBody.error || 'erro ao inserir'}`);
-              }
-            } catch (err: any) {
-              errors++;
-              appendLog(type, `❌ ID ${tmdbId}: ${err?.message || 'erro'}`);
-            }
-          })
-        );
-
-        updateSync(type, { inserted, skipped, errors });
-        if (i % 50 === 0 && i > 0) {
-          appendLog(type, `⏳ Progresso: ${i}/${newIds.length} — inseridos: ${inserted}, erros: ${errors}`);
-        }
-        await sleep(BATCH_DELAY_MS);
-      }
-
-      updateSync(type, { status: 'done', inserted, skipped, errors });
-      appendLog(type, `🎉 Concluído! Inseridos: ${inserted} | Pulados: ${skipped} | Erros: ${errors}`);
+      const { jobId } = await res.json();
+      setJobs(prev => ({ ...prev, [type]: { ...prev[type], jobId } }));
+      startPoll(type, jobId);
     } catch (err: any) {
-      updateSync(type, { status: 'error', errorMsg: err?.message || 'Erro desconhecido' });
-      appendLog(type, `💥 Erro fatal: ${err?.message}`);
+      setJobs(prev => ({
+        ...prev,
+        [type]: { ...prev[type], status: 'error', errorMsg: err?.message || 'Erro ao iniciar sync' },
+      }));
     }
   };
 
-  const syncAll = async () => {
-    for (const ct of CONTENT_TYPES) {
-      await syncType(ct.key);
+  const cancelSync = async (type: ContentType) => {
+    const jobId = jobs[type].jobId;
+    stopPoll(type);
+    setJobs(prev => ({ ...prev, [type]: { ...prev[type], status: 'cancelled' } }));
+    if (jobId) {
+      try {
+        await fetch(`/api/sync/flix3/cancel/${jobId}`, { method: 'POST' });
+      } catch {}
     }
   };
 
-  const cancelSync = (type: ContentType) => {
-    abortRefs.current[type] = true;
+  const syncAll = () => {
+    CONTENT_TYPES.forEach(ct => {
+      if (jobs[ct.key].status !== 'running') {
+        syncType(ct.key);
+      }
+    });
   };
 
   const movieUrl = buildRedeFlixMovieUrl(testMovieId || '19995');
@@ -244,19 +189,19 @@ function AdminFlix3Tab() {
       <section className="bg-white/5 p-6 md:p-8 rounded-3xl border border-white/10 backdrop-blur-xl relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-cyan-500/5 pointer-events-none" />
         <div className="relative z-10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
             <div>
               <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
                 <Download className="w-5 h-5 text-emerald-400" />
                 Listas de IDs — Sincronizar com o App
               </h3>
               <p className="text-gray-500 text-xs mt-1">
-                Cada lista contém IDs TMDB. O sync busca os metadados e cadastra apenas os conteúdos ainda não existentes.
+                O sync roda no servidor — continua mesmo se você navegar para outra aba.
               </p>
             </div>
             <button
               onClick={syncAll}
-              disabled={CONTENT_TYPES.some(t => ['fetching-list','checking-db','syncing'].includes(syncStates[t.key].status))}
+              disabled={CONTENT_TYPES.some(t => jobs[t.key].status === 'running')}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest transition-all shrink-0"
             >
               <RefreshCcw size={13} />
@@ -264,12 +209,18 @@ function AdminFlix3Tab() {
             </button>
           </div>
 
+          <div className="mb-4 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 font-mono flex items-center gap-2">
+            <List size={11} />
+            Os conteúdos sincronizados aparecem automaticamente no app. Clique em "Atualizar" na navbar para recarregar.
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {CONTENT_TYPES.map(ct => {
-              const s = syncStates[ct.key];
-              const isRunning = ['fetching-list','checking-db','syncing'].includes(s.status);
-              const progress = s.total > 0 && s.status === 'syncing'
-                ? Math.round(((s.inserted + s.skipped + s.errors) / Math.max(s.total - s.existing, 1)) * 100)
+              const j = jobs[ct.key];
+              const isRunning = j.status === 'running';
+              const newCount = Math.max(j.total - j.existing, 0);
+              const progress = newCount > 0 && isRunning
+                ? Math.round(((j.inserted + j.skipped + j.errors) / newCount) * 100)
                 : 0;
 
               return (
@@ -297,16 +248,16 @@ function AdminFlix3Tab() {
                     </div>
                   </div>
 
-                  {s.status !== 'idle' && (
+                  {j.status !== 'idle' && (
                     <div className="space-y-2">
                       <div className="flex flex-wrap gap-3 text-[10px] font-mono">
-                        <span className="text-gray-400">Total: <span className="text-white font-black">{s.total}</span></span>
-                        <span className="text-gray-400">Já existentes: <span className="text-yellow-400 font-black">{s.existing}</span></span>
-                        <span className="text-gray-400">Inseridos: <span className="text-green-400 font-black">{s.inserted}</span></span>
-                        {s.errors > 0 && <span className="text-gray-400">Erros: <span className="text-red-400 font-black">{s.errors}</span></span>}
+                        <span className="text-gray-400">Total: <span className="text-white font-black">{j.total}</span></span>
+                        <span className="text-gray-400">Já existentes: <span className="text-yellow-400 font-black">{j.existing}</span></span>
+                        <span className="text-gray-400">Inseridos: <span className="text-green-400 font-black">{j.inserted}</span></span>
+                        {j.errors > 0 && <span className="text-gray-400">Erros: <span className="text-red-400 font-black">{j.errors}</span></span>}
                       </div>
 
-                      {s.status === 'syncing' && s.total > 0 && (
+                      {isRunning && newCount > 0 && (
                         <div className="w-full bg-black/30 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-300 bg-gradient-to-r ${ct.key === 'movie' ? 'from-emerald-500 to-cyan-500' : ct.key === 'tv' ? 'from-cyan-500 to-blue-500' : ct.key === 'anime' ? 'from-violet-500 to-purple-500' : 'from-pink-500 to-rose-500'}`}
@@ -315,39 +266,45 @@ function AdminFlix3Tab() {
                         </div>
                       )}
 
-                      {s.status === 'done' && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-green-400 font-black">
-                          <CheckCircle2 size={11} /> Concluído
-                        </div>
-                      )}
-                      {s.status === 'error' && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-black">
-                          <AlertCircle size={11} /> {s.errorMsg}
-                        </div>
-                      )}
-                      {s.status === 'fetching-list' && (
+                      {isRunning && j.total === 0 && (
                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 animate-pulse">
-                          <Loader2 size={11} className="animate-spin" /> Obtendo lista da API...
+                          <Loader2 size={11} className="animate-spin" /> Iniciando no servidor...
                         </div>
                       )}
-                      {s.status === 'checking-db' && (
+                      {isRunning && j.total > 0 && j.existing > 0 && j.inserted === 0 && j.errors === 0 && (
                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 animate-pulse">
-                          <Loader2 size={11} className="animate-spin" /> Verificando banco de dados...
+                          <Loader2 size={11} className="animate-spin" /> Buscando metadados do TMDB...
                         </div>
                       )}
 
-                      {s.log.length > 0 && (
+                      {j.status === 'done' && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-green-400 font-black">
+                          <CheckCircle2 size={11} /> Concluído — {j.inserted} inseridos
+                        </div>
+                      )}
+                      {j.status === 'error' && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-black">
+                          <AlertCircle size={11} /> {j.errorMsg}
+                        </div>
+                      )}
+                      {j.status === 'cancelled' && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-yellow-400 font-black">
+                          <X size={11} /> Cancelado
+                        </div>
+                      )}
+
+                      {j.log.length > 0 && (
                         <div>
                           <button
                             onClick={() => setShowLog(prev => ({ ...prev, [ct.key]: !prev[ct.key] }))}
                             className="flex items-center gap-1 text-[9px] text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest font-black"
                           >
                             {showLog[ct.key] ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
-                            Log ({s.log.length})
+                            Log ({j.log.length})
                           </button>
                           {showLog[ct.key] && (
                             <div className="mt-2 bg-black/40 rounded-xl p-3 max-h-40 overflow-y-auto scrollbar-hide space-y-0.5">
-                              {s.log.map((entry, i) => (
+                              {j.log.map((entry, i) => (
                                 <p key={i} className="text-[9px] font-mono text-gray-400 leading-relaxed">{entry}</p>
                               ))}
                             </div>
@@ -358,7 +315,7 @@ function AdminFlix3Tab() {
                   )}
 
                   <a
-                    href={`https://redeflixapi.store/list-${ct.key === 'tv' ? 'tv' : ct.key}-ids.txt`}
+                    href={`https://redeflixapi.store/list-${ct.key}-ids.txt`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gray-600 hover:text-gray-400 transition-colors"
@@ -463,7 +420,8 @@ function AdminFlix3Tab() {
             { ok: true, text: 'Player via iframe embutido — igual ao API Flix e Net 2.0' },
             { ok: true, text: 'Sem chave de API necessária — acesso público direto' },
             { ok: true, text: 'Botão Anti-Ads no player para bloquear pop-ups (preferência salva no dispositivo)' },
-            { ok: true, text: 'Sync de listas: importa filmes/séries/animes/doramas diretamente do catálogo da API' },
+            { ok: true, text: 'Sync roda no servidor — não para ao navegar para outra aba' },
+            { ok: true, text: 'Conteúdos sincronizados aparecem no app após recarregar (botão Atualizar na navbar)' },
           ].map(({ ok, text }) => (
             <div key={text} className="flex items-start gap-3">
               {ok

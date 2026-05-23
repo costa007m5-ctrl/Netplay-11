@@ -80,11 +80,10 @@ router.post("/movies/upsert", async (req, res) => {
 
 router.get("/movies", async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    const limit = Math.min(Number(req.query.limit) || 500, 10000);
     const offset = Number(req.query.offset) || 0;
     const type = req.query.type as string | undefined;
 
-    let query = db.select().from(moviesTable);
     if (type) {
       const rows = await db
         .select()
@@ -95,7 +94,7 @@ router.get("/movies", async (req, res) => {
       res.json({ movies: rows, total: rows.length });
       return;
     }
-    const rows = await query.limit(limit).offset(offset);
+    const rows = await db.select().from(moviesTable).limit(limit).offset(offset);
     res.json({ movies: rows, total: rows.length });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || "Erro ao buscar filmes" });

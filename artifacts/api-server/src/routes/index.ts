@@ -12,6 +12,7 @@ import betterflixRouter from "./betterflix";
 import vidsrcRouter from "./vidsrc";
 import flix3Router from "./flix3";
 import moviesRouter from "./movies";
+import syncRouter from "./sync";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(betterflixRouter);
 router.use(vidsrcRouter);
 router.use(flix3Router);
 router.use(moviesRouter);
+router.use(syncRouter);
 
 export default router;
