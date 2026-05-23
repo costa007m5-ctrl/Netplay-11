@@ -420,7 +420,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          {options.map((option, idx) => {
+          {options.filter(o => o.available).map((option, idx) => {
             const Icon = option.icon;
             return (
               <motion.button
