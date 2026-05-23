@@ -113,58 +113,139 @@ async function fetchVidsrcLatest(
   return [];
 }
 
+// Verifica se o item TMDB tem dublagem PT-BR disponível
+function hasPtBrDubbing(tmdbData: any): boolean {
+  const spoken = (tmdbData.spoken_languages || []) as any[];
+  const hasPt = spoken.some(
+    (l: any) => l.iso_639_1 === "pt" || l.iso_639_1 === "pt-BR"
+  );
+  const originalPt = tmdbData.original_language === "pt";
+  return hasPt || originalPt;
+}
+
 router.get("/betterflix/latest", async (req, res) => {
   const page = Number(req.query.page) || 1;
   const typeFilter = (req.query.type as string) || "all";
 
+  const TMDB_KEY = process.env.VITE_TMDB_API_KEY;
+  if (!TMDB_KEY) {
+    res.status(503).json({ error: "TMDB key não configurada" });
+    return;
+  }
+
   try {
-    const [movies, tvshows] = await Promise.all([
-      typeFilter !== "tvshows" ? fetchVidsrcLatest("movies", page) : [],
-      typeFilter !== "movies" ? fetchVidsrcLatest("tvshows", page) : [],
-    ]);
+    // ── Fonte primária: API Flix (conteúdo recente via TMDB) ──────────────────
+    const tmdbMoviePromise =
+      typeFilter !== "tvshows"
+        ? axios
+            .get(
+              `https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_KEY}&language=pt-BR&page=${page}&region=BR`,
+              { timeout: 8000 }
+            )
+            .then((r) =>
+              (r.data.results || []).map((m: any) => ({
+                tmdb_id: m.id,
+                type: "movie" as const,
+                title: m.title || m.name,
+                poster_path: m.poster_path || null,
+                backdrop_path: m.backdrop_path || null,
+                vote_average: m.vote_average || 0,
+                release_date: m.release_date || null,
+                overview: m.overview || "",
+                genres: "",
+                source: "apiflix" as const,
+              }))
+            )
+            .catch(() => [] as any[])
+        : ([] as any[]);
 
-    const combined = [...movies, ...tvshows].slice(0, 24);
+    const tmdbSeriesPromise =
+      typeFilter !== "movies"
+        ? axios
+            .get(
+              `https://api.themoviedb.org/3/tv/on_the_air?api_key=${TMDB_KEY}&language=pt-BR&page=${page}`,
+              { timeout: 8000 }
+            )
+            .then((r) =>
+              (r.data.results || []).map((s: any) => ({
+                tmdb_id: s.id,
+                type: "series" as const,
+                title: s.name || s.title,
+                poster_path: s.poster_path || null,
+                backdrop_path: s.backdrop_path || null,
+                vote_average: s.vote_average || 0,
+                release_date: s.first_air_date || null,
+                overview: s.overview || "",
+                genres: "",
+                source: "apiflix" as const,
+              }))
+            )
+            .catch(() => [] as any[])
+        : ([] as any[]);
 
-    if (combined.length === 0) {
-      res.json({ results: [] });
-      return;
-    }
+    // ── Fonte secundária: Vidsrc — somente com dublagem PT-BR ─────────────────
+    const vidsrcMoviesPromise =
+      typeFilter !== "tvshows"
+        ? fetchVidsrcLatest("movies", page)
+        : ([] as any[]);
+    const vidsrcSeriesPromise =
+      typeFilter !== "movies"
+        ? fetchVidsrcLatest("tvshows", page)
+        : ([] as any[]);
 
-    const TMDB_KEY = process.env.VITE_TMDB_API_KEY;
-    if (!TMDB_KEY) {
-      res.json({ results: combined });
-      return;
-    }
+    const [tmdbMovies, tmdbSeries, vidsrcMovies, vidsrcSeries] =
+      await Promise.all([
+        tmdbMoviePromise,
+        tmdbSeriesPromise,
+        vidsrcMoviesPromise,
+        vidsrcSeriesPromise,
+      ]);
 
-    // Enriquece com metadados TMDB em paralelo (máx 24 itens)
-    const enriched = await Promise.all(
-      combined.map(async (item: any) => {
-        try {
-          const mediaType = item.contentType === "series" ? "tv" : "movie";
-          const { data } = await axios.get(
-            `https://api.themoviedb.org/3/${mediaType}/${item.tmdb_id}?api_key=${TMDB_KEY}&language=pt-BR`,
-            { timeout: 6000 }
-          );
-          return {
-            tmdb_id: item.tmdb_id,
-            type: item.contentType,
-            title: data.title || data.name,
-            poster_path: data.poster_path || null,
-            backdrop_path: data.backdrop_path || null,
-            vote_average: data.vote_average || 0,
-            release_date: data.release_date || data.first_air_date || null,
-            overview: data.overview || "",
-            genres: data.genres?.map((g: any) => g.name).join(", ") || "",
-          };
-        } catch {
-          return null;
-        }
-      })
+    // Enriquece itens do Vidsrc e filtra apenas os com dubagem PT-BR
+    const vidsrcItems = [...vidsrcMovies, ...vidsrcSeries];
+    const vidsrcEnriched = (
+      await Promise.all(
+        vidsrcItems.slice(0, 30).map(async (item: any) => {
+          try {
+            const mediaType = item.contentType === "series" ? "tv" : "movie";
+            const { data } = await axios.get(
+              `https://api.themoviedb.org/3/${mediaType}/${item.tmdb_id}?api_key=${TMDB_KEY}&language=pt-BR`,
+              { timeout: 6000 }
+            );
+            if (!hasPtBrDubbing(data)) return null; // Descarta sem PT-BR
+            return {
+              tmdb_id: item.tmdb_id,
+              type: item.contentType,
+              title: data.title || data.name,
+              poster_path: data.poster_path || null,
+              backdrop_path: data.backdrop_path || null,
+              vote_average: data.vote_average || 0,
+              release_date: data.release_date || data.first_air_date || null,
+              overview: data.overview || "",
+              genres: data.genres?.map((g: any) => g.name).join(", ") || "",
+              source: "vidsrc" as const,
+            };
+          } catch {
+            return null;
+          }
+        })
+      )
+    ).filter(Boolean);
+
+    // Combina: API Flix primeiro, Vidsrc PT-BR depois — sem duplicatas
+    const apiFlixItems = [...tmdbMovies, ...tmdbSeries];
+    const seenIds = new Set<number>(apiFlixItems.map((i) => i.tmdb_id));
+    const vidsrcFiltered = vidsrcEnriched.filter(
+      (i) => !seenIds.has(i!.tmdb_id)
     );
 
-    res.json({ results: enriched.filter((i) => i && i.title) });
+    const results = [...apiFlixItems, ...vidsrcFiltered].slice(0, 24);
+    res.json({ results });
   } catch (err: any) {
-    res.status(502).json({ error: "Falha ao buscar últimos da API Flix", detail: err.message });
+    res.status(502).json({
+      error: "Falha ao buscar novidades da API Flix",
+      detail: err.message,
+    });
   }
 });
 

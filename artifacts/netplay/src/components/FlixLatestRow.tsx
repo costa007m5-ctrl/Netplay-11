@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Zap, Film, Tv } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Zap, Film, Tv, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 
@@ -119,6 +120,7 @@ const FILTER_OPTIONS = [
 ];
 
 const FlixLatestRow = ({ onSelectMovie }: FlixLatestRowProps) => {
+  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<FlixItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,6 +194,15 @@ const FlixLatestRow = ({ onSelectMovie }: FlixLatestRowProps) => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Ver todas as novidades */}
+          <button
+            onClick={() => navigate('/novidades-flix')}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-600/15 hover:bg-red-600/30 border border-red-600/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-widest transition-all"
+          >
+            Ver tudo
+            <ArrowRight size={11} />
+          </button>
+
           {/* Filtro de tipo */}
           <div className="flex bg-white/5 rounded-full p-0.5 border border-white/10">
             {FILTER_OPTIONS.map(opt => (

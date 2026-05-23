@@ -17,6 +17,7 @@ const CollectionsCarousel = React.lazy(() => import('./components/CollectionsCar
 const ContinueWatchingRow = React.lazy(() => import('./components/ContinueWatchingRow'));
 const NewReleasesRow = React.lazy(() => import('./components/NewReleasesRow'));
 const FlixLatestRow = React.lazy(() => import('./components/FlixLatestRow'));
+const FlixNovitiesPage = React.lazy(() => import('./pages/FlixNovitiesPage'));
 const CinemaRow = React.lazy(() => import('./components/CinemaRow'));
 const Top10Row = React.lazy(() => import('./components/Top10Row'));
 const AppInfo = React.lazy(() => import('./components/AppInfo'));
@@ -1179,10 +1180,19 @@ const HomeView = React.memo(({
             <motion.div 
                whileHover={{ scale: 1.05 }}
                onClick={() => navigate('/canais')}
-               className="bg-black/60 backdrop-blur-2xl border border-white/5 rounded-[1.5rem] p-4 flex flex-col items-center justify-center cursor-pointer group hover:bg-orange-500/10 hover:border-orange-500/30 transition-all shadow-xl relative overflow-hidden col-span-2"
+               className="bg-black/60 backdrop-blur-2xl border border-white/5 rounded-[1.5rem] p-4 flex flex-col items-center justify-center cursor-pointer group hover:bg-orange-500/10 hover:border-orange-500/30 transition-all shadow-xl relative overflow-hidden"
              >
                <Tv2 size={24} className="text-orange-400 mb-2 group-hover:scale-110 transition-transform" />
                <span className="text-white font-black text-sm md:text-base italic uppercase tracking-tighter">Canais de TV</span>
+            </motion.div>
+
+            <motion.div
+               whileHover={{ scale: 1.05 }}
+               onClick={() => navigate('/novidades-flix')}
+               className="bg-black/60 backdrop-blur-2xl border border-white/5 rounded-[1.5rem] p-4 flex flex-col items-center justify-center cursor-pointer group hover:bg-red-500/10 hover:border-red-500/30 transition-all shadow-xl relative overflow-hidden"
+             >
+               <Zap size={24} className="text-red-500 mb-2 group-hover:scale-110 transition-transform" fill="currentColor" />
+               <span className="text-white font-black text-sm md:text-base italic uppercase tracking-tighter">Novidades Flix</span>
             </motion.div>
           </div>
         </section>
@@ -6285,6 +6295,12 @@ export default function App() {
           <Route path="/canais" element={
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div></div>}>
               <CanaisTVPage />
+            </Suspense>
+          } />
+
+          <Route path="/novidades-flix" element={
+            <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
+              <FlixNovitiesPage onSelectMovie={handleSelectMovie} />
             </Suspense>
           } />
 
