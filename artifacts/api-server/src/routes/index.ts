@@ -10,6 +10,7 @@ import tmdbRouter from "./tmdb";
 import aiRouter from "./ai";
 import betterflixRouter from "./betterflix";
 import vidsrcRouter from "./vidsrc";
+import flix3Router from "./flix3";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(tmdbRouter);
 router.use(aiRouter);
 router.use(betterflixRouter);
 router.use(vidsrcRouter);
+router.use(flix3Router);
 
 export default router;

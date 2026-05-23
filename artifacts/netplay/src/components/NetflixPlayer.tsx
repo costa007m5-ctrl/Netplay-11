@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock, Languages } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, X, ChevronLeft, Settings, Subtitles, FastForward, WifiOff, AlertCircle, Cast, Tv, Share2, Info, Smile, Users, PictureInPicture, ZoomIn, ZoomOut, Lock, Unlock, Languages, ShieldCheck, ShieldOff } from 'lucide-react';
 import screenfull from 'screenfull';
 import Hls from 'hls.js';
 import { motion, AnimatePresence } from 'motion/react';
@@ -422,6 +422,16 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     setSandboxDisabled(prev => {
       const next = !prev;
       try { localStorage.setItem('netplay_disable_sandbox', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
+  const [popupsBlocked, setPopupsBlocked] = useState(() => {
+    try { return localStorage.getItem('netplay_block_popups') !== '0'; } catch { return true; }
+  });
+  const togglePopupsBlocked = () => {
+    setPopupsBlocked(prev => {
+      const next = !prev;
+      try { localStorage.setItem('netplay_block_popups', next ? '1' : '0'); } catch {}
       return next;
     });
   };
@@ -2490,7 +2500,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           <iframe
             src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || activeSrc || src) : (activeSrc || src)}
             className="relative z-[10] w-full h-full border-0"
-            {...(!sandboxDisabled && { sandbox: "allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox" })}
+            {...(!sandboxDisabled && { sandbox: `allow-scripts allow-same-origin allow-presentation allow-forms${!popupsBlocked ? ' allow-popups allow-popups-to-escape-sandbox' : ''}` })}
             allowFullScreen
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share; clipboard-write"
             referrerPolicy="origin"
@@ -3663,7 +3673,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       {/* Controles do Iframe Mode */}
       {isIframeMode && (
         <>
-          {/* Barra superior esquerda: Voltar + Sandbox */}
+          {/* Barra superior esquerda: Voltar + Anti-Anúncio + Sandbox */}
           <div className="absolute top-6 left-6 z-[400] flex items-center gap-2 pointer-events-auto">
             <button
               onClick={onClose}
@@ -3672,8 +3682,22 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
               <ChevronLeft size={32} strokeWidth={3} />
             </button>
             <button
+              onClick={togglePopupsBlocked}
+              title={popupsBlocked ? 'Bloqueio de anúncios ATIVO — clique para desativar' : 'Bloqueio de anúncios DESATIVADO — clique para ativar'}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-black uppercase tracking-widest shadow-2xl border transition-all ${
+                popupsBlocked
+                  ? 'bg-green-600/80 border-green-400/60 text-white hover:bg-green-700/90'
+                  : 'bg-red-500/70 border-red-400/50 text-white hover:bg-red-600/80'
+              }`}
+            >
+              {popupsBlocked ? <ShieldCheck size={13} /> : <ShieldOff size={13} />}
+              <span className="hidden sm:inline">
+                {popupsBlocked ? 'Anti-Ads ON' : 'Anti-Ads OFF'}
+              </span>
+            </button>
+            <button
               onClick={toggleSandbox}
-              title={sandboxDisabled ? 'Sandbox desativado — clique para ativar' : 'Sandbox ativo — clique para desativar (ajuda com bloqueadores de anúncio)'}
+              title={sandboxDisabled ? 'Sandbox desativado — clique para ativar' : 'Sandbox ativo — clique para desativar'}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-full backdrop-blur-md text-xs font-black uppercase tracking-widest shadow-2xl border transition-all ${
                 sandboxDisabled
                   ? 'bg-orange-500/80 border-orange-400/60 text-white hover:bg-orange-600/90'
