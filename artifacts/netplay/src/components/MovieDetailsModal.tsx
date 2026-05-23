@@ -739,7 +739,7 @@ const MovieDetailsModal = React.memo(({
                 </div>
               ) : (
                 <>
-                  {movie.videoUrl || movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0) ? (
+                  {movie.videoUrl || movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0) || !!(movie as any).tmdb_id || !!(movie as any).created_at ? (
                     <div className="flex flex-col gap-2">
                       <motion.button
                         whileHover={{ scale: 1.05, boxShadow: isLocked ? '0 0 40px rgba(220,38,38,0.3)' : '0 0 40px rgba(255,255,255,0.3)' }}

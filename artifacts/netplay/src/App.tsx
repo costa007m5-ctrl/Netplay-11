@@ -5426,7 +5426,7 @@ export default function App() {
   };
 
   const visibleMovies = useMemo(() => {
-    return myMovies.filter(m => !m.is_hidden && m.videoUrl !== '');
+    return myMovies.filter(m => !m.is_hidden);
   }, [myMovies]);
 
   // Filtrar filmes para Lançamentos (2025-2026)
