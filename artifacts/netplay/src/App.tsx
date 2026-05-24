@@ -5548,21 +5548,25 @@ export default function App() {
     const cached = localStorage.getItem('cached_my_movies_v4');
     if (cached) {
       try {
-        setMyMovies(JSON.parse(cached));
-        setIsLoadingMovies(false);
+        const parsed = JSON.parse(cached);
+        if (parsed.length > 0) {
+          setMyMovies(parsed);
+          setIsLoadingMovies(false);
+        }
       } catch {
         localStorage.removeItem('cached_my_movies_v4');
       }
     }
 
-    if (!hasSupabase || !user) {
+    // Não bloqueia por hasSupabase — igual ao fetchMyList que funciona sem essa verificação
+    if (!user) {
       setIsLoadingMovies(false);
       return;
     }
 
     const saveCache = (movies: Movie[]) => {
       try {
-        if (movies.length === 0) return; // Nunca sobrescreve cache com lista vazia
+        if (movies.length === 0) return;
         const str = JSON.stringify(movies);
         if (str.length < 4 * 1024 * 1024) {
           localStorage.setItem('cached_my_movies_v4', str);
@@ -5574,38 +5578,50 @@ export default function App() {
       }
     };
 
-    // Colunas mínimas garantidas — fallback se colunas extras não existirem
-    const MOVIE_COLS_ESSENTIAL = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
+    // Nível 1: colunas otimizadas (rápido, payload leve)
+    const COLS_LEVEL1 = MOVIE_COLS_BROWSE;
+    // Nível 2: colunas básicas garantidas (sem colunas que podem não existir)
+    const COLS_LEVEL2 = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
+    // Nível 3: seleciona tudo (exatamente como fetchMyList faz com movies(*)) e filtra no cliente
+    const COLS_LEVEL3 = '*';
 
-    const runQuery = async (cols: string) => {
-      const INITIAL_MOVIES = 500;
-      const INITIAL_SERIES = 250;
-      return Promise.all([
-        supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL_MOVIES - 1),
-        supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL_SERIES - 1),
-      ]);
-    };
+    const queryBoth = async (cols: string) => Promise.all([
+      supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).limit(500),
+      supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).limit(250),
+    ]);
+
+    const stripHeavyFields = (rows: any[]): any[] =>
+      rows.map(({ episodes, actors, ...rest }) => rest);
 
     try {
-      // Tenta primeiro com colunas otimizadas; cai para colunas básicas se alguma não existir
-      let [resMovies, resSeries] = await runQuery(MOVIE_COLS_BROWSE);
+      setIsLoadingMovies(true);
 
-      if (resMovies.error || resSeries.error) {
-        console.warn('Colunas extras não encontradas, usando fallback:', resMovies.error?.message || resSeries.error?.message);
-        [resMovies, resSeries] = await runQuery(MOVIE_COLS_ESSENTIAL);
+      // Tentativa 1: colunas otimizadas
+      let [resM, resS] = await queryBoth(COLS_LEVEL1);
+
+      // Tentativa 2: colunas básicas (se alguma coluna não existir)
+      if (resM.error || resS.error) {
+        console.warn('[fetchMyMovies] Tentativa 1 falhou, usando colunas básicas:', resM.error?.message || resS.error?.message);
+        [resM, resS] = await queryBoth(COLS_LEVEL2);
       }
 
-      if (resMovies.error) throw resMovies.error;
-      if (resSeries.error) throw resSeries.error;
+      // Tentativa 3: select(*) com strip client-side (idêntico ao movies(*) do fetchMyList)
+      if (resM.error || resS.error) {
+        console.warn('[fetchMyMovies] Tentativa 2 falhou, usando select(*) como fetchMyList:', resM.error?.message || resS.error?.message);
+        [resM, resS] = await queryBoth(COLS_LEVEL3);
+        if (!resM.error && resM.data) resM = { ...resM, data: stripHeavyFields(resM.data) };
+        if (!resS.error && resS.data) resS = { ...resS, data: stripHeavyFields(resS.data) };
+      }
 
-      const initialItems = [...(resMovies.data || []), ...(resSeries.data || [])].map(fmtMovieRow);
-      setMyMovies(initialItems);
+      if (resM.error) throw resM.error;
+      if (resS.error) throw resS.error;
+
+      const items = [...(resM.data || []), ...(resS.data || [])].map(fmtMovieRow);
+      setMyMovies(items);
       setLoadingMoreCount(0);
-      setIsLoadingMovies(false);
-      saveCache(initialItems);
-    } catch (error) {
-      console.error('Erro ao buscar filmes do Supabase:', error);
-      setLoadingMoreCount(0);
+      saveCache(items);
+    } catch (error: any) {
+      console.error('[fetchMyMovies] Todas as tentativas falharam:', error?.message || error);
     } finally {
       setIsLoadingMovies(false);
     }
