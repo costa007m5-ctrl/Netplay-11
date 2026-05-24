@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Star, ArrowRight, Globe } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, Globe } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTMDBCategories } from '../hooks/useTMDBCategories';
 
@@ -113,71 +113,33 @@ function CategoryRow({ category, delay, onSelect }: { category: any; delay: numb
 }
 
 function TMDBMovieCard({ movie, onSelect }: { movie: any; onSelect: () => void }) {
-  const [failed, setFailed] = React.useState(false);
   const title = movie.title || movie.name || '';
-  const rating = movie.vote_average ? Number(movie.vote_average.toFixed(1)) : null;
-  const year = (movie.release_date || movie.first_air_date || '').slice(0, 4);
+  const posterSrc = movie.poster_path
+    ? tmdbImg(movie.poster_path, 'w342')
+    : 'https://via.placeholder.com/342x513?text=Sem+Poster';
 
   return (
     <motion.div
-      whileTap={{ scale: 0.94 }}
-      className="flex-none snap-start cursor-pointer"
-      style={{ width: 100 }}
+      whileTap={{ scale: 0.95 }}
+      className="flex-none w-28 sm:w-36 snap-start cursor-pointer group"
       onClick={onSelect}
     >
-      {/* Poster */}
-      <div
-        className="relative rounded-xl overflow-hidden border transition-all duration-200"
-        style={{ aspectRatio: '2/3', borderColor: 'rgba(255,255,255,0.07)', background: '#1a1a1a' }}
-      >
-        {movie.poster_path && !failed ? (
-          <img
-            src={tmdbImg(movie.poster_path)}
-            alt={title}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center p-2">
-            <span
-              className="font-black text-center uppercase leading-tight"
-              style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)' }}
-            >
-              {title}
-            </span>
-          </div>
-        )}
-        {/* Gradient overlay */}
-        <div
-          className="absolute inset-x-0 bottom-0"
-          style={{ height: '40%', background: 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)' }}
+      <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/60 transition-all shadow-lg">
+        <img
+          src={posterSrc}
+          alt={title}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        {/* Rating badge */}
-        {rating && rating > 0 && (
-          <div
-            className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-full px-1.5 py-0.5"
-            style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
-          >
-            <Star size={6} className="text-yellow-400" fill="currentColor" />
-            <span className="text-white font-black" style={{ fontSize: 7 }}>{rating}</span>
-          </div>
-        )}
-        {/* Year tag */}
-        {year && (
-          <div className="absolute bottom-1.5 left-1.5">
-            <span className="font-bold" style={{ fontSize: 7, color: 'rgba(255,255,255,0.45)' }}>{year}</span>
-          </div>
-        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+          <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{title}</p>
+          {movie.vote_average ? (
+            <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {Number(movie.vote_average).toFixed(1)}</p>
+          ) : null}
+        </div>
       </div>
-      {/* Title */}
-      <p
-        className="mt-1.5 font-bold uppercase truncate leading-tight px-0.5"
-        style={{ fontSize: 8, color: 'rgba(255,255,255,0.55)' }}
-        title={title}
-      >
-        {title}
-      </p>
+      <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{title}</p>
     </motion.div>
   );
 }

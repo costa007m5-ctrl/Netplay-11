@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Filter, Star, X, ChevronRight, History, TrendingUp, Activity, Loader2, CheckCircle } from 'lucide-react';
+import { Search, Filter, Star, X, ChevronRight, History, TrendingUp, Activity } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import tmdb, { requests } from '../services/tmdb';
 import { Movie } from '../types';
 import { CATEGORIES } from '../constants';
-import { supabase } from '../lib/supabase';
 
 interface AdvancedSearchProps {
   onSelectMovie: (movie: Movie) => void;
@@ -33,7 +32,6 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
   const [history] = useState(['Oppenheimer', 'Marvel', 'Terror', 'Ficção']);
   const [year, setYear] = useState<string>('');
   const [minRating, setMinRating] = useState<number>(0);
-  const [savingId, setSavingId] = useState<number | null>(null);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
 
   const popularTags = ['Novidades', 'Top 10', 'Oscar 2024', 'Marvel', 'DC', 'Dublados'];
@@ -183,7 +181,7 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
 
   // ──────────────────────────────────────────────
   // Auto-save: clicou num resultado TMDB (não está na biblioteca)
-  // → busca detalhes completos no TMDB → salva no Supabase → abre o conteúdo
+  // → abre imediatamente → salva em background via API server
   // ──────────────────────────────────────────────
   const handleResultClick = useCallback(async (m: any) => {
     if (m._isLocal) {
@@ -191,7 +189,10 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
       return;
     }
 
-    setSavingId(m.id);
+    // Abre o conteúdo imediatamente sem esperar o save
+    onSelectMovie({ ...m, _isLocal: true } as any);
+
+    // Salva em background silenciosamente via API server (evita RLS do Supabase)
     try {
       const endpoint = m.type === 'series' ? `/tv/${m.id}` : `/movie/${m.id}`;
       const { data: details } = await tmdb.get(endpoint, { params: { language: 'pt-BR' } });
@@ -200,7 +201,7 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
       const releaseDate = details.release_date || details.first_air_date || '';
       const releaseYear = parseInt(releaseDate.substring(0, 4)) || null;
 
-      const movieData: any = {
+      const movieData = {
         id: m.id,
         title: details.title || details.name || m.title,
         type: m.type,
@@ -217,14 +218,15 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
         video_url: '',
       };
 
-      await supabase.from('movies').upsert(movieData, { onConflict: 'id' });
+      await fetch('/api/movies/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(movieData),
+      });
 
       setSavedIds(prev => new Set(prev).add(m.id));
-      onSelectMovie({ ...movieData, videoUrl: '', _isLocal: true } as any);
-    } catch (e) {
-      onSelectMovie(m);
-    } finally {
-      setSavingId(null);
+    } catch (_e) {
+      // Falha silenciosa — o usuário já está vendo o conteúdo
     }
   }, [onSelectMovie]);
 
@@ -371,7 +373,6 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-10">
                   {mergedDisplayResults.map((m: any, idx) => {
-                    const isSaving = savingId === m.id;
                     const wasSaved = savedIds.has(m.id);
                     return (
                       <motion.div
@@ -380,9 +381,9 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: Math.min(idx * 0.04, 0.4) }}
                         className="group cursor-pointer relative"
-                        onClick={() => !isSaving && handleResultClick(m)}
+                        onClick={() => handleResultClick(m)}
                       >
-                        <div className={`aspect-[2/3] rounded-2xl md:rounded-3xl overflow-hidden relative shadow-2xl transition-all ${m._isLocal ? 'border-2 border-red-600/30 group-hover:border-red-600' : 'border border-white/5 group-hover:border-white/20'}`}>
+                        <div className={`aspect-[2/3] rounded-2xl md:rounded-3xl overflow-hidden relative shadow-2xl transition-all ${m._isLocal || wasSaved ? 'border-2 border-red-600/30 group-hover:border-red-600' : 'border border-white/5 group-hover:border-white/20'}`}>
                           <img
                             src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w500/${m.poster_path}`) : 'https://via.placeholder.com/500x750?text=Sem+Poster'}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -390,32 +391,17 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
                             loading="lazy"
                           />
 
-                          {/* Overlay de salvando */}
-                          {isSaving && (
-                            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
-                              <Loader2 size={28} className="text-red-500 animate-spin" />
-                              <span className="text-white font-black text-[9px] uppercase tracking-widest">Adicionando...</span>
-                            </div>
-                          )}
+                          {/* Overlay hover */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-6 flex flex-col justify-end">
+                            <span className="text-red-600 font-black text-[10px] mb-2">{m.vote_average?.toFixed(1) || '-'} ★</span>
+                            <h4 className="text-white font-black text-sm md:text-lg uppercase leading-none truncate">{m.title}</h4>
+                          </div>
 
-                          {/* Overlay hover normal */}
-                          {!isSaving && (
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-6 flex flex-col justify-end">
-                              <span className="text-red-600 font-black text-[10px] mb-2">{m.vote_average?.toFixed(1) || '-'} ★</span>
-                              <h4 className="text-white font-black text-sm md:text-lg uppercase leading-none truncate">{m.title}</h4>
-                            </div>
-                          )}
-
-                          {/* Badge: na biblioteca / sugestão TMDB / recém salvo */}
-                          {m._isLocal || wasSaved ? (
+                          {/* Badge: na biblioteca */}
+                          {(m._isLocal || wasSaved) && (
                             <div className="absolute top-2 left-2 md:top-3 md:left-3 flex items-center gap-1.5 bg-red-600 px-2 py-1 md:px-3 md:py-1.5 rounded-full border border-red-500 shadow-lg shadow-red-600/30 z-10">
                               <div className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,1)] animate-pulse" />
                               <span className="text-[7px] md:text-[9px] font-black uppercase tracking-widest text-white leading-none mt-0.5">Na Biblioteca</span>
-                            </div>
-                          ) : (
-                            <div className="absolute top-2 left-2 md:top-3 md:left-3 flex items-center gap-1 bg-black/80 px-2 py-1 md:px-3 md:py-1.5 rounded-full border border-white/10 opacity-85 z-10">
-                              <Star size={8} className="text-yellow-400 md:w-2.5 md:h-2.5" />
-                              <span className="text-[7px] md:text-[9px] font-black uppercase tracking-widest text-gray-200 leading-none mt-0.5">TMDB</span>
                             </div>
                           )}
                         </div>
