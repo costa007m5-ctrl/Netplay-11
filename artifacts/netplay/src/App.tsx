@@ -3756,42 +3756,48 @@ export default function App() {
   const myListIds = useMemo(() => new Set(myList.map(m => m.id)), [myList]);
 
   const heroMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
     const heroKeywords = ['marvel', 'dc comics', 'batman', 'spider-man', 'spiderman', 'superman', 'avengers', 'vingadores', 'liga da justiça', 'justice league', 'x-men', 'herói', 'hero', 'super-herói'];
     return deferredMyMovies.filter(m => {
       const t = (m.title || '').toLowerCase();
-      const o = (m.overview || '').toLowerCase();
       const g = (m.genres || '').toLowerCase();
-      return heroKeywords.some(k => t.includes(k) || o.includes(k)) || g.includes('fantasia') || g.includes('ação');
+      return heroKeywords.some(k => t.includes(k)) || g.includes('fantasia') || g.includes('ação');
     });
-  }, [deferredMyMovies]);
+  }, [deferredMyMovies, loadingMoreCount]);
 
   const collectionMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
+    // Usa conjunto de palavras-chave indexado por franquia para evitar quadratic matching
+    const allKeywords = FRANCHISES.flatMap(f => f.keywords);
     return deferredMyMovies.filter(m => {
       const t = (m.title || '').toLowerCase();
-      const o = (m.overview || '').toLowerCase();
-      return FRANCHISES.some(f => f.keywords.some(k => t.includes(k) || o.includes(k)));
+      return allKeywords.some(k => t.includes(k));
     }).sort((a, b) => {
       const dateA = String(a.release_date || (a as any).release_year || '0');
       const dateB = String(b.release_date || (b as any).release_year || '0');
       return dateA.localeCompare(dateB);
     });
-  }, [deferredMyMovies]);
+  }, [deferredMyMovies, loadingMoreCount]);
 
   const dynamicFranchises = useMemo(() => {
+    // Não recalcula enquanto ainda há dados carregando em background
+    if (loadingMoreCount > 0) return [] as any[];
+
     const list: any[] = [];
     const coveredMovieIds = new Set<number>();
-    
-    // Matcha filmes de uma franquia usando título, nome, overview, gêneros e atores
+
+    // Pré-computa string de busca por filme para evitar concatenação repetida por franquia
+    const movieSearchStr = new Map<number, string>();
+    deferredMyMovies.forEach(m => {
+      movieSearchStr.set(m.id, [
+        m.title, (m as any).name, m.overview, m.genres, m.actors, m.collection_name
+      ].map(s => (s || '').toLowerCase()).join(' '));
+    });
+
+    // Matcha filmes de uma franquia usando string pré-computada
     const matchesFranchise = (m: Movie, keywords: string[]) => {
-      const fields = [
-        (m.title || '').toLowerCase(),
-        ((m as any).name || '').toLowerCase(),
-        (m.overview || '').toLowerCase(),
-        (m.genres || '').toLowerCase(),
-        (m.actors || '').toLowerCase(),
-        (m.collection_name || '').toLowerCase(),
-      ];
-      return keywords.some(k => fields.some(f => f.includes(k)));
+      const str = movieSearchStr.get(m.id) || '';
+      return keywords.some(k => str.includes(k));
     };
 
     // 1. Franquias definidas (Marvel, DC, Disney, etc.)
@@ -3874,7 +3880,7 @@ export default function App() {
     });
 
     return list;
-  }, [deferredMyMovies]);
+  }, [deferredMyMovies, loadingMoreCount]);
 
   // Enriquece filmes sem collection_id consultando o TMDB em background
   const enrichCollectionsInBackground = React.useCallback(async (movies: Movie[]) => {
@@ -3921,8 +3927,8 @@ export default function App() {
       }));
       await new Promise(r => setTimeout(r, 300)); // respeita rate limit
     }
-    // Re-carrega filmes após enriquecimento
-    fetchMyMovies();
+    // Enriquecimento salvo no Supabase — o cache local será atualizado na próxima sessão
+    // Não recarrega todos os filmes para evitar o custo de desempenho
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSupabase]);
 
@@ -5464,11 +5470,14 @@ export default function App() {
     };
 
     try {
-      const INITIAL = 500;
+      const INITIAL = 300;
       const BATCH = 1000;
-      const CONCURRENCY = 5;
+      const CONCURRENCY = 2;
 
-      // 1. Em paralelo: conta totais + busca os primeiros 500 de cada tipo
+      // Colunas necessárias para exibição — evita carregar texto longo (overview, actors) desnecessariamente
+      const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,release_year,rating,vote_average,runtime,genres,genre,video_url,video_url_2,preferred_quality,logo_path,watch_providers,is_hidden,last_rescanned_at,collection_id,collection_name,collection_poster_path,collection_backdrop_path,collection_logo_path,actors,overview,episodes,created_at,updated_at';
+
+      // 1. Em paralelo: conta totais + busca os primeiros itens de cada tipo
       const [
         { count: totalMovies },
         { count: totalSeries },
@@ -5477,8 +5486,8 @@ export default function App() {
       ] = await Promise.all([
         supabase.from('movies').select('id', { count: 'exact', head: true }).eq('type', 'movie'),
         supabase.from('movies').select('id', { count: 'exact', head: true }).eq('type', 'series'),
-        supabase.from('movies').select('*').eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL - 1),
-        supabase.from('movies').select('*').eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL - 1),
+        supabase.from('movies').select(COLS).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL - 1),
+        supabase.from('movies').select(COLS).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL - 1),
       ]);
 
       if (errM) throw errM;
@@ -5510,8 +5519,8 @@ export default function App() {
         const ranges: number[] = [];
         for (let s = INITIAL; s < total; s += BATCH) ranges.push(s);
 
-        // Acumula 2 rodadas (= CONCURRENCY*2 páginas = ~10.000 itens) antes de um único setState
-        const ACCUMULATE_ROUNDS = 2;
+        // Acumula 8 rodadas antes de um único setState para reduzir re-renders
+        const ACCUMULATE_ROUNDS = 8;
         let accumulated: any[] = [];
         let accumulatedCount = 0;
 
@@ -5534,7 +5543,7 @@ export default function App() {
             slice.map(start =>
               supabase
                 .from('movies')
-                .select('*')
+                .select(COLS)
                 .eq('type', type)
                 .order('created_at', { ascending: false })
                 .range(start, start + BATCH - 1)
@@ -5827,27 +5836,25 @@ export default function App() {
 
   // Filtrar filmes para Lançamentos (2025-2026)
   const newMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
     return visibleMovies.filter(movie => {
-      const year = movie.release_date ? new Date(movie.release_date).getFullYear() : 
-                   (movie.release_year ? parseInt(String(movie.release_year)) : 0);
+      const year = movie.release_year || (movie.release_date ? new Date(movie.release_date).getFullYear() : 0);
       return year === 2025 || year === 2026;
     });
-  }, [visibleMovies]);
+  }, [visibleMovies, loadingMoreCount]);
 
   // Filtrar filmes para Fresquinho do Cinema (2026 e <= 5 meses)
   const cinemaMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
     const now = new Date();
     return visibleMovies.filter(movie => {
       if (!movie.release_date) return false;
       const releaseDate = new Date(movie.release_date);
-      const year = releaseDate.getFullYear();
-      
-      if (year !== 2026) return false;
-
+      if (releaseDate.getFullYear() !== 2026) return false;
       const diffMonths = (now.getFullYear() - releaseDate.getFullYear()) * 12 + (now.getMonth() - releaseDate.getMonth());
       return diffMonths <= 5 && diffMonths >= 0;
     });
-  }, [visibleMovies]);
+  }, [visibleMovies, loadingMoreCount]);
 
   // Top 10 Filmes
   const top10Movies = useMemo(() => {
@@ -5865,6 +5872,7 @@ export default function App() {
 
   // Cara Nova (Recém re-scaneados)
   const caraNovaMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
     const now = new Date().getTime();
     return visibleMovies.filter(movie => {
       if (movie.last_rescanned_at) {
@@ -5874,26 +5882,28 @@ export default function App() {
       }
       return false;
     });
-  }, [visibleMovies]);
+  }, [visibleMovies, loadingMoreCount]);
 
   // Conteúdo TeraBox
   const teraboxMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
     return visibleMovies.filter(m => 
       m.videoUrl?.includes('terabox') || 
       m.videoUrl?.includes('1024terabox') || 
       m.videoUrl?.includes('teraboxapp')
     ).slice(0, 10);
-  }, [visibleMovies]);
+  }, [visibleMovies, loadingMoreCount]);
 
   // Conteúdo TARAPLAY (KingX/TeraDL)
   const taraplayMovies = useMemo(() => {
+    if (loadingMoreCount > 0) return [] as Movie[];
     return visibleMovies.filter(m => 
       m.videoUrl?.includes('player.kingx.dev') || 
       m.videoUrl?.includes('teradl.kingx.dev') ||
       m.videoUrl?.includes('gdplayer.to') ||
       m.videoUrl?.includes('gdplayer.org')
     );
-  }, [visibleMovies]);
+  }, [visibleMovies, loadingMoreCount]);
 
   // Função auxiliar para agrupar por gênero
   const groupByGenre = (movies: Movie[]) => {
@@ -5916,8 +5926,14 @@ export default function App() {
     }, {} as { [key: string]: Movie[] });
   };
 
-  const moviesByGenre = useMemo(() => groupByGenre(visibleMovies), [visibleMovies]);
-  const newMoviesByGenre = useMemo(() => groupByGenre(newMovies), [newMovies]);
+  const moviesByGenre = useMemo(() => {
+    if (loadingMoreCount > 0) return {} as { [key: string]: Movie[] };
+    return groupByGenre(visibleMovies);
+  }, [visibleMovies, loadingMoreCount]);
+  const newMoviesByGenre = useMemo(() => {
+    if (loadingMoreCount > 0) return {} as { [key: string]: Movie[] };
+    return groupByGenre(newMovies);
+  }, [newMovies, loadingMoreCount]);
 
   // Filtrar filmes para a pesquisa
   const searchResults = useMemo(() => {
