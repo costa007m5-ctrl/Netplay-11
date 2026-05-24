@@ -965,6 +965,8 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
   const [expandedCount, setExpandedCount] = React.useState(30);
   const [isSearching, setIsSearching] = React.useState(false);
   const [supabaseResults, setSupabaseResults] = React.useState<Movie[]>([]);
+  const [tmdbResults, setTmdbResults] = React.useState<any[]>([]);
+  const [isTmdbSearching, setIsTmdbSearching] = React.useState(false);
 
   // Debounce 300ms antes de disparar busca
   React.useEffect(() => {
@@ -976,6 +978,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
   React.useEffect(() => {
     if (!debouncedSearch || debouncedSearch.length < 2) {
       setSupabaseResults([]);
+      setTmdbResults([]);
       setIsSearching(false);
       return;
     }
@@ -1015,6 +1018,42 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     doSearch();
     return () => { cancelled = true; };
   }, [debouncedSearch, type]);
+
+  // Busca TMDB — sugestões externas (filmes/séries não na biblioteca)
+  React.useEffect(() => {
+    if (!debouncedSearch || debouncedSearch.length < 2) {
+      setTmdbResults([]);
+      return;
+    }
+    let cancelled = false;
+    setIsTmdbSearching(true);
+
+    const doTmdbSearch = async () => {
+      try {
+        const tmdbType = type === 'series' ? 'tv' : 'movie';
+        const endpoint = tmdbType === 'tv' ? '/search/tv' : '/search/movie';
+        const { data } = await tmdb.get(endpoint, { params: { query: debouncedSearch, language: 'pt-BR' } });
+        if (cancelled) return;
+        const dbIds = new Set(supabaseResults.map((m: any) => m.id));
+        const external = (data.results || [])
+          .filter((r: any) => !dbIds.has(r.id))
+          .map((r: any) => ({
+            ...r,
+            title: r.title || r.name,
+            type: tmdbType === 'tv' ? 'series' : 'movie',
+            _isTmdb: true,
+          }));
+        if (!cancelled) setTmdbResults(external);
+      } catch {
+        if (!cancelled) setTmdbResults([]);
+      } finally {
+        if (!cancelled) setIsTmdbSearching(false);
+      }
+    };
+
+    doTmdbSearch();
+    return () => { cancelled = true; };
+  }, [debouncedSearch, type, supabaseResults]);
 
   const label = type === 'series' ? 'Séries' : 'Filmes';
 
@@ -1199,21 +1238,69 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           </div>
 
         ) : debouncedSearch ? (
-          /* Resultados do Supabase (biblioteca completa) */
+          /* Resultados: Supabase (biblioteca) + TMDB (sugestões externas) */
           isSearching ? (
             <div className="flex items-center gap-3 py-20">
               <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-gray-400 font-bold uppercase tracking-widest text-xs">Buscando na biblioteca completa...</span>
             </div>
-          ) : supabaseResults.length > 0 ? (
-            <>
-              <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-6">
-                {supabaseResults.length} resultado{supabaseResults.length !== 1 ? 's' : ''} para "{debouncedSearch}"
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
-                {supabaseResults.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
-              </div>
-            </>
+          ) : (supabaseResults.length > 0 || tmdbResults.length > 0) ? (
+            <div className="space-y-10">
+              {/* Resultados da biblioteca */}
+              {supabaseResults.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <p className="text-gray-400 text-xs font-black uppercase tracking-widest border-l-4 border-red-600 pl-3">
+                      Na Biblioteca · {supabaseResults.length} resultado{supabaseResults.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+                    {supabaseResults.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
+                  </div>
+                </div>
+              )}
+              {/* Sugestões do TMDB (não estão na biblioteca) */}
+              {(isTmdbSearching || tmdbResults.length > 0) && (
+                <div>
+                  <div className="flex items-center gap-3 mb-5">
+                    <p className="text-gray-400 text-xs font-black uppercase tracking-widest border-l-4 border-white/20 pl-3">
+                      Sugestões TMDB {isTmdbSearching ? '· Buscando...' : `· ${tmdbResults.length} título${tmdbResults.length !== 1 ? 's' : ''}`}
+                    </p>
+                    {isTmdbSearching && <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />}
+                  </div>
+                  {!isTmdbSearching && tmdbResults.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+                      {tmdbResults.map((m: any, idx: number) => (
+                        <motion.div
+                          key={`tmdb-${m.id}`}
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+                          className="group cursor-pointer"
+                          onClick={() => onSelectMovie(m)}
+                        >
+                          <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-white/20 transition-all shadow-xl">
+                            <img
+                              src={m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster'}
+                              alt={m.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[7px] font-black text-gray-400 uppercase tracking-widest border border-white/10">TMDB</div>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+                              <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{m.title}</p>
+                              {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
+                            </div>
+                          </div>
+                          <p className="text-gray-500 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title}</p>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-32 text-center">
               <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
@@ -6873,7 +6960,7 @@ export default function App() {
              />
           } />
           
-          <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
+          <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} onMovieAdded={(movie) => setMyMovies(prev => prev.some(m => m.id === movie.id) ? prev : [movie, ...prev])} />} />
           <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} />} />
           <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />

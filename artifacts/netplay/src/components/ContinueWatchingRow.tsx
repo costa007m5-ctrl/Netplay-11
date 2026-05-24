@@ -7,11 +7,11 @@ interface ContinueWatchingRowProps {
   title: string;
   movies: Movie[];
   onSelectMovie: (movie: Movie) => void;
-  onPlayMovie: (movie: Movie, episodeUrl?: string, startTime?: number) => void;
+  onPlayMovie: (movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string) => void;
   profileName: string;
 }
 
-const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie: Movie, onSelectMovie: (movie: Movie) => void, onPlayMovie: (movie: Movie, episodeUrl?: string, startTime?: number) => void }) => {
+const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie: Movie, onSelectMovie: (movie: Movie) => void, onPlayMovie: (movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string) => void }) => {
   const duration = movie.runtime ? movie.runtime * 60 : 7200;
   const position = movie.last_position || 0;
   const progress = (position / duration) * 100;
@@ -36,11 +36,17 @@ const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie:
     : null;
 
   const handleClick = () => {
+    // Recupera a preferência de API/player salva para esse conteúdo
+    let savedPlayerStyle: string | undefined;
+    try {
+      const prefRaw = localStorage.getItem(`netplay_server_pref_${movie.id}`);
+      if (prefRaw) savedPlayerStyle = JSON.parse(prefRaw)?.playerStyle;
+    } catch {}
+
     if (movie.type === 'series') {
-      // Toca direto no episódio salvo com o tempo salvo
-      onPlayMovie(movie, resolvedEpisodeUrl, position);
+      onPlayMovie(movie, resolvedEpisodeUrl, position, savedPlayerStyle);
     } else {
-      onPlayMovie(movie, movie.videoUrl, position);
+      onPlayMovie(movie, movie.videoUrl, position, savedPlayerStyle);
     }
   };
 

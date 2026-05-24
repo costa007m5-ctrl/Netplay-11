@@ -70,6 +70,7 @@ router.post("/movies/upsert", async (req, res) => {
           genre: movie.genre || null,
           video_url: movie.video_url || "",
           logo_path: movie.logo_path || null,
+          updated_at: new Date(),
         },
       });
     res.json({ success: true });

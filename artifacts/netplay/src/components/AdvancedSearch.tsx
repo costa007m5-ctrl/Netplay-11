@@ -14,9 +14,10 @@ interface AdvancedSearchProps {
   dynamicFranchises: any[];
   onSelectFranchise: (franchise: any) => void;
   categories?: any[];
+  onMovieAdded?: (movie: Movie) => void;
 }
 
-const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dynamicFranchises, onSelectFranchise, categories = CATEGORIES }: AdvancedSearchProps) => {
+const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dynamicFranchises, onSelectFranchise, categories = CATEGORIES, onMovieAdded }: AdvancedSearchProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialQuery = searchParams.get('q') || '';
@@ -219,17 +220,27 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
         video_url: '',
       };
 
-      await fetch('/api/movies/upsert', {
+      const res = await fetch('/api/movies/upsert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(movieData),
       });
 
-      setSavedIds(prev => new Set(prev).add(m.id));
+      if (res.ok) {
+        setSavedIds(prev => new Set(prev).add(m.id));
+        // Notifica o App para adicionar o filme ao estado local (persiste no refresh via Supabase)
+        if (onMovieAdded) {
+          onMovieAdded({
+            ...movieData,
+            vote_average: movieData.rating,
+            videoUrl: movieData.video_url,
+          } as unknown as Movie);
+        }
+      }
     } catch (_e) {
       // Falha silenciosa — o usuário já está vendo o conteúdo
     }
-  }, [onSelectMovie]);
+  }, [onSelectMovie, onMovieAdded]);
 
   // Deduplica: biblioteca (local + DB) tem prioridade sobre TMDB
   const mergedDisplayResults = useMemo(() => {
