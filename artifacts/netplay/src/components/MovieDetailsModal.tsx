@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Play, Plus, ThumbsUp, Volume2, VolumeX, Users, Sparkles, Calendar, Star, Clock, Info, ChevronDown, Monitor, Smartphone, Cast, Share2, Tv, RotateCcw, Loader2, Lock, RefreshCcw } from 'lucide-react';
+import { buildRedeFlixMovieUrl, buildRedeFlixSerieUrl } from './admin/AdminFlix3Tab';
 import { QRCodeSVG } from 'qrcode.react';
 import { Movie } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -737,7 +738,24 @@ const MovieDetailsModal = React.memo(({
                 </div>
               ) : (
                 <>
-                  {movie.videoUrl || movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0) || !!(movie as any).tmdb_id || !!(movie as any).created_at ? (
+                  {(() => {
+                  // Resolve URL para conteúdo da biblioteca sem video_url (ex: Flix 3.0)
+                  const tmdbId = (movie as any).tmdb_id || movie.id;
+                  const resolvePlayUrl = (): string => {
+                    if (movie.videoUrl) return movie.videoUrl;
+                    if (isSeries) return buildRedeFlixSerieUrl(tmdbId, 1, 1);
+                    return buildRedeFlixMovieUrl(tmdbId);
+                  };
+                  const resolveEpUrl = (): string => {
+                    if (isSeries && movie.episodes && movie.episodes.length > 0) {
+                      return sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || buildRedeFlixSerieUrl(tmdbId, 1, 1);
+                    }
+                    return resolvePlayUrl();
+                  };
+                  // Conteúdo disponível = na biblioteca OU tem URL de vídeo/episódios
+                  const isAvailable = !!(movie as any).created_at || !!(movie as any).tmdb_id || !!movie.videoUrl || !!movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0);
+                  if (isAvailable) {
+                    return (
                     <div className="flex flex-col gap-2">
                       <motion.button
                         whileHover={{ scale: 1.05, boxShadow: isLocked ? '0 0 40px rgba(220,38,38,0.3)' : '0 0 40px rgba(255,255,255,0.3)' }}
@@ -746,11 +764,9 @@ const MovieDetailsModal = React.memo(({
                           if (isLocked) { document.dispatchEvent(new CustomEvent('open-plans')); return; }
                           const savedPref = getSavedServerPref(movie.id);
                           if (isSeries && movie.episodes && movie.episodes.length > 0) {
-                            const urlToPlay = sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
-                            triggerSmartPlay(urlToPlay, 0, undefined, 0, savedPref || undefined);
+                            triggerSmartPlay(resolveEpUrl(), 0, undefined, 0, savedPref || undefined);
                           } else {
-                            const movieUrl = movie.videoUrl || '';
-                            triggerSmartPlay(movieUrl, 0, undefined, undefined, savedPref || undefined);
+                            triggerSmartPlay(resolvePlayUrl(), 0, undefined, undefined, savedPref || undefined);
                           }
                         }}
                         className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
@@ -767,10 +783,9 @@ const MovieDetailsModal = React.memo(({
                         <button
                           onClick={() => {
                             if (isSeries && movie.episodes && movie.episodes.length > 0) {
-                              const urlToPlay = sortedEpisodesFlat[0]?.videoUrl || sortedEpisodesFlat[0]?.videoUrl2 || '';
-                              triggerSmartPlay(urlToPlay, 0, undefined, 0);
+                              triggerSmartPlay(resolveEpUrl(), 0, undefined, 0);
                             } else {
-                              triggerSmartPlay(movie.videoUrl || '', 0);
+                              triggerSmartPlay(resolvePlayUrl(), 0);
                             }
                           }}
                           className="flex items-center gap-1.5 text-gray-600 hover:text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-colors"
@@ -780,7 +795,9 @@ const MovieDetailsModal = React.memo(({
                         </button>
                       )}
                     </div>
-                  ) : (
+                    );
+                  }
+                  return (
                     <motion.button
                       whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(220,38,38,0.3)' }}
                       whileTap={{ scale: 0.95 }}
@@ -790,7 +807,8 @@ const MovieDetailsModal = React.memo(({
                       <Sparkles size={14} className="md:w-6 md:h-6" />
                       <span className="whitespace-nowrap">Indicar Filme</span>
                     </motion.button>
-                  )}
+                  );
+                })()}
                 </>
               )}
 
@@ -848,6 +866,13 @@ const MovieDetailsModal = React.memo(({
             <div className="space-y-3 md:space-y-4 flex-1">
               <h3 className="text-gray-500 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-xs italic">Onde Assistir</h3>
               <div className="flex flex-wrap gap-3 md:gap-5">
+                {/* Badge "Na Plataforma" para conteúdo da biblioteca NetPlay */}
+                {!!(movie as any).created_at && (
+                  <div className="px-4 py-2 rounded-xl md:rounded-2xl bg-red-600/20 border border-red-600/50 backdrop-blur-2xl flex items-center gap-2 shadow-lg shadow-red-600/10">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-red-400 font-black uppercase tracking-widest text-[8px] md:text-[10px] italic">Na Plataforma</span>
+                  </div>
+                )}
                 {providers.length > 0 ? (
                   providers.map((p: any, i: number) => (
                     <div key={i} className="group relative">
@@ -873,11 +898,11 @@ const MovieDetailsModal = React.memo(({
                       </div>
                     </div>
                   ))
-                ) : (
+                ) : !(movie as any).created_at ? (
                   <div className="px-4 py-2 rounded-xl md:rounded-2xl bg-white/5 border border-white/10 backdrop-blur-2xl flex items-center gap-3 md:gap-4">
                     <span className="text-white font-black uppercase tracking-widest text-[10px] md:text-xs italic">{provider.name}</span>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
 

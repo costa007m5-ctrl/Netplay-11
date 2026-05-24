@@ -79,6 +79,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [bfCurrentUrl, setBfCurrentUrl] = useState<string>('');
   const [bfCurrentEpisodeIndex, setBfCurrentEpisodeIndex] = useState<number>(-1);
 
+  // Flix 3.0 (RedeFlixApi) — estado para troca de episódio sem recriar o componente
+  const [rfCurrentUrl, setRfCurrentUrl] = useState<string>('');
+  const [rfCurrentEpisodeIndex, setRfCurrentEpisodeIndex] = useState<number>(-1);
+
   // Net 2.0 — dica de áudio em Português
   const [showVidsrcHint, setShowVidsrcHint] = useState(true);
   useEffect(() => {
@@ -1259,21 +1263,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   if (isRedeFlixUrl || playerStyle === 'redeflix') {
     const rfTitle = movie.title || movie.name || 'Assistindo';
     const rfIsTV = movie.type === 'series';
+    const rfAllEpisodes = bfEpisodes.length > 0 ? bfEpisodes : sortedEpisodes;
+    const rfTmdbId = (movie as any).tmdb_id || movie.id;
 
     const rfInitialEpIndex = (initialEpisodeIndex !== undefined && initialEpisodeIndex >= 0)
       ? initialEpisodeIndex
       : (() => {
-          if (!rfIsTV || sortedEpisodes.length === 0) return -1;
-          const idx = sortedEpisodes.findIndex(ep => ep.videoUrl === url || ep.videoUrl2 === url);
+          if (!rfIsTV || rfAllEpisodes.length === 0) return -1;
+          const idx = rfAllEpisodes.findIndex((ep: any) => ep.videoUrl === url || ep.videoUrl2 === url);
           return idx >= 0 ? idx : 0;
         })();
 
-    const activeRfEpIndex = rfInitialEpIndex;
+    const activeRfUrl = rfCurrentUrl || url;
+    const activeRfEpIndex = rfCurrentEpisodeIndex >= 0 ? rfCurrentEpisodeIndex : rfInitialEpIndex;
 
     return (
       <div className="relative w-full h-full">
         <NetflixPlayer
-          src={url}
+          src={activeRfUrl}
           title={rfTitle}
           seriesTitle={rfIsTV ? (movie.title || movie.name || '') : undefined}
           backdropUrl={movie.backdrop_path}
@@ -1282,13 +1289,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
           onClose={onClose}
           initialTime={0}
           isMovie={!rfIsTV}
-          hasNextEpisode={rfIsTV && activeRfEpIndex >= 0 && activeRfEpIndex < sortedEpisodes.length - 1}
+          episodes={rfIsTV && rfAllEpisodes.length > 0 ? rfAllEpisodes : undefined}
+          currentEpisodeIndex={activeRfEpIndex >= 0 ? activeRfEpIndex : undefined}
+          onSelectEpisode={(ep: any) => {
+            const s = ep.season ?? 1;
+            const e = ep.episode ?? 1;
+            const newUrl = ep.videoUrl || buildRedeFlixSerieUrl(rfTmdbId, s, e);
+            const newIdx = rfAllEpisodes.findIndex((se: any) => (se.season ?? 1) === s && (se.episode ?? 1) === e);
+            setRfCurrentUrl(newUrl);
+            setRfCurrentEpisodeIndex(newIdx >= 0 ? newIdx : -1);
+          }}
+          hasNextEpisode={rfIsTV && activeRfEpIndex >= 0 && activeRfEpIndex < rfAllEpisodes.length - 1}
           onNextEpisode={() => {
-            if (!rfIsTV || activeRfEpIndex < 0 || activeRfEpIndex >= sortedEpisodes.length - 1) return;
-            const nextEp = sortedEpisodes[activeRfEpIndex + 1] as any;
+            if (!rfIsTV || activeRfEpIndex < 0 || activeRfEpIndex >= rfAllEpisodes.length - 1) return;
+            const nextEp = rfAllEpisodes[activeRfEpIndex + 1] as any;
             const s = nextEp.season ?? 1;
             const e = nextEp.episode ?? 1;
-            if (onPlayNext) onPlayNext(movie, buildRedeFlixSerieUrl(movie.id, s, e), activeRfEpIndex + 1);
+            const newUrl = nextEp.videoUrl || buildRedeFlixSerieUrl(rfTmdbId, s, e);
+            setRfCurrentUrl(newUrl);
+            setRfCurrentEpisodeIndex(activeRfEpIndex + 1);
           }}
           recommendations={recommendations}
           onSelectRecommendation={(rec) => {
