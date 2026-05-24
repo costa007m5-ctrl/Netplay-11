@@ -5597,9 +5597,32 @@ export default function App() {
     const movieLimit = parseInt(localStorage.getItem('subaflix_movie_limit') || '800', 10);
     const seriesLimit = parseInt(localStorage.getItem('subaflix_series_limit') || '800', 10);
 
+    // Supabase PostgREST retorna no máximo 1000 linhas por requisição.
+    // Quando o limite é maior, paginamos em blocos de 1000 e combinamos os resultados.
+    const PAGE_SIZE = 1000;
+    const fetchPaginated = async (cols: string, type: string, totalLimit: number) => {
+      let all: any[] = [];
+      let from = 0;
+      while (all.length < totalLimit) {
+        const batchSize = Math.min(PAGE_SIZE, totalLimit - all.length);
+        const { data, error } = await supabase
+          .from('movies')
+          .select(cols)
+          .eq('type', type)
+          .order('created_at', { ascending: false })
+          .range(from, from + batchSize - 1);
+        if (error) return { data: null, error };
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < batchSize) break;
+        from += batchSize;
+      }
+      return { data: all, error: null };
+    };
+
     const queryBoth = async (cols: string) => Promise.all([
-      supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).limit(movieLimit),
-      supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).limit(seriesLimit),
+      fetchPaginated(cols, 'movie', movieLimit),
+      fetchPaginated(cols, 'series', seriesLimit),
     ]);
 
     const stripHeavyFields = (rows: any[]): any[] =>
