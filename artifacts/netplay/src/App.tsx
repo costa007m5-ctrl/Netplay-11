@@ -995,8 +995,20 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
             <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
               <Search size={40} className="text-gray-700" />
             </div>
-            <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum conteúdo encontrado</p>
-            {searchQuery && <button onClick={() => setSearchQuery('')} className="mt-6 px-8 py-3 bg-red-600 rounded-full font-black uppercase text-[10px] tracking-widest">Limpar busca</button>}
+            {searchQuery ? (
+              <>
+                <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum resultado para "{searchQuery}"</p>
+                <button onClick={() => setSearchQuery('')} className="mt-6 px-8 py-3 bg-red-600 rounded-full font-black uppercase text-[10px] tracking-widest">Limpar busca</button>
+              </>
+            ) : type === 'filmes' ? (
+              <>
+                <p className="text-white font-black uppercase tracking-widest text-sm mb-2">Nenhum filme encontrado</p>
+                <p className="text-gray-500 text-xs max-w-xs leading-relaxed mb-1">Os filmes são adicionados pelo <span className="text-red-400 font-bold">Sync Flix 3.0</span> no painel admin.</p>
+                <p className="text-gray-600 text-[10px] max-w-xs leading-relaxed">Certifique-se de rodar a migration SQL no Supabase para adicionar a coluna <code className="bg-white/5 px-1 rounded">tmdb_id</code> e depois execute o sync de <span className="text-emerald-400 font-bold">Filmes</span>.</p>
+              </>
+            ) : (
+              <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum conteúdo encontrado</p>
+            )}
           </div>
         )}
       </div>
@@ -6381,11 +6393,7 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
-          <Route path="/filmes" element={
-            <React.Suspense fallback={<div className="min-h-screen bg-black" />}>
-              <FlixNovitiesPage onSelectMovie={handleSelectMovie} defaultFilter="movies" hideFilterBar={true} pageTitle="Filmes" />
-            </React.Suspense>
-          } />
+          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
           <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={

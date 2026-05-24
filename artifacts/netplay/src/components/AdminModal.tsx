@@ -699,6 +699,8 @@ create table if not exists movies (
   id bigint primary key generated always as identity,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   title text not null,
+  name text,
+  tmdb_id integer unique,
   video_url text,
   video_url_2 text,
   backdrop_path text,
@@ -706,14 +708,20 @@ create table if not exists movies (
   logo_path text,
   overview text,
   genres text,
+  genre text,
   file_name text,
   type text default 'movie',
   episodes jsonb default '[]'::jsonb,
   watch_providers text,
   release_date text,
+  release_year integer,
   runtime integer,
   rating float,
+  vote_average float,
   actors text,
+  preferred_quality text,
+  collection_id text,
+  collection_logo_path text,
   is_hidden boolean default false,
   last_rescanned_at timestamp with time zone,
   user_id uuid references auth.users(id) default auth.uid()
@@ -722,6 +730,50 @@ create table if not exists movies (
 -- 2. Garantir que todas as colunas necessárias existam (para tabelas já criadas)
 do $$ 
 begin 
+  -- Coluna tmdb_id (CRÍTICA para o sync do Flix 3.0)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='tmdb_id') then
+    alter table movies add column tmdb_id integer;
+    -- Adiciona constraint unique se não existir
+    if not exists (select 1 from information_schema.table_constraints where table_name='movies' and constraint_name='movies_tmdb_id_key') then
+      alter table movies add constraint movies_tmdb_id_key unique (tmdb_id);
+    end if;
+  end if;
+
+  -- Coluna name (para séries/animes com nome diferente do título)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='name') then
+    alter table movies add column name text;
+  end if;
+
+  -- Coluna release_year (para filtros e lançamentos)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='release_year') then
+    alter table movies add column release_year integer;
+  end if;
+
+  -- Coluna vote_average (alias de rating usado pelo TMDB)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='vote_average') then
+    alter table movies add column vote_average float;
+  end if;
+
+  -- Coluna genre (gênero principal único)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='genre') then
+    alter table movies add column genre text;
+  end if;
+
+  -- Coluna preferred_quality
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='preferred_quality') then
+    alter table movies add column preferred_quality text;
+  end if;
+
+  -- Coluna collection_id (franquias)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='collection_id') then
+    alter table movies add column collection_id text;
+  end if;
+
+  -- Coluna collection_logo_path (logo da franquia)
+  if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='collection_logo_path') then
+    alter table movies add column collection_logo_path text;
+  end if;
+
   -- Coluna genres
   if not exists (select 1 from information_schema.columns where table_name='movies' and column_name='genres') then
     alter table movies add column genres text;
