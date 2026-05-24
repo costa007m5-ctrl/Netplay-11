@@ -5734,6 +5734,64 @@ export default function App() {
     });
   }, [continueWatching]);
 
+  // Personalização avançada: busca mais conteúdo do banco baseado nos top gêneros assistidos
+  const hasFetchedPersonalizedRef = React.useRef(false);
+  useEffect(() => {
+    if (hasFetchedPersonalizedRef.current || !user || continueWatching.length === 0 || myMovies.length === 0) return;
+
+    const fetchPersonalizedByGenre = async () => {
+      hasFetchedPersonalizedRef.current = true;
+
+      // Detecta top 3 gêneros do histórico
+      const genreCount: Record<string, number> = {};
+      continueWatching.forEach(m => {
+        const genres = (m.genres || '').split(',').map((g: string) => g.trim()).filter(Boolean);
+        genres.forEach(g => { genreCount[g] = (genreCount[g] || 0) + 1; });
+      });
+      const topGenres = Object.entries(genreCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([g]) => g);
+
+      if (topGenres.length === 0) return;
+
+      const existingIds = new Set(myMovies.map(m => m.id));
+      const COLS = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
+
+      // Busca até 80 títulos por gênero que ainda não estão carregados
+      const results = await Promise.all(
+        topGenres.map(genre =>
+          supabase.from('movies')
+            .select(COLS)
+            .ilike('genres', `%${genre}%`)
+            .eq('is_hidden', false)
+            .order('rating', { ascending: false })
+            .limit(80)
+        )
+      );
+
+      const newItems: Movie[] = [];
+      for (const res of results) {
+        if (res.data) {
+          for (const m of res.data) {
+            if (!existingIds.has(m.id)) {
+              newItems.push(fmtMovieRow(m));
+              existingIds.add(m.id);
+            }
+          }
+        }
+      }
+
+      if (newItems.length > 0) {
+        startTransition(() => {
+          setMyMovies(prev => [...prev, ...newItems]);
+        });
+      }
+    };
+
+    fetchPersonalizedByGenre();
+  }, [continueWatching, user, myMovies.length]);
+
   useEffect(() => {
     if (user) {
       fetchMyMovies();
