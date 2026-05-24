@@ -313,30 +313,48 @@ const MovieDetailsModal = React.memo(({
       let resolvedId: number = movie.id;
       let resolvedType: 'tv' | 'movie' = mediaType;
 
-      // Verifica se movie.id é válido no TMDB diretamente
+      // Helper: extrai gêneros pt-BR de um detailsRes
+      const extractGenres = (data: any): string => {
+        return (data?.genres || []).map((g: any) => g.name).filter(Boolean).join(', ');
+      };
+
+      // Helper: mescla todas as categorias de providers BR sem duplicatas
+      const mergeBrProviders = (brData: any): any[] => {
+        const all = [
+          ...(brData?.flatrate || []),
+          ...(brData?.buy || []),
+          ...(brData?.rent || []),
+          ...(brData?.free || []),
+          ...(brData?.ads || []),
+        ];
+        return all.filter((p, i, arr) => arr.findIndex(x => x.provider_id === p.provider_id) === i);
+      };
+
+      // Tenta buscar detalhes TMDB usando movie.id diretamente (mais rápido)
+      let detailsOk = false;
       try {
         const detailsEndpoint = mediaType === 'tv' ? requests.tvDetails(movie.id) : requests.movieDetails(movie.id);
         const detailsRes = await tmdb.get(detailsEndpoint, { params: { language: 'pt-BR' } });
         if (!cancelled && detailsRes.data?.id) {
-          // Extrai gêneros dos detalhes
-          const genreNames: string[] = (detailsRes.data.genres || []).map((g: any) => g.name);
-          if (genreNames.length > 0 && !movie.genres) {
-            setTmdbGenres(genreNames.join(', '));
-          }
+          detailsOk = true;
+          const genres = extractGenres(detailsRes.data);
+          if (genres) setTmdbGenres(genres); // sempre sobrescreve com pt-BR do TMDB
         }
       } catch {
-        // ID direto falhou — tenta busca por título
+        detailsOk = false;
+      }
+
+      // Se ID direto falhou, busca por título
+      if (!detailsOk) {
         const foundId = await lookupTmdbId(title, mediaType, year);
         if (!cancelled && foundId) {
           resolvedId = foundId;
           try {
             const detEndpoint = mediaType === 'tv' ? requests.tvDetails(foundId) : requests.movieDetails(foundId);
             const det = await tmdb.get(detEndpoint, { params: { language: 'pt-BR' } });
-            if (!cancelled && det.data?.genres) {
-              const genreNames: string[] = (det.data.genres || []).map((g: any) => g.name);
-              if (genreNames.length > 0 && !movie.genres) {
-                setTmdbGenres(genreNames.join(', '));
-              }
+            if (!cancelled) {
+              const genres = extractGenres(det.data);
+              if (genres) setTmdbGenres(genres);
             }
           } catch {}
         } else if (!cancelled) {
@@ -361,44 +379,46 @@ const MovieDetailsModal = React.memo(({
         }
       }
 
-      // Fetch watch providers com ID resolvido
-      try {
-        const wpUrl = resolvedType === 'tv' ? requests.tvWatchProviders(resolvedId) : requests.movieWatchProviders(resolvedId);
-        const res = await tmdb.get(wpUrl);
-        let brProviders = res.data.results?.BR?.flatrate || res.data.results?.BR?.buy || res.data.results?.BR?.free || [];
-
-        // Se vazio, tenta tipo alternativo
-        if (brProviders.length === 0) {
-          const altUrl = resolvedType === 'tv' ? requests.movieWatchProviders(resolvedId) : requests.tvWatchProviders(resolvedId);
-          try {
-            const altRes = await tmdb.get(altUrl);
-            brProviders = altRes.data.results?.BR?.flatrate || altRes.data.results?.BR?.buy || altRes.data.results?.BR?.free || [];
-          } catch {}
+      // Fetch watch providers — mescla TODAS as categorias BR
+      const fetchProviders = async (id: number, type: 'tv' | 'movie'): Promise<any[]> => {
+        try {
+          const wpUrl = type === 'tv' ? requests.tvWatchProviders(id) : requests.movieWatchProviders(id);
+          const res = await tmdb.get(wpUrl);
+          return mergeBrProviders(res.data.results?.BR);
+        } catch {
+          return [];
         }
+      };
 
-        if (!cancelled) {
-          setRealWatchProviders(brProviders);
-          if (brProviders.length > 0) {
-            const knownProviders = [
-              { name: 'Netflix', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', bg: 'bg-black' },
-              { name: 'Disney+', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', bg: 'bg-[#00143c]' },
-              { name: 'Max', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg', bg: 'bg-[#002be7]' },
-              { name: 'Prime Video', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png', bg: 'bg-[#00a8e1]' },
-              { name: 'Apple TV+', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg', bg: 'bg-black' },
-              { name: 'Paramount+', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg', bg: 'bg-blue-900' },
-              { name: 'Globoplay', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg', bg: 'bg-white' },
-              { name: 'Hulu', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Hulu_Logo.svg', bg: 'bg-[#1ce783]' }
-            ];
-            const found = brProviders.find((p: any) =>
-              knownProviders.some(kp => p.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(p.provider_name.toLowerCase()))
-            );
-            if (found) {
-              const kpData = knownProviders.find(kp => found.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(found.provider_name.toLowerCase()));
-              if (kpData) setCurrentProvider(kpData);
-            }
+      let brProviders = await fetchProviders(resolvedId, resolvedType);
+
+      // Se vazio, tenta tipo alternativo
+      if (brProviders.length === 0) {
+        brProviders = await fetchProviders(resolvedId, resolvedType === 'tv' ? 'movie' : 'tv');
+      }
+
+      if (!cancelled) {
+        setRealWatchProviders(brProviders);
+        if (brProviders.length > 0) {
+          const knownProviders = [
+            { name: 'Netflix', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', bg: 'bg-black' },
+            { name: 'Disney+', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', bg: 'bg-[#00143c]' },
+            { name: 'Max', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg', bg: 'bg-[#002be7]' },
+            { name: 'Prime Video', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png', bg: 'bg-[#00a8e1]' },
+            { name: 'Apple TV+', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg', bg: 'bg-black' },
+            { name: 'Paramount+', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg', bg: 'bg-blue-900' },
+            { name: 'Globoplay', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg', bg: 'bg-white' },
+            { name: 'Hulu', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Hulu_Logo.svg', bg: 'bg-[#1ce783]' }
+          ];
+          const found = brProviders.find((p: any) =>
+            knownProviders.some(kp => p.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(p.provider_name.toLowerCase()))
+          );
+          if (found) {
+            const kpData = knownProviders.find(kp => found.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(found.provider_name.toLowerCase()));
+            if (kpData) setCurrentProvider(kpData);
           }
         }
-      } catch {}
+      }
     }
 
     fetchTmdbData();
