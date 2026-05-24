@@ -886,7 +886,7 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
   );
 });
 
-const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean }) => {
+const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading, loadingMoreCount }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean; loadingMoreCount?: number }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [expandedGenre, setExpandedGenre] = React.useState<string | null>(null);
   const [expandedCount, setExpandedCount] = React.useState(30);
@@ -993,6 +993,17 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
             </>
           )}
         </div>
+
+        {/* Banner de carregamento em background */}
+        {!isLoading && (loadingMoreCount ?? 0) > 0 && (
+          <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl w-fit">
+            <div className="w-3.5 h-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin flex-none" />
+            <span className="text-gray-400 text-[11px] font-bold uppercase tracking-widest">
+              Carregando mais {(loadingMoreCount ?? 0).toLocaleString('pt-BR')} títulos...
+            </span>
+            <span className="text-gray-600 text-[10px]">você já pode navegar e buscar</span>
+          </div>
+        )}
 
         {/* Search bar — always visible */}
         {!expandedGenre && (
@@ -3551,6 +3562,7 @@ export default function App() {
   const [isPlansScreenOpen, setIsPlansScreenOpen] = useState(false);
   const [myMovies, setMyMovies] = useState<Movie[]>([]);
   const [isLoadingMovies, setIsLoadingMovies] = useState(true);
+  const [loadingMoreCount, setLoadingMoreCount] = useState(0);
   const [continueWatching, setContinueWatching] = useState<Movie[]>([]);
   const [watchHistory, setWatchHistory] = useState<Record<number, number>>({});
   
@@ -5383,7 +5395,7 @@ export default function App() {
       return;
     }
 
-    const formatMovies = (rawData: any[]): Movie[] =>
+    const fmt = (rawData: any[]): Movie[] =>
       rawData.map(m => ({
         ...m,
         id: m.id,
@@ -5403,7 +5415,6 @@ export default function App() {
     const saveCache = (movies: Movie[]) => {
       try {
         const str = JSON.stringify(movies);
-        // Só cacheia se couber em 4MB (limite seguro do localStorage)
         if (str.length < 4 * 1024 * 1024) {
           localStorage.setItem('cached_my_movies_v3', str);
         } else {
@@ -5415,68 +5426,89 @@ export default function App() {
     };
 
     try {
-      const PAGE_SIZE = 1000;
+      const INITIAL = 500;
+      const BATCH = 1000;
+      const CONCURRENCY = 5;
 
-      // 1. Busca a quantidade total (requisição HEAD ultra-rápida)
-      const { count, error: countError } = await supabase
-        .from('movies')
-        .select('id', { count: 'exact', head: true });
+      // 1. Em paralelo: conta totais + busca os primeiros 500 de cada tipo
+      const [
+        { count: totalMovies },
+        { count: totalSeries },
+        { data: firstMovies, error: errM },
+        { data: firstSeries, error: errS },
+      ] = await Promise.all([
+        supabase.from('movies').select('id', { count: 'exact', head: true }).eq('type', 'movie'),
+        supabase.from('movies').select('id', { count: 'exact', head: true }).eq('type', 'series'),
+        supabase.from('movies').select('*').eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL - 1),
+        supabase.from('movies').select('*').eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL - 1),
+      ]);
 
-      if (countError) throw countError;
+      if (errM) throw errM;
+      if (errS) throw errS;
 
-      const total = count || 0;
-      const pageCount = Math.ceil(total / PAGE_SIZE);
-      console.log(`Total: ${total} conteúdos, ${pageCount} páginas`);
+      const initialItems = [...(firstMovies || []), ...(firstSeries || [])];
+      setMyMovies(fmt(initialItems));
+      setIsLoadingMovies(false);
 
-      // 2. Busca a primeira página e exibe imediatamente
-      const { data: firstPage, error: firstError } = await supabase
-        .from('movies')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(0, PAGE_SIZE - 1);
+      const remainMovies = Math.max(0, (totalMovies || 0) - INITIAL);
+      const remainSeries = Math.max(0, (totalSeries || 0) - INITIAL);
+      const totalRemaining = remainMovies + remainSeries;
 
-      if (firstError) throw firstError;
-
-      if (firstPage && firstPage.length > 0) {
-        setMyMovies(formatMovies(firstPage));
-        setIsLoadingMovies(false);
-      }
-
-      if (pageCount <= 1) {
-        const formatted = formatMovies(firstPage || []);
-        setMyMovies(formatted);
-        saveCache(formatted);
-        setIsLoadingMovies(false);
+      if (totalRemaining === 0) {
+        saveCache(fmt(initialItems));
+        setLoadingMoreCount(0);
         return;
       }
 
-      // 3. Busca as páginas restantes em paralelo (lotes de 5 simultâneas)
-      const CONCURRENCY = 5;
-      const remainingPages = Array.from({ length: pageCount - 1 }, (_, i) => i + 1);
-      let allData: any[] = firstPage || [];
+      setLoadingMoreCount(totalRemaining);
 
-      for (let i = 0; i < remainingPages.length; i += CONCURRENCY) {
-        const batch = remainingPages.slice(i, i + CONCURRENCY);
-        const results = await Promise.all(
-          batch.map(page =>
-            supabase
-              .from('movies')
-              .select('*')
-              .order('created_at', { ascending: false })
-              .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-          )
-        );
-        for (const { data, error } of results) {
-          if (error) console.error('Erro numa página:', error);
-          if (data) allData = allData.concat(data);
+      // 2. Carrega o restante de cada tipo em paralelo, atualizando a tela a cada lote
+      const loadRest = async (type: 'movie' | 'series', total: number) => {
+        if (total <= INITIAL) return;
+        const ranges: number[] = [];
+        for (let s = INITIAL; s < total; s += BATCH) ranges.push(s);
+
+        for (let i = 0; i < ranges.length; i += CONCURRENCY) {
+          const slice = ranges.slice(i, i + CONCURRENCY);
+          const results = await Promise.all(
+            slice.map(start =>
+              supabase
+                .from('movies')
+                .select('*')
+                .eq('type', type)
+                .order('created_at', { ascending: false })
+                .range(start, start + BATCH - 1)
+            )
+          );
+          for (const { data, error } of results) {
+            if (error) console.error(`Erro paginando ${type}:`, error);
+            if (data && data.length > 0) {
+              const newItems = fmt(data);
+              setMyMovies(prev => {
+                const existingIds = new Set(prev.map(m => m.id));
+                return [...prev, ...newItems.filter(m => !existingIds.has(m.id))];
+              });
+              setLoadingMoreCount(c => Math.max(0, c - data.length));
+            }
+          }
         }
-      }
+      };
 
-      const formatted = formatMovies(allData);
-      setMyMovies(formatted);
-      saveCache(formatted);
+      // Roda filmes e séries em paralelo no background
+      await Promise.all([
+        loadRest('movie', totalMovies || 0),
+        loadRest('series', totalSeries || 0),
+      ]);
+
+      setLoadingMoreCount(0);
+      // Salva cache com tudo carregado
+      setMyMovies(prev => {
+        saveCache(prev);
+        return prev;
+      });
     } catch (error) {
       console.error('Erro ao buscar filmes do Supabase:', error);
+      setLoadingMoreCount(0);
     } finally {
       setIsLoadingMovies(false);
     }
@@ -6559,8 +6591,8 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
-          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
-          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
+          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} loadingMoreCount={loadingMoreCount} />} />
+          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} loadingMoreCount={loadingMoreCount} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
