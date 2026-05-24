@@ -27,6 +27,7 @@ import AdminEpisodeSettingsTab from './AdminEpisodeSettingsTab';
 import AdminFlixAPITab from './AdminFlixAPITab';
 import AdminNet2Tab from './AdminNet2Tab';
 import AdminFlix3Tab from './AdminFlix3Tab';
+import AdminSubaflixTab from './AdminSubaflixTab';
 import QualitySelect from './QualitySelect';
 import MigrateBatchPanel from './MigrateBatchPanel';
 
@@ -59,7 +60,7 @@ interface AdminPanelProps {
   onRefresh?: () => void;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3' | 'player-apis';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3' | 'player-apis' | 'subaflix';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1695,6 +1696,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             <p className="hidden md:block text-[10px] text-gray-500 font-black uppercase tracking-widest mb-4 px-4">Categorias</p>
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Activity },
+              { id: 'subaflix', label: 'Subaflix', icon: Settings },
               { id: 'quente', label: 'Quente', icon: Activity },
               { id: 'net2', label: 'Net 2.0', icon: Tv },
               { id: 'flixapi', label: 'API Flix', icon: Tv },
@@ -2275,6 +2277,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminMercadoPagoTab />
             ) : activeTab === 'referrals' ? (
               <AdminReferralsTab />
+            ) : activeTab === 'subaflix' ? (
+              <AdminSubaflixTab />
             ) : activeTab === 'net2' ? (
               <AdminNet2Tab />
             ) : activeTab === 'flixapi' ? (

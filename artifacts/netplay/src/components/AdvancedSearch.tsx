@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import tmdb, { requests } from '../services/tmdb';
 import { Movie } from '../types';
 import { CATEGORIES } from '../constants';
+import { supabase } from '../lib/supabase';
 
 interface AdvancedSearchProps {
   onSelectMovie: (movie: Movie) => void;
@@ -23,6 +24,7 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
   const [localResults, setLocalResults] = useState<Movie[]>([]);
   const [externalResults, setExternalResults] = useState<Movie[]>([]);
+  const [dbResults, setDbResults] = useState<Movie[]>([]);
   const [franchiseResults, setFranchiseResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
@@ -130,6 +132,33 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
         });
 
         setExternalResults(filteredTmdb);
+
+        // Busca simultânea no banco de dados (encontra títulos da biblioteca completa)
+        if (activeQuery && activeQuery.length >= 2) {
+          try {
+            const DB_COLS = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at';
+            const { data: dbData } = await supabase
+              .from('movies')
+              .select(DB_COLS)
+              .ilike('title', `%${activeQuery}%`)
+              .eq('is_hidden', false)
+              .order('rating', { ascending: false })
+              .limit(60);
+            if (dbData && dbData.length > 0) {
+              setDbResults(dbData.map((m: any) => ({
+                ...m,
+                videoUrl: m.video_url,
+                videoUrl2: m.video_url_2,
+                vote_average: m.vote_average || m.rating || 0,
+                rating: m.rating || m.vote_average || 0,
+              })));
+            } else {
+              setDbResults([]);
+            }
+          } catch (_e) {
+            setDbResults([]);
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -145,6 +174,7 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
     setDebouncedQuery('');
     setLocalResults([]);
     setExternalResults([]);
+    setDbResults([]);
     setFranchiseResults([]);
     setSearchParams({}, { replace: true });
   };
@@ -165,45 +195,49 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
 
   // Deduplicate merged results for final render
   const mergedDisplayResults = useMemo(() => {
-     // Mapa de resultados locais — chave primária é o ID numérico do item
-     const localsById = new globalThis.Map<any, Movie>();
+     const normalizeTitle = (s: string) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
+
+     // Mapa de resultados da biblioteca — prioridade: myMovies (800 carregados) > dbResults (busca no banco completo)
+     const libraryById = new globalThis.Map<any, any>();
+
      localResults.forEach(loc => {
-        localsById.set(loc.id, loc);
+        libraryById.set(loc.id, { ...loc, _isLocal: true });
+     });
+
+     // Adiciona resultados do banco de dados (biblioteca completa) que não estão em myMovies
+     dbResults.forEach(db => {
+        if (!libraryById.has(db.id)) {
+           libraryById.set(db.id, { ...db, _isLocal: true });
+        }
      });
 
      const externals: any[] = [];
 
-     const normalizeTitle = (s: string) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/gi, '');
-
      externalResults.forEach((ext: any) => {
-        // Se o item externo já está na biblioteca (por ID ou por título), mostra como local com dados corretos
-        const existingInLibrary = myMovies.find(m =>
-          m.id == ext.id ||
-          (normalizeTitle(m.title || (m as any).name || '') === normalizeTitle(ext.title || ext.name || '') &&
-           normalizeTitle(m.title || (m as any).name || '').length > 0)
-        );
+        // Se o item externo já está na biblioteca (por ID, por título normalizado, ou por dbResults)
+        const existingInLibrary =
+          libraryById.get(ext.id) ||
+          Array.from(libraryById.values()).find(m =>
+            normalizeTitle(m.title || m.name || '') === normalizeTitle(ext.title || ext.name || '') &&
+            normalizeTitle(m.title || m.name || '').length > 2
+          );
 
         if (existingInLibrary) {
-          // Garante que aparece com dados completos da biblioteca (type, episodes, etc.)
-          if (!localsById.has(existingInLibrary.id)) {
-             localsById.set(existingInLibrary.id, existingInLibrary);
+          // Garante que aparece com dados completos da biblioteca
+          if (!libraryById.has(existingInLibrary.id)) {
+             libraryById.set(existingInLibrary.id, { ...existingInLibrary, _isLocal: true });
           }
         } else {
           // Sugestão externa genuína — deduplica por ID
           if (!externals.some(e => e.id == ext.id)) {
-            externals.push(ext);
+            externals.push({ ...ext, _isLocal: false });
           }
         }
      });
 
-     const locals = Array.from(localsById.values());
-
-     // Anota os arrays para renderizar badges
-     const annotatedLocals = locals.map((m: any) => ({ ...(m as any), _isLocal: true }));
-     const annotatedExternals = externals.map((m: any) => ({ ...(m as any), _isLocal: false }));
-
-     return [...annotatedLocals, ...annotatedExternals];
-  }, [localResults, externalResults, myMovies]);
+     const libraryItems = Array.from(libraryById.values());
+     return [...libraryItems, ...externals];
+  }, [localResults, externalResults, dbResults, myMovies]);
 
 
   return (

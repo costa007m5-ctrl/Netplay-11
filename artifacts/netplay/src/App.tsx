@@ -981,31 +981,39 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     }
     let cancelled = false;
     setIsSearching(true);
-    const COLS_SEARCH_FALLBACK = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
+
+    const SAFE_COLS = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
     const dbType = type === 'series' ? 'series' : 'movie';
-    supabase
-      .from('movies')
-      .select(MOVIE_COLS_SEARCH)
-      .eq('type', dbType)
-      .ilike('title', `%${debouncedSearch}%`)
-      .order('rating', { ascending: false })
-      .limit(200)
-      .then(async ({ data, error }) => {
+
+    const doSearch = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('movies')
+          .select(SAFE_COLS)
+          .eq('type', dbType)
+          .ilike('title', `%${debouncedSearch}%`)
+          .eq('is_hidden', false)
+          .order('rating', { ascending: false })
+          .limit(200);
+
         if (cancelled) return;
         if (error) {
-          const { data: fallbackData } = await supabase
-            .from('movies')
-            .select(COLS_SEARCH_FALLBACK)
-            .eq('type', dbType)
-            .ilike('title', `%${debouncedSearch}%`)
-            .order('rating', { ascending: false })
-            .limit(200);
-          if (!cancelled) setSupabaseResults((fallbackData || []).map(fmtMovieRow));
+          console.warn('[ContentFilteredPage] Erro na busca Supabase:', error.message);
+          setSupabaseResults([]);
         } else {
           setSupabaseResults((data || []).map(fmtMovieRow));
         }
-        setIsSearching(false);
-      });
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[ContentFilteredPage] Erro inesperado na busca:', err);
+          setSupabaseResults([]);
+        }
+      } finally {
+        if (!cancelled) setIsSearching(false);
+      }
+    };
+
+    doSearch();
     return () => { cancelled = true; };
   }, [debouncedSearch, type]);
 
@@ -5585,9 +5593,13 @@ export default function App() {
     // Nível 3: seleciona tudo (exatamente como fetchMyList faz com movies(*)) e filtra no cliente
     const COLS_LEVEL3 = '*';
 
+    // Lê limites configurados pelo admin (Subaflix) ou usa o padrão de 800
+    const movieLimit = parseInt(localStorage.getItem('subaflix_movie_limit') || '800', 10);
+    const seriesLimit = parseInt(localStorage.getItem('subaflix_series_limit') || '800', 10);
+
     const queryBoth = async (cols: string) => Promise.all([
-      supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).limit(500),
-      supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).limit(500),
+      supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).limit(movieLimit),
+      supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).limit(seriesLimit),
     ]);
 
     const stripHeavyFields = (rows: any[]): any[] =>
