@@ -5592,9 +5592,19 @@ export default function App() {
     // Nível 3: seleciona tudo (exatamente como fetchMyList faz com movies(*)) e filtra no cliente
     const COLS_LEVEL3 = '*';
 
-    // Lê limites configurados pelo admin (Subaflix) ou usa o padrão de 800
-    const movieLimit = parseInt(localStorage.getItem('subaflix_movie_limit') || '800', 10);
-    const seriesLimit = parseInt(localStorage.getItem('subaflix_series_limit') || '800', 10);
+    // Lê limites configurados pelo admin (Subaflix) do servidor (global para todos os usuários)
+    let movieLimit = 800;
+    let seriesLimit = 800;
+    try {
+      const settingsRes = await fetch('/api/settings');
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json();
+        if (settings.movie_limit) movieLimit = parseInt(settings.movie_limit, 10);
+        if (settings.series_limit) seriesLimit = parseInt(settings.series_limit, 10);
+      }
+    } catch (_e) {
+      // Fallback para 800 se API falhar
+    }
 
     // Supabase PostgREST retorna no máximo 1000 linhas por requisição.
     // Quando o limite é maior, paginamos em blocos de 1000 e combinamos os resultados.

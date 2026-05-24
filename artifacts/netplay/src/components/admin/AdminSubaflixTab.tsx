@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
-import { Settings, Film, Tv, Save, RefreshCw, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, Film, Tv, Save, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 
-const MOVIE_LIMIT_KEY = 'subaflix_movie_limit';
-const SERIES_LIMIT_KEY = 'subaflix_series_limit';
-
+const DEFAULT_LIMIT = 800;
 const QUICK_OPTIONS = [100, 200, 500, 800, 1000, 2000, 5000];
 
 const LimitControl: React.FC<{
@@ -13,6 +11,10 @@ const LimitControl: React.FC<{
   onChange: (v: number) => void;
 }> = ({ icon, label, value, onChange }) => {
   const [inputValue, setInputValue] = useState(String(value));
+
+  useEffect(() => {
+    setInputValue(String(value));
+  }, [value]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '');
@@ -70,29 +72,53 @@ const LimitControl: React.FC<{
 };
 
 const AdminSubaflixTab: React.FC = () => {
-  const [movieLimit, setMovieLimit] = useState<number>(
-    parseInt(localStorage.getItem(MOVIE_LIMIT_KEY) || '800', 10)
-  );
-  const [seriesLimit, setSeriesLimit] = useState<number>(
-    parseInt(localStorage.getItem(SERIES_LIMIT_KEY) || '800', 10)
-  );
+  const [movieLimit, setMovieLimit] = useState<number>(DEFAULT_LIMIT);
+  const [seriesLimit, setSeriesLimit] = useState<number>(DEFAULT_LIMIT);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
-    localStorage.setItem(MOVIE_LIMIT_KEY, String(movieLimit));
-    localStorage.setItem(SERIES_LIMIT_KEY, String(seriesLimit));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (data.movie_limit) setMovieLimit(parseInt(data.movie_limit, 10));
+        if (data.series_limit) setSeriesLimit(parseInt(data.series_limit, 10));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const persist = async (ml: number, sl: number) => {
+    setSaving(true);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movie_limit: String(ml), series_limit: String(sl) }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const handleSave = () => persist(movieLimit, seriesLimit);
+
   const handleReset = () => {
-    setMovieLimit(800);
-    setSeriesLimit(800);
-    localStorage.setItem(MOVIE_LIMIT_KEY, '800');
-    localStorage.setItem(SERIES_LIMIT_KEY, '800');
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setMovieLimit(DEFAULT_LIMIT);
+    setSeriesLimit(DEFAULT_LIMIT);
+    persist(DEFAULT_LIMIT, DEFAULT_LIMIT);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <Loader2 className="text-red-500 animate-spin" size={28} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 p-6 md:p-10 max-w-2xl">
@@ -128,26 +154,28 @@ const AdminSubaflixTab: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-4">
-        <p className="text-yellow-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
-          Após salvar, recarregue o app (F5 ou feche e abra) para que o novo limite entre em vigor.
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4">
+        <p className="text-blue-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
+          As configurações ficam salvas no servidor e valem para todos os usuários da plataforma.
         </p>
       </div>
 
       <div className="flex gap-3">
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-8 py-3 bg-red-600 hover:bg-red-500 rounded-xl font-black uppercase text-xs tracking-widest text-white transition-all shadow-lg shadow-red-600/20"
+          disabled={saving}
+          className="flex items-center gap-2 px-8 py-3 bg-red-600 hover:bg-red-500 disabled:opacity-60 rounded-xl font-black uppercase text-xs tracking-widest text-white transition-all shadow-lg shadow-red-600/20"
         >
-          {saved ? <CheckCircle size={16} /> : <Save size={16} />}
-          {saved ? 'Salvo!' : 'Salvar'}
+          {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
+          {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
         </button>
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-black uppercase text-xs tracking-widest text-gray-400 hover:text-white transition-all"
+          disabled={saving}
+          className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-black uppercase text-xs tracking-widest text-gray-400 hover:text-white transition-all disabled:opacity-60"
         >
           <RefreshCw size={14} />
-          Resetar (800)
+          Resetar ({DEFAULT_LIMIT})
         </button>
       </div>
     </div>
