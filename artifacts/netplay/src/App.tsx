@@ -981,16 +981,29 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     }
     let cancelled = false;
     setIsSearching(true);
+    const COLS_SEARCH_FALLBACK = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
+    const dbType = type === 'series' ? 'series' : 'movie';
     supabase
       .from('movies')
       .select(MOVIE_COLS_SEARCH)
-      .eq('type', type === 'series' ? 'series' : 'movie')
+      .eq('type', dbType)
       .ilike('title', `%${debouncedSearch}%`)
       .order('rating', { ascending: false })
       .limit(200)
-      .then(({ data }) => {
+      .then(async ({ data, error }) => {
         if (cancelled) return;
-        setSupabaseResults((data || []).map(fmtMovieRow));
+        if (error) {
+          const { data: fallbackData } = await supabase
+            .from('movies')
+            .select(COLS_SEARCH_FALLBACK)
+            .eq('type', dbType)
+            .ilike('title', `%${debouncedSearch}%`)
+            .order('rating', { ascending: false })
+            .limit(200);
+          if (!cancelled) setSupabaseResults((fallbackData || []).map(fmtMovieRow));
+        } else {
+          setSupabaseResults((data || []).map(fmtMovieRow));
+        }
         setIsSearching(false);
       });
     return () => { cancelled = true; };
@@ -5549,6 +5562,7 @@ export default function App() {
 
     const saveCache = (movies: Movie[]) => {
       try {
+        if (movies.length === 0) return; // Nunca sobrescreve cache com lista vazia
         const str = JSON.stringify(movies);
         if (str.length < 4 * 1024 * 1024) {
           localStorage.setItem('cached_my_movies_v4', str);
@@ -5560,25 +5574,31 @@ export default function App() {
       }
     };
 
-    try {
-      // Carrega 500 filmes + 250 séries imediatamente usando colunas leves (sem episodes/actors/overview).
-      // Isso reduz o payload de ~10MB para ~500KB, tornando o load muito mais rápido.
-      // O restante da biblioteca (2000+) é acessível via pesquisa — busca direto no Supabase.
+    // Colunas mínimas garantidas — fallback se colunas extras não existirem
+    const MOVIE_COLS_ESSENTIAL = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,genres,video_url,video_url_2,logo_path,is_hidden,created_at,updated_at';
+
+    const runQuery = async (cols: string) => {
       const INITIAL_MOVIES = 500;
       const INITIAL_SERIES = 250;
-
-      const [
-        { data: firstMovies, error: errM },
-        { data: firstSeries, error: errS },
-      ] = await Promise.all([
-        supabase.from('movies').select(MOVIE_COLS_BROWSE).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL_MOVIES - 1),
-        supabase.from('movies').select(MOVIE_COLS_BROWSE).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL_SERIES - 1),
+      return Promise.all([
+        supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL_MOVIES - 1),
+        supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL_SERIES - 1),
       ]);
+    };
 
-      if (errM) throw errM;
-      if (errS) throw errS;
+    try {
+      // Tenta primeiro com colunas otimizadas; cai para colunas básicas se alguma não existir
+      let [resMovies, resSeries] = await runQuery(MOVIE_COLS_BROWSE);
 
-      const initialItems = [...(firstMovies || []), ...(firstSeries || [])].map(fmtMovieRow);
+      if (resMovies.error || resSeries.error) {
+        console.warn('Colunas extras não encontradas, usando fallback:', resMovies.error?.message || resSeries.error?.message);
+        [resMovies, resSeries] = await runQuery(MOVIE_COLS_ESSENTIAL);
+      }
+
+      if (resMovies.error) throw resMovies.error;
+      if (resSeries.error) throw resSeries.error;
+
+      const initialItems = [...(resMovies.data || []), ...(resSeries.data || [])].map(fmtMovieRow);
       setMyMovies(initialItems);
       setLoadingMoreCount(0);
       setIsLoadingMovies(false);
@@ -5597,13 +5617,20 @@ export default function App() {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const COLS_NEW = 'id,title,type,poster_path,backdrop_path,release_date,release_year,rating,vote_average,video_url,video_url_2,logo_path,genres,is_hidden,created_at';
-      const [{ data: movies }, { data: series }] = await Promise.all([
+      const COLS_NEW = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,video_url,video_url_2,logo_path,genres,is_hidden,created_at';
+      const [resM, resS] = await Promise.all([
         supabase.from('movies').select(COLS_NEW).eq('type', 'movie').gte('created_at', today.toISOString()).order('created_at', { ascending: false }).limit(20),
         supabase.from('movies').select(COLS_NEW).eq('type', 'series').gte('created_at', today.toISOString()).order('created_at', { ascending: false }).limit(20),
       ]);
-      setNewOnPlatformMovies((movies || []).map(fmtMovieRow));
-      setNewOnPlatformSeries((series || []).map(fmtMovieRow));
+      const COLS_NEW_SAFE = 'id,title,type,poster_path,backdrop_path,release_date,rating,vote_average,video_url,video_url_2,logo_path,genres,is_hidden,created_at';
+      const moviesData = resM.error
+        ? (await supabase.from('movies').select(COLS_NEW_SAFE).eq('type', 'movie').gte('created_at', today.toISOString()).order('created_at', { ascending: false }).limit(20)).data
+        : resM.data;
+      const seriesData = resS.error
+        ? (await supabase.from('movies').select(COLS_NEW_SAFE).eq('type', 'series').gte('created_at', today.toISOString()).order('created_at', { ascending: false }).limit(20)).data
+        : resS.data;
+      setNewOnPlatformMovies((moviesData || []).map(fmtMovieRow));
+      setNewOnPlatformSeries((seriesData || []).map(fmtMovieRow));
     } catch (e) {
       console.error('Erro ao buscar novidades na plataforma:', e);
     }
