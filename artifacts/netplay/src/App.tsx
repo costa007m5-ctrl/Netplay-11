@@ -888,119 +888,232 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
 
 const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [selectedGenre, setSelectedGenre] = React.useState('');
-
-  const filtered = React.useMemo(() => {
-    let items = type === 'series'
-      ? myMovies.filter((m: any) => m.type === 'series')
-      : myMovies.filter((m: any) => m.type === 'movie' || (!m.type && m.type !== 'series'));
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      items = items.filter((m: any) => ((m.title || m.name || '')).toLowerCase().includes(q));
-    }
-    if (selectedGenre) {
-      items = items.filter((m: any) => (m.genres || '').toLowerCase().includes(selectedGenre.toLowerCase()));
-    }
-    return items;
-  }, [myMovies, type, searchQuery, selectedGenre]);
-
-  const genres = React.useMemo(() => {
-    const all = myMovies
-      .filter((m: any) => type === 'series' ? m.type === 'series' : m.type === 'movie' || !m.type)
-      .flatMap((m: any) => (m.genres || '').split(',').map((g: string) => g.trim()))
-      .filter(Boolean);
-    return [...new Set(all)].sort().slice(0, 14) as string[];
-  }, [myMovies, type]);
+  const [expandedGenre, setExpandedGenre] = React.useState<string | null>(null);
+  const [expandedCount, setExpandedCount] = React.useState(30);
 
   const label = type === 'series' ? 'Séries' : 'Filmes';
+
+  const baseItems = React.useMemo(() => {
+    return type === 'series'
+      ? myMovies.filter((m: any) => m.type === 'series')
+      : myMovies.filter((m: any) => m.type === 'movie' || (!m.type && m.type !== 'series'));
+  }, [myMovies, type]);
+
+  const searchFiltered = React.useMemo(() => {
+    if (!searchQuery) return baseItems;
+    const q = searchQuery.toLowerCase();
+    return baseItems.filter((m: any) => ((m.title || m.name || '')).toLowerCase().includes(q));
+  }, [baseItems, searchQuery]);
+
+  const genreGroups = React.useMemo(() => {
+    const map = new Map<string, Movie[]>();
+    for (const m of baseItems) {
+      const genres = (m.genres || '').split(',').map((g: string) => g.trim()).filter(Boolean);
+      const keys = genres.length > 0 ? genres : ['Outros'];
+      for (const g of keys) {
+        const arr = map.get(g) || [];
+        arr.push(m as Movie);
+        map.set(g, arr);
+      }
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([genre, items]) => ({ genre, items }));
+  }, [baseItems]);
+
+  const expandedItems = React.useMemo(() => {
+    if (!expandedGenre) return [];
+    const group = genreGroups.find(g => g.genre === expandedGenre);
+    return group ? group.items.slice(0, expandedCount) : [];
+  }, [expandedGenre, genreGroups, expandedCount]);
+
+  const handleExpandGenre = (genre: string) => {
+    setExpandedGenre(genre);
+    setExpandedCount(30);
+  };
+
+  const handleBackToCarousels = () => {
+    setExpandedGenre(null);
+    setExpandedCount(30);
+  };
+
+  const MovieCard = React.useCallback(({ m, idx }: { m: any; idx: number }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+      className="group cursor-pointer"
+      onClick={() => onSelectMovie(m)}
+    >
+      <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
+        <img
+          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w342${m.backdrop_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster')}
+          alt={m.title || m.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+          <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{m.title || m.name}</p>
+          {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
+        </div>
+        {m.type === 'series' && type === 'series' && (
+          <div className="absolute top-2 right-2 bg-red-600/80 px-1.5 py-0.5 rounded text-[7px] font-black text-white uppercase tracking-widest">Série</div>
+        )}
+      </div>
+      <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
+    </motion.div>
+  ), [onSelectMovie, type]);
 
   return (
     <div className="min-h-screen bg-[#111] text-white pb-32 pt-20 md:pt-28">
       <div className="px-5 md:px-12 max-w-[1920px] mx-auto">
-        <div className="flex items-end gap-4 mb-8">
-          <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter text-white leading-none">{label}</h1>
-          <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-2">{isLoading ? 'Carregando...' : `${filtered.length} títulos`}</span>
-        </div>
 
-        <div className="flex flex-col gap-3 mb-8">
-          <div className="relative max-w-lg">
-            <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder={`Buscar ${label.toLowerCase()}...`}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-10 pr-10 text-sm font-bold text-white placeholder-gray-600 outline-none focus:border-red-600 transition-colors"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
-                <X size={15} />
+        {/* Header */}
+        <div className="flex items-end gap-4 mb-8">
+          {expandedGenre ? (
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleBackToCarousels}
+                className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors font-black uppercase tracking-widest text-xs"
+              >
+                ← Voltar
               </button>
-            )}
-          </div>
-          {genres.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              {genres.map((genre: string) => (
-                <button
-                  key={genre}
-                  onClick={() => setSelectedGenre(selectedGenre === genre ? '' : genre)}
-                  className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${selectedGenre === genre ? 'bg-red-600 border-red-600 text-white' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
-                >
-                  {genre}
-                </button>
-              ))}
+              <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter text-white leading-none">{expandedGenre}</h1>
+              <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-0.5">
+                {genreGroups.find(g => g.genre === expandedGenre)?.items.length || 0} títulos
+              </span>
             </div>
+          ) : (
+            <>
+              <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter text-white leading-none">{label}</h1>
+              <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-2">
+                {isLoading ? 'Carregando...' : `${baseItems.length} títulos`}
+              </span>
+            </>
           )}
         </div>
 
+        {/* Search bar — always visible */}
+        {!expandedGenre && (
+          <div className="flex flex-col gap-3 mb-10">
+            <div className="relative max-w-lg">
+              <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={`Buscar ${label.toLowerCase()}...`}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-10 pr-10 text-sm font-bold text-white placeholder-gray-600 outline-none focus:border-red-600 transition-colors"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Loading skeleton */}
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse border border-white/5" />
+          <div className="space-y-10">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i}>
+                <div className="h-4 w-36 bg-white/5 rounded animate-pulse mb-4" />
+                <div className="flex gap-3">
+                  {Array.from({ length: 10 }).map((_, j) => (
+                    <div key={j} className="flex-none w-28 sm:w-36 aspect-[2/3] rounded-xl bg-white/5 animate-pulse border border-white/5" />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-        ) : filtered.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
-            {filtered.map((m: any, idx: number) => (
-              <motion.div
-                key={m.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(idx * 0.025, 0.4) }}
-                className="group cursor-pointer"
-                onClick={() => onSelectMovie(m)}
-              >
-                <div className="aspect-[2/3] rounded-2xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
-                  <img
-                    src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w342${m.backdrop_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster')}
-                    alt={m.title || m.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
-                    <p className="text-white font-black text-xs uppercase leading-tight truncate">{m.title || m.name}</p>
-                    {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
-                  </div>
-                  {m.type === 'series' && type === 'series' && (
-                    <div className="absolute top-2 right-2 bg-red-600/80 px-1.5 py-0.5 rounded text-[7px] font-black text-white uppercase tracking-widest">Série</div>
+
+        ) : searchQuery ? (
+          /* Search results */
+          searchFiltered.length > 0 ? (
+            <>
+              <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-6">
+                {searchFiltered.length} resultado{searchFiltered.length !== 1 ? 's' : ''} para "{searchQuery}"
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+                {searchFiltered.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-32 text-center">
+              <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
+                <Search size={40} className="text-gray-700" />
+              </div>
+              <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum resultado para "{searchQuery}"</p>
+              <button onClick={() => setSearchQuery('')} className="mt-6 px-8 py-3 bg-red-600 rounded-full font-black uppercase text-[10px] tracking-widest">Limpar busca</button>
+            </div>
+          )
+
+        ) : expandedGenre ? (
+          /* Expanded genre grid */
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+              {expandedItems.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
+            </div>
+            {expandedCount < (genreGroups.find(g => g.genre === expandedGenre)?.items.length || 0) && (
+              <div className="flex justify-center mt-12">
+                <button
+                  onClick={() => setExpandedCount(c => c + 30)}
+                  className="px-10 py-3 bg-white/5 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-gray-300 hover:bg-white/10 hover:text-white hover:border-red-600/40 transition-all"
+                >
+                  Carregar mais 30
+                </button>
+              </div>
+            )}
+          </>
+
+        ) : genreGroups.length > 0 ? (
+          /* Genre carousels */
+          <div className="space-y-10">
+            {genreGroups.map(({ genre, items }) => (
+              <div key={genre}>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-base font-black uppercase tracking-tighter text-white">{genre}</h2>
+                  {items.length > 10 && (
+                    <button
+                      onClick={() => handleExpandGenre(genre)}
+                      className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-red-400 transition-colors"
+                    >
+                      Ver todos ({items.length}) →
+                    </button>
                   )}
                 </div>
-                <p className="text-gray-400 text-[10px] font-bold mt-2 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
-              </motion.div>
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                  {items.slice(0, 10).map((m: any, idx: number) => (
+                    <div key={m.id} className="flex-none w-[110px] sm:w-[140px] md:w-[150px]">
+                      <MovieCard m={m} idx={idx} />
+                    </div>
+                  ))}
+                  {items.length > 10 && (
+                    <div className="flex-none w-[110px] sm:w-[140px] md:w-[150px]">
+                      <button
+                        onClick={() => handleExpandGenre(genre)}
+                        className="aspect-[2/3] w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-red-600/50 transition-all flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-white"
+                      >
+                        <span className="text-xl font-black">+{items.length - 10}</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">Ver mais</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
+
         ) : (
+          /* Empty state */
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
               <Search size={40} className="text-gray-700" />
             </div>
-            {searchQuery ? (
-              <>
-                <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum resultado para "{searchQuery}"</p>
-                <button onClick={() => setSearchQuery('')} className="mt-6 px-8 py-3 bg-red-600 rounded-full font-black uppercase text-[10px] tracking-widest">Limpar busca</button>
-              </>
-            ) : type === 'filmes' ? (
+            {type === 'filmes' ? (
               <>
                 <p className="text-white font-black uppercase tracking-widest text-sm mb-2">Nenhum filme encontrado</p>
                 <p className="text-gray-500 text-xs max-w-xs leading-relaxed mb-1">Os filmes são adicionados pelo <span className="text-red-400 font-bold">Sync Flix 3.0</span> no painel admin.</p>
@@ -1011,6 +1124,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
             )}
           </div>
         )}
+
       </div>
     </div>
   );
