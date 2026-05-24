@@ -3485,40 +3485,70 @@ const MovieDetailRouteWrapper = ({
 const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggleFavorite, myListIds, favoriteIds }: any) => {
   const { providerId } = useParams();
   const navigate = useNavigate();
-  
-  const providerMovies = useMemo(() => {
-    if (!providerId) return [];
-    
-    // Normalização para busca robusta
-    const pIdNormalized = providerId.toLowerCase().replace(/\s+/g, '').replace(/[+]/g, 'plus');
+  const [dbProviderMovies, setDbProviderMovies] = React.useState<Movie[]>([]);
+  const [isLoadingProvider, setIsLoadingProvider] = React.useState(false);
+
+  // Mapeamento de apelidos comuns
+  const providerAliases: Record<string, string[]> = {
+    'apple tv+': ['apple tv', 'apple tv plus', 'atvp'],
+    'paramount+': ['paramount plus', 'pmnt'],
+    'disney+': ['disney plus', 'star+', 'star plus'],
+    'max': ['hbo max', 'hbo'],
+    'netflix': ['nflx'],
+    'prime video': ['amazon prime', 'amazon'],
+  };
+
+  React.useEffect(() => {
+    if (!providerId) return;
+    setIsLoadingProvider(true);
+    setDbProviderMovies([]);
+
     const pIdDirect = providerId.toLowerCase();
-    
-    // Mapeamento de apelidos comuns ou variações
-    const providerAliases: Record<string, string[]> = {
-      'apple tv+': ['apple', 'atvp', 'apple tv', 'apple tv plus'],
-      'paramount+': ['paramount', 'pmnt', 'paramount plus'],
-      'disney+': ['disney', 'star+', 'star plus'],
-      'max': ['hbo', 'warner'],
-      'netflix': ['nflx']
+    const aliases = providerAliases[pIdDirect] || [];
+    // Todos os termos de busca para ILIKE no Supabase
+    const searchTerms = [pIdDirect, ...aliases];
+
+    const fetchFromDb = async () => {
+      try {
+        const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,rating,vote_average,runtime,genres,video_url,video_url_2,logo_path,watch_providers,is_hidden,created_at,updated_at';
+        // Busca usando OR de ILIKE para todos os termos
+        const orClause = searchTerms.map(t => `watch_providers.ilike.%${t}%`).join(',');
+        const { data, error } = await supabase
+          .from('movies')
+          .select(COLS)
+          .or(orClause)
+          .eq('is_hidden', false)
+          .order('updated_at', { ascending: false })
+          .limit(400);
+
+        if (!error && data) {
+          setDbProviderMovies(data.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
+        }
+      } catch (e) {
+        console.warn('[ProviderViewWrapper] Erro ao buscar no DB:', e);
+      } finally {
+        setIsLoadingProvider(false);
+      }
     };
 
+    fetchFromDb();
+  }, [providerId]);
+
+  // Combina DB + memória (sem duplicatas), priorizando resultados do DB
+  const providerMovies = React.useMemo(() => {
+    if (dbProviderMovies.length > 0) return dbProviderMovies;
+    if (!providerId) return [];
+    const pIdDirect = providerId.toLowerCase();
+    const pIdNormalized = pIdDirect.replace(/\s+/g, '').replace(/[+]/g, 'plus');
     const aliases = providerAliases[pIdDirect] || [];
-    
     return myMovies.filter((m: any) => {
       if (!m.watch_providers) return false;
       const wp = m.watch_providers.toLowerCase();
-      const wpNormalized = wp.replace(/\s+/g, '').replace(/[+]/g, 'plus');
-      
-      const containsDirect = wp.includes(pIdDirect) || wpNormalized.includes(pIdNormalized);
-      const containsAlias = aliases.some(alias => wp.includes(alias));
-      
-      // Also check if provider Name is in the title for originals
-      const title = (m.title || m.name || '').toLowerCase();
-      const isOriginal = aliases.some(alias => title.includes(alias));
-
-      return containsDirect || containsAlias || isOriginal;
+      const containsDirect = wp.includes(pIdDirect) || wp.replace(/\s+/g, '').replace(/[+]/g, 'plus').includes(pIdNormalized);
+      const containsAlias = aliases.some((alias: string) => wp.includes(alias));
+      return containsDirect || containsAlias;
     });
-  }, [myMovies, providerId]);
+  }, [dbProviderMovies, myMovies, providerId]);
 
   return (
     <ProviderPage 
@@ -3530,6 +3560,7 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
       onToggleFavorite={toggleFavorite}
       myListIds={myListIds}
       favoriteIds={favoriteIds}
+      isLoading={isLoadingProvider}
     />
   );
 };

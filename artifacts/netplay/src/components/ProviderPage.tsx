@@ -15,6 +15,7 @@ interface ProviderPageProps {
   onToggleFavorite: (movie: Movie) => void;
   myListIds: Set<number>;
   favoriteIds: Set<number>;
+  isLoading?: boolean;
 }
 
 const providerConfigs: Record<string, any> = {
@@ -148,7 +149,8 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
   onToggleMyList, 
   onToggleFavorite,
   myListIds,
-  favoriteIds
+  favoriteIds,
+  isLoading = false,
 }) => {
   const navigate = useNavigate();
   const config = providerConfigs[provider] || providerConfigs['Netflix'];
@@ -257,7 +259,32 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
 
       {/* Content Rows */}
       <div className={`relative z-30 pb-20 space-y-8 md:space-y-12 px-2 md:px-0 ${provider === 'Disney+' ? '' : '-mt-20 md:-mt-48'}`}>
-        
+
+        {isLoading && movies.length === 0 && (
+          <div className="px-4 md:px-12 space-y-8 pt-8">
+            {[0, 1, 2].map(i => (
+              <div key={i}>
+                <div className="h-4 w-40 bg-white/5 rounded animate-pulse mb-4" />
+                <div className="flex gap-3 overflow-hidden">
+                  {Array.from({ length: 8 }).map((_, j) => (
+                    <div key={j} className="flex-none w-36 md:w-52 aspect-video rounded-xl bg-white/5 animate-pulse border border-white/5" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isLoading && movies.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-32 px-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6">
+              <Info size={28} className="text-gray-600" />
+            </div>
+            <p className="text-gray-500 font-black uppercase tracking-widest text-sm italic">Nenhum conteúdo encontrado para este serviço</p>
+            <p className="text-gray-700 font-bold text-xs mt-2 uppercase tracking-widest">O catálogo será atualizado conforme o conteúdo for adicionado à plataforma</p>
+          </div>
+        )}
+
         {provider === 'Disney+' && (
           <div className="flex overflow-x-auto no-scrollbar gap-4 md:gap-6 px-4 md:px-12 mb-12 relative z-40 py-4 mt-4">
             {DISNEY_BRANDS.map((brand) => {

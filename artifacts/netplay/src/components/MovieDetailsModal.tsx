@@ -984,14 +984,18 @@ const MovieDetailsModal = React.memo(({
             <div className="space-y-3 md:space-y-4 flex-1">
               <h3 className="text-gray-500 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-xs italic">Gêneros</h3>
               <div className="flex flex-wrap gap-2">
-                {(movie.genres || tmdbGenres || "").split(',').filter(g => g.trim()).length > 0
-                  ? (movie.genres || tmdbGenres || "").split(',').map(g => g.trim()).filter(Boolean).map(g => (
-                    <span key={g} className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">{g}</span>
-                  ))
-                  : tmdbGenres === null
-                    ? <span className="text-gray-600 font-black uppercase tracking-widest text-[9px] italic animate-pulse">Carregando...</span>
-                    : <span className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">Sem informação</span>
-                }
+                {(() => {
+                  const displayGenres = (tmdbGenres || movie.genres || '').split(',').map((g: string) => g.trim()).filter(Boolean);
+                  if (displayGenres.length > 0) {
+                    return displayGenres.map((g: string) => (
+                      <span key={g} className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">{g}</span>
+                    ));
+                  }
+                  if (tmdbGenres === null) {
+                    return <span className="text-gray-600 font-black uppercase tracking-widest text-[9px] italic animate-pulse">Carregando...</span>;
+                  }
+                  return <span className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">Sem informação</span>;
+                })()}
               </div>
             </div>
           </div>
