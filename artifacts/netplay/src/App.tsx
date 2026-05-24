@@ -5367,73 +5367,114 @@ export default function App() {
   }, [profile, activeRoomId, myMovies]);
 
   const fetchMyMovies = async () => {
-    // Tentar carregar do cache primeiro
-    const cached = localStorage.getItem('cached_my_movies');
+    // Mostra cache imediatamente enquanto busca dados frescos
+    const cached = localStorage.getItem('cached_my_movies_v3');
     if (cached) {
       try {
         setMyMovies(JSON.parse(cached));
-      } catch {}
+        setIsLoadingMovies(false);
+      } catch {
+        localStorage.removeItem('cached_my_movies_v3');
+      }
     }
 
     if (!hasSupabase || !user) {
-      console.log('fetchMyMovies: Sem Supabase ou Usuário', { hasSupabase, user: !!user });
       setIsLoadingMovies(false);
       return;
     }
-    
-    try {
-      console.log('Buscando filmes do Supabase...');
-      const PAGE_SIZE = 1000;
-      let allData: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('movies')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(from, from + PAGE_SIZE - 1);
 
-        if (error) {
-          console.error('Erro detalhado do Supabase:', error);
-          throw error;
+    const formatMovies = (rawData: any[]): Movie[] =>
+      rawData.map(m => ({
+        ...m,
+        id: m.id,
+        videoUrl: m.video_url,
+        videoUrl2: m.video_url_2,
+        preferredQuality: m.preferred_quality || undefined,
+        vote_average: m.vote_average || m.rating || 0,
+        rating: m.rating || m.vote_average || 0,
+        release_date: m.release_date || '',
+        release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
+        runtime: m.runtime || 0,
+        actors: m.actors || '',
+        is_hidden: m.is_hidden || false,
+        watch_providers: m.watch_providers || '',
+      }));
+
+    const saveCache = (movies: Movie[]) => {
+      try {
+        const str = JSON.stringify(movies);
+        // Só cacheia se couber em 4MB (limite seguro do localStorage)
+        if (str.length < 4 * 1024 * 1024) {
+          localStorage.setItem('cached_my_movies_v3', str);
+        } else {
+          localStorage.removeItem('cached_my_movies_v3');
         }
-        if (!data || data.length === 0) break;
-        allData = allData.concat(data);
-        if (data.length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
+      } catch {
+        localStorage.removeItem('cached_my_movies_v3');
       }
-      const data = allData;
+    };
 
-      console.log(`Filmes encontrados: ${data?.length || 0}`);
+    try {
+      const PAGE_SIZE = 1000;
 
-      if (data) {
-        const formattedMovies: Movie[] = data.map(m => {
-          let cascadeSettings: { qualityCascadeDelay?: number; cascadeToV3OnPenultimate?: boolean } = {};
-          try {
-            const raw = localStorage.getItem(`netplay_cascade_${m.id}`);
-            if (raw) cascadeSettings = JSON.parse(raw);
-          } catch {}
-          return {
-            ...m,
-            id: m.id,
-            videoUrl: m.video_url,
-            videoUrl2: m.video_url_2,
-            preferredQuality: m.preferred_quality || undefined,
-            vote_average: m.vote_average || m.rating || 0,
-            rating: m.rating || m.vote_average || 0,
-            release_date: m.release_date || '',
-            release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
-            runtime: m.runtime || 0,
-            actors: m.actors || '',
-            is_hidden: m.is_hidden || false,
-            watch_providers: m.watch_providers || '',
-            ...cascadeSettings,
-          };
-        });
+      // 1. Busca a quantidade total (requisição HEAD ultra-rápida)
+      const { count, error: countError } = await supabase
+        .from('movies')
+        .select('id', { count: 'exact', head: true });
 
-        setMyMovies(formattedMovies);
-        localStorage.setItem('cached_my_movies', JSON.stringify(formattedMovies));
+      if (countError) throw countError;
+
+      const total = count || 0;
+      const pageCount = Math.ceil(total / PAGE_SIZE);
+      console.log(`Total: ${total} conteúdos, ${pageCount} páginas`);
+
+      // 2. Busca a primeira página e exibe imediatamente
+      const { data: firstPage, error: firstError } = await supabase
+        .from('movies')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(0, PAGE_SIZE - 1);
+
+      if (firstError) throw firstError;
+
+      if (firstPage && firstPage.length > 0) {
+        setMyMovies(formatMovies(firstPage));
+        setIsLoadingMovies(false);
       }
+
+      if (pageCount <= 1) {
+        const formatted = formatMovies(firstPage || []);
+        setMyMovies(formatted);
+        saveCache(formatted);
+        setIsLoadingMovies(false);
+        return;
+      }
+
+      // 3. Busca as páginas restantes em paralelo (lotes de 5 simultâneas)
+      const CONCURRENCY = 5;
+      const remainingPages = Array.from({ length: pageCount - 1 }, (_, i) => i + 1);
+      let allData: any[] = firstPage || [];
+
+      for (let i = 0; i < remainingPages.length; i += CONCURRENCY) {
+        const batch = remainingPages.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(page =>
+            supabase
+              .from('movies')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+          )
+        );
+        for (const { data, error } of results) {
+          if (error) console.error('Erro numa página:', error);
+          if (data) allData = allData.concat(data);
+        }
+      }
+
+      const formatted = formatMovies(allData);
+      setMyMovies(formatted);
+      saveCache(formatted);
     } catch (error) {
       console.error('Erro ao buscar filmes do Supabase:', error);
     } finally {
