@@ -2215,6 +2215,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       className={isBackgroundMode ? "absolute inset-0 z-0 bg-black flex items-center justify-center select-none overflow-hidden scale-105 pointer-events-auto" : "fixed inset-0 bg-black z-[3000] flex items-center justify-center select-none group overflow-hidden"}
       onMouseMove={handleMouseMove}
       onClick={handleContainerClick}
+      onTouchStart={() => resetControlsTimer()}
     >
       {/* Backdrop de fundo enquanto carrega ou como papel de parede */}
       
@@ -3673,8 +3674,15 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
       {/* Controles do Iframe Mode */}
       {isIframeMode && (
         <>
+          {/* Overlay transparente para capturar toques quando controles estão ocultos */}
+          <div
+            className={`absolute inset-0 z-[390] transition-opacity duration-300 ${showControls ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}
+            onClick={() => resetControlsTimer()}
+            onTouchStart={() => resetControlsTimer()}
+          />
+
           {/* Barra superior esquerda: Voltar + Anti-Anúncio + Sandbox */}
-          <div className="absolute top-6 left-6 z-[400] flex items-center gap-2 pointer-events-auto">
+          <div className={`absolute top-6 left-6 z-[400] flex items-center gap-2 pointer-events-auto transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <button
               onClick={onClose}
               className="bg-black/60 backdrop-blur-md p-3 rounded-full text-white hover:bg-red-600 transition-colors shadow-2xl border border-white/10"
@@ -3713,7 +3721,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
           {/* Barra superior direita: Episódios + Próximo (para séries) */}
           {!isMovie && !showEpisodesSidebar && (
-            <div className="absolute top-6 right-6 z-[400] flex items-center gap-2 pointer-events-auto">
+            <div className={`absolute top-6 right-6 z-[400] flex items-center gap-2 pointer-events-auto transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
               {hasNextEpisode && onNextEpisode && (
                 <button
                   onClick={onNextEpisode}
