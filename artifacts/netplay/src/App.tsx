@@ -992,7 +992,6 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           .select(SAFE_COLS)
           .eq('type', dbType)
           .ilike('title', `%${debouncedSearch}%`)
-          .or('is_hidden.is.null,is_hidden.eq.false')
           .order('rating', { ascending: false })
           .limit(200);
 
@@ -1001,7 +1000,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           console.warn('[ContentFilteredPage] Erro na busca Supabase:', error.message);
           setSupabaseResults([]);
         } else {
-          setSupabaseResults((data || []).map(fmtMovieRow));
+          setSupabaseResults((data || []).filter((m: any) => !m.is_hidden).map(fmtMovieRow));
         }
       } catch (err) {
         if (!cancelled) {
@@ -5799,7 +5798,6 @@ export default function App() {
           supabase.from('movies')
             .select(COLS)
             .ilike('genres', `%${genre}%`)
-            .or('is_hidden.is.null,is_hidden.eq.false')
             .order('rating', { ascending: false })
             .limit(80)
         )
