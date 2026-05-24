@@ -5269,15 +5269,26 @@ export default function App() {
     
     try {
       console.log('Buscando filmes do Supabase...');
-      const { data, error } = await supabase
-        .from('movies')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('movies')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
 
-      if (error) {
-        console.error('Erro detalhado do Supabase:', error);
-        throw error;
+        if (error) {
+          console.error('Erro detalhado do Supabase:', error);
+          throw error;
+        }
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
+      const data = allData;
 
       console.log(`Filmes encontrados: ${data?.length || 0}`);
 
