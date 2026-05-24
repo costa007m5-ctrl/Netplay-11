@@ -752,8 +752,8 @@ const MovieDetailsModal = React.memo(({
                     }
                     return resolvePlayUrl();
                   };
-                  // Conteúdo disponível = na biblioteca OU tem URL de vídeo/episódios
-                  const isAvailable = !!(movie as any).created_at || !!(movie as any).tmdb_id || !!movie.videoUrl || !!movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0);
+                  // Conteúdo disponível = na biblioteca OU tem URL de vídeo/episódios OU tem ID TMDB (jogador externo disponível)
+                  const isAvailable = !!(movie as any).created_at || !!(movie as any).tmdb_id || !!movie.videoUrl || !!movie.videoUrl2 || (isSeries && movie.episodes && movie.episodes.length > 0) || !!(movie as any)._isLocal || typeof movie.id === 'number';
                   if (isAvailable) {
                     return (
                     <div className="flex flex-col gap-2">
