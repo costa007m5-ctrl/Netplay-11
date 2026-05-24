@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Filter, Star, X, ChevronRight, History, TrendingUp, Activity } from 'lucide-react';
+import { Search, Filter, Star, X, ChevronRight, History, TrendingUp, Activity, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import tmdb, { requests } from '../services/tmdb';
 import { Movie } from '../types';
 import { CATEGORIES } from '../constants';
+import { supabase } from '../lib/supabase';
 
 interface AdvancedSearchProps {
   onSelectMovie: (movie: Movie) => void;
