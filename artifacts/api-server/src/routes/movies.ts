@@ -71,6 +71,7 @@ router.post("/movies/upsert", async (req, res) => {
           video_url: movie.video_url || "",
           logo_path: movie.logo_path || null,
           updated_at: new Date(),
+          created_at: new Date(),
         },
       });
     res.json({ success: true });

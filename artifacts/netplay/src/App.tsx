@@ -958,7 +958,7 @@ const fmtMovieRow = (m: any): Movie => ({
   watch_providers: m.watch_providers || '',
 });
 
-const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading, newOnPlatform }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean; newOnPlatform?: Movie[] }) => {
+const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading, newOnPlatform, totalCount }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean; newOnPlatform?: Movie[]; totalCount?: number | null }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [expandedGenre, setExpandedGenre] = React.useState<string | null>(null);
@@ -1189,9 +1189,16 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           ) : (
             <>
               <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter text-white leading-none">{label}</h1>
-              <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-2">
-                {isLoading ? 'Carregando...' : `${baseItems.length} títulos`}
-              </span>
+              <div className="flex flex-col mb-2">
+                <span className="text-gray-600 font-black uppercase tracking-widest text-xs">
+                  {isLoading ? 'Carregando...' : totalCount != null ? `${totalCount.toLocaleString('pt-BR')} títulos` : `${baseItems.length} títulos`}
+                </span>
+                {totalCount != null && totalCount > baseItems.length && (
+                  <span className="text-gray-700 font-bold text-[10px] uppercase tracking-widest">
+                    Pesquise para explorar todo o catálogo
+                  </span>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -3811,6 +3818,8 @@ export default function App() {
   const [myMovies, setMyMovies] = useState<Movie[]>([]);
   const [isLoadingMovies, setIsLoadingMovies] = useState(true);
   const [loadingMoreCount, setLoadingMoreCount] = useState(0);
+  const [totalMoviesCount, setTotalMoviesCount] = useState<number | null>(null);
+  const [totalSeriesCount, setTotalSeriesCount] = useState<number | null>(null);
   const [newOnPlatformMovies, setNewOnPlatformMovies] = useState<Movie[]>([]);
   const [newOnPlatformSeries, setNewOnPlatformSeries] = useState<Movie[]>([]);
   // useDeferredValue: computações pesadas (franquias, gêneros, etc.) só recomputam
@@ -5705,7 +5714,7 @@ export default function App() {
           .from('movies')
           .select(cols)
           .eq('type', type)
-          .order('created_at', { ascending: false })
+          .order('updated_at', { ascending: false })
           .range(from, from + batchSize - 1);
         if (error) return { data: null, error };
         if (!data || data.length === 0) break;
@@ -5751,6 +5760,15 @@ export default function App() {
       setMyMovies(items);
       setLoadingMoreCount(0);
       saveCache(items);
+
+      // Busca contagem real em background (sem bloquear UI)
+      Promise.all([
+        supabase.from('movies').select('*', { count: 'exact', head: true }).eq('type', 'movie'),
+        supabase.from('movies').select('*', { count: 'exact', head: true }).eq('type', 'series'),
+      ]).then(([cntM, cntS]) => {
+        if (cntM.count !== null) setTotalMoviesCount(cntM.count);
+        if (cntS.count !== null) setTotalSeriesCount(cntS.count);
+      }).catch(() => {});
     } catch (error: any) {
       console.error('[fetchMyMovies] Todas as tentativas falharam:', error?.message || error);
     } finally {
@@ -6128,13 +6146,18 @@ export default function App() {
   const cinemaMovies = useMemo(() => {
     if (loadingMoreCount > 0) return [] as Movie[];
     const now = new Date();
-    return visibleMovies.filter(movie => {
+    // Prioridade 1: filmes lançados em 2024-2026 (recentes, em cartaz)
+    const recent = visibleMovies.filter(movie => {
       if (!movie.release_date) return false;
-      const releaseDate = new Date(movie.release_date);
-      if (releaseDate.getFullYear() !== 2026) return false;
-      const diffMonths = (now.getFullYear() - releaseDate.getFullYear()) * 12 + (now.getMonth() - releaseDate.getMonth());
-      return diffMonths <= 5 && diffMonths >= 0;
+      const year = new Date(movie.release_date).getFullYear();
+      return year >= 2024 && year <= 2026;
     });
+    if (recent.length >= 4) return recent.slice(0, 20);
+    // Fallback: top-rated filmes com backdrop disponível
+    return visibleMovies
+      .filter(m => m.backdrop_path && m.type === 'movie')
+      .sort((a, b) => (b.vote_average || b.rating || 0) - (a.vote_average || a.rating || 0))
+      .slice(0, 20);
   }, [visibleMovies, loadingMoreCount]);
 
   // Top 10 Filmes
@@ -6961,8 +6984,8 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} onMovieAdded={(movie) => setMyMovies(prev => prev.some(m => m.id === movie.id) ? prev : [movie, ...prev])} />} />
-          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} />} />
-          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} />} />
+          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} totalCount={totalMoviesCount} />} />
+          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} totalCount={totalSeriesCount} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
