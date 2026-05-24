@@ -158,6 +158,7 @@ const MovieDetailsModal = React.memo(({
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [realWatchProviders, setRealWatchProviders] = useState<any[]>([]);
   const [currentProvider, setCurrentProvider] = useState<any>(getProvider(movie, streamingProviders));
+  const [tmdbGenres, setTmdbGenres] = useState<string | null>(null);
   const [showQualitySelector, setShowQualitySelector] = useState(false);
   const [selectedQuality, setSelectedQuality] = useState<'480p' | '720p' | '1080p'>('720p');
   const [logoUrl, setLogoUrl] = useState<string | null>(movie.logo_path || null);
@@ -295,65 +296,114 @@ const MovieDetailsModal = React.memo(({
   }, [isPlayingFullscreen]);
 
   useEffect(() => {
-    if (movie.id && !logoUrl) {
-      async function fetchLogo() {
-        const type: 'tv' | 'movie' = (movie as any).name ? 'tv' : 'movie';
-        const title = (movie as any).title || (movie as any).name || '';
-        const year = movie.release_date
-          ? new Date(movie.release_date).getFullYear()
-          : (movie as any).first_air_date
-          ? new Date((movie as any).first_air_date).getFullYear()
-          : null;
-        const tmdbId = await lookupTmdbId(title, type, year);
-        const idToUse = tmdbId || null;
-        if (!idToUse) return;
-        const logo = await getMovieLogo(idToUse, type);
-        if (logo) { setLogoUrl(logo); return; }
-        const fallbackType: 'tv' | 'movie' = type === 'tv' ? 'movie' : 'tv';
-        const logo2 = await getMovieLogo(idToUse, fallbackType);
-        if (logo2) setLogoUrl(logo2);
-      }
-      fetchLogo();
-    }
-  }, [movie.id]);
+    if (!movie.id) return;
+    let cancelled = false;
 
-  useEffect(() => {
-    const fetchWatchProviders = async () => {
+    async function fetchTmdbData() {
+      const mediaType: 'tv' | 'movie' = isSeries || !!(movie as any).first_air_date ? 'tv' : 'movie';
+      const altType: 'tv' | 'movie' = mediaType === 'tv' ? 'movie' : 'tv';
+      const title = (movie as any).title || (movie as any).name || '';
+      const year = movie.release_date
+        ? new Date(movie.release_date).getFullYear()
+        : (movie as any).first_air_date
+        ? new Date((movie as any).first_air_date).getFullYear()
+        : null;
+
+      // Resolve TMDB ID: tenta movie.id direto primeiro (mais rápido), depois busca por título
+      let resolvedId: number = movie.id;
+      let resolvedType: 'tv' | 'movie' = mediaType;
+
+      // Verifica se movie.id é válido no TMDB diretamente
       try {
-        const isTv = isSeries || !!movie.first_air_date;
-        const url = isTv ? requests.tvWatchProviders(movie.id) : requests.movieWatchProviders(movie.id);
-        const res = await tmdb.get(url);
-        const brProviders = res.data.results?.BR?.flatrate || res.data.results?.BR?.buy || [];
-        setRealWatchProviders(brProviders);
-
-        // Update current provider based on real data
-        if (brProviders.length > 0) {
-          const knownProviders = [
-            { name: 'Netflix', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', bg: 'bg-black' },
-            { name: 'Disney+', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', bg: 'bg-[#00143c]' },
-            { name: 'Max', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg', bg: 'bg-[#002be7]' },
-            { name: 'Prime Video', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png', bg: 'bg-[#00a8e1]' },
-            { name: 'Apple TV+', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg', bg: 'bg-black' },
-            { name: 'Paramount+', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg', bg: 'bg-blue-900' },
-            { name: 'Globoplay', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg', bg: 'bg-white' },
-            { name: 'Hulu', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Hulu_Logo.svg', bg: 'bg-[#1ce783]' }
-          ];
-          
-          const found = brProviders.find((p: any) => 
-            knownProviders.some(kp => p.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(p.provider_name.toLowerCase()))
-          );
-          
-          if (found) {
-            const kpData = knownProviders.find(kp => found.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(found.provider_name.toLowerCase()));
-            if (kpData) setCurrentProvider(kpData);
+        const detailsEndpoint = mediaType === 'tv' ? requests.tvDetails(movie.id) : requests.movieDetails(movie.id);
+        const detailsRes = await tmdb.get(detailsEndpoint, { params: { language: 'pt-BR' } });
+        if (!cancelled && detailsRes.data?.id) {
+          // Extrai gêneros dos detalhes
+          const genreNames: string[] = (detailsRes.data.genres || []).map((g: any) => g.name);
+          if (genreNames.length > 0 && !movie.genres) {
+            setTmdbGenres(genreNames.join(', '));
           }
         }
-      } catch (error) {
-        console.error("Erro ao buscar watch providers:", error);
+      } catch {
+        // ID direto falhou — tenta busca por título
+        const foundId = await lookupTmdbId(title, mediaType, year);
+        if (!cancelled && foundId) {
+          resolvedId = foundId;
+          try {
+            const detEndpoint = mediaType === 'tv' ? requests.tvDetails(foundId) : requests.movieDetails(foundId);
+            const det = await tmdb.get(detEndpoint, { params: { language: 'pt-BR' } });
+            if (!cancelled && det.data?.genres) {
+              const genreNames: string[] = (det.data.genres || []).map((g: any) => g.name);
+              if (genreNames.length > 0 && !movie.genres) {
+                setTmdbGenres(genreNames.join(', '));
+              }
+            }
+          } catch {}
+        } else if (!cancelled) {
+          // Tenta como tipo alternativo
+          const altId = await lookupTmdbId(title, altType, year);
+          if (!cancelled && altId) {
+            resolvedId = altId;
+            resolvedType = altType;
+          }
+        }
       }
-    };
-    fetchWatchProviders();
-  }, [movie.id, movie.type, movie.first_air_date]);
+
+      if (cancelled) return;
+
+      // Fetch logo usando ID resolvido
+      if (!logoUrl) {
+        const logo = await getMovieLogo(resolvedId, resolvedType);
+        if (!cancelled && logo) { setLogoUrl(logo); }
+        else if (!cancelled) {
+          const logo2 = await getMovieLogo(resolvedId, resolvedType === 'tv' ? 'movie' : 'tv');
+          if (!cancelled && logo2) setLogoUrl(logo2);
+        }
+      }
+
+      // Fetch watch providers com ID resolvido
+      try {
+        const wpUrl = resolvedType === 'tv' ? requests.tvWatchProviders(resolvedId) : requests.movieWatchProviders(resolvedId);
+        const res = await tmdb.get(wpUrl);
+        let brProviders = res.data.results?.BR?.flatrate || res.data.results?.BR?.buy || res.data.results?.BR?.free || [];
+
+        // Se vazio, tenta tipo alternativo
+        if (brProviders.length === 0) {
+          const altUrl = resolvedType === 'tv' ? requests.movieWatchProviders(resolvedId) : requests.tvWatchProviders(resolvedId);
+          try {
+            const altRes = await tmdb.get(altUrl);
+            brProviders = altRes.data.results?.BR?.flatrate || altRes.data.results?.BR?.buy || altRes.data.results?.BR?.free || [];
+          } catch {}
+        }
+
+        if (!cancelled) {
+          setRealWatchProviders(brProviders);
+          if (brProviders.length > 0) {
+            const knownProviders = [
+              { name: 'Netflix', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', bg: 'bg-black' },
+              { name: 'Disney+', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', bg: 'bg-[#00143c]' },
+              { name: 'Max', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg', bg: 'bg-[#002be7]' },
+              { name: 'Prime Video', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png', bg: 'bg-[#00a8e1]' },
+              { name: 'Apple TV+', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg', bg: 'bg-black' },
+              { name: 'Paramount+', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg', bg: 'bg-blue-900' },
+              { name: 'Globoplay', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg', bg: 'bg-white' },
+              { name: 'Hulu', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Hulu_Logo.svg', bg: 'bg-[#1ce783]' }
+            ];
+            const found = brProviders.find((p: any) =>
+              knownProviders.some(kp => p.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(p.provider_name.toLowerCase()))
+            );
+            if (found) {
+              const kpData = knownProviders.find(kp => found.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(found.provider_name.toLowerCase()));
+              if (kpData) setCurrentProvider(kpData);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    fetchTmdbData();
+    return () => { cancelled = true; };
+  }, [movie.id, isSeries]);
 
   const savedUrl = useMemo(() => {
     return localStorage.getItem(`netplay_progress_url_${movie.id}`) || movie.savedEpisodeUrl || null;
@@ -381,6 +431,9 @@ const MovieDetailsModal = React.memo(({
     setShowVideo(false);
     setActiveInfoTab('details');
     setCurrentProvider(getProvider(movie));
+    setTmdbGenres(null);
+    setRealWatchProviders([]);
+    setLogoUrl(movie.logo_path || null);
     
     if (savedEpisodeSeason) {
       setSelectedSeason(savedEpisodeSeason);
@@ -911,9 +964,14 @@ const MovieDetailsModal = React.memo(({
             <div className="space-y-3 md:space-y-4 flex-1">
               <h3 className="text-gray-500 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-xs italic">Gêneros</h3>
               <div className="flex flex-wrap gap-2">
-                {(movie.genres || "Conteúdo Digital").split(',').map(g => (
-                  <span key={g} className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">{g.trim()}</span>
-                ))}
+                {(movie.genres || tmdbGenres || "").split(',').filter(g => g.trim()).length > 0
+                  ? (movie.genres || tmdbGenres || "").split(',').map(g => g.trim()).filter(Boolean).map(g => (
+                    <span key={g} className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">{g}</span>
+                  ))
+                  : tmdbGenres === null
+                    ? <span className="text-gray-600 font-black uppercase tracking-widest text-[9px] italic animate-pulse">Carregando...</span>
+                    : <span className="bg-white/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg text-[9px] md:text-[11px] font-black uppercase tracking-widest text-gray-300 italic border border-white/5">Sem informação</span>
+                }
               </div>
             </div>
           </div>
@@ -1143,7 +1201,7 @@ const MovieDetailsModal = React.memo(({
                     <div className="space-y-6">
                       <h3 className="text-white font-black uppercase tracking-[0.3em] text-sm italic">Gêneros</h3>
                       <div className="flex flex-wrap gap-3">
-                        {(movie.genres || "Ação, Aventura").split(',').map(g => (
+                        {(movie.genres || tmdbGenres || "Sem informação").split(',').map(g => (
                           <span key={g} className="bg-white/10 px-5 py-2 rounded-xl text-xs font-black text-gray-300 italic uppercase tracking-widest border border-white/5">{g.trim()}</span>
                         ))}
                       </div>
