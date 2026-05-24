@@ -7,6 +7,7 @@ import {
   Palette, UserCircle, Edit3, Lock, LogOut, CheckCircle2, AlertCircle, Heart,
   Save, X, Smartphone, List, Download, Sparkles, Users, Copy, Share2
 } from 'lucide-react';
+import AdminContentEditTab from './admin/AdminContentEditTab';
 import { supabase } from '../lib/supabase';
 
 export default function ProfileDashboard({ 
@@ -27,7 +28,7 @@ export default function ProfileDashboard({
   isAdmin,
   updateAppSettings
 }: any) {
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'settings' | 'lists' | 'stats' | 'devices'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'settings' | 'lists' | 'stats' | 'devices' | 'content'>('overview');
   
   // Local settings states (the 50 features)
   const [autoplay, setAutoplay] = useState(appSettings?.autoplay_next ?? true);
@@ -270,6 +271,7 @@ export default function ProfileDashboard({
     { id: 'lists', icon: List, label: 'Minhas Listas' },
     { id: 'settings', icon: Sliders, label: 'Preferências (Novo)' },
     { id: 'devices', icon: Smartphone, label: 'Dispositivos' },
+    ...(isAdmin ? [{ id: 'content', icon: Edit3, label: 'Conteúdo' }] : []),
   ];
 
   return (
@@ -855,6 +857,22 @@ export default function ProfileDashboard({
                   <p className="text-gray-500 text-[10px] uppercase font-bold mt-4 tracking-widest">Atenção: Você precisará logar novamente em todos os aparelhos.</p>
                 </div>
              </div>
+          )}
+
+          {/* TAB: CONTEÚDO (admin only) */}
+          {activeSubTab === 'content' && isAdmin && (
+            <div className="bg-white/5 p-6 md:p-10 rounded-[2rem] border border-white/10 backdrop-blur-xl">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-11 h-11 bg-red-600/20 rounded-2xl flex items-center justify-center">
+                  <Edit3 className="text-red-500" size={20} />
+                </div>
+                <div>
+                  <h2 className="text-white font-black text-xl italic uppercase tracking-tighter">Editar Conteúdo</h2>
+                  <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Gerencie os filmes e séries da plataforma</p>
+                </div>
+              </div>
+              <AdminContentEditTab />
+            </div>
           )}
 
         </motion.div>

@@ -3053,12 +3053,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                               </button>
                             )}
                             <button 
-                              onClick={() => setEditingMovie(movie)}
-                              className="p-1.5 md:p-2 bg-white/5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button 
                               onClick={() => {
                                 if (window.confirm(`Tem certeza que deseja deletar "${movie.title}"?`)) {
                                   onDeleteMovies([movie.id]);
@@ -3131,12 +3125,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             Atualizar Coleção
                           </button>
                         )}
-                        <button 
-                          onClick={() => setEditingMovie(movie)}
-                          className="w-full py-2 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
-                        >
-                          Editar
-                        </button>
                         <button 
                           onClick={() => onToggleHideMovies([movie.id], !movie.is_hidden)}
                           className="w-full py-2 bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all border border-white/10"
