@@ -1088,6 +1088,28 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
 
   return (
     <div className="min-h-screen bg-[#111] text-white pb-32 pt-20 md:pt-28">
+
+      {/* Banner de carregamento */}
+      {isLoading && (
+        <div className="fixed top-16 left-0 right-0 z-40 flex items-center justify-center gap-3 bg-gradient-to-r from-red-900/90 via-red-700/90 to-red-900/90 backdrop-blur-sm py-3 px-6 shadow-lg border-b border-red-500/30">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin flex-none" />
+            <span className="text-white font-black uppercase tracking-widest text-xs">
+              Carregando {label.toLowerCase()}...
+            </span>
+          </div>
+          <div className="flex gap-1 ml-2">
+            {[0,1,2].map(i => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="px-5 md:px-12 max-w-[1920px] mx-auto">
 
         {/* Header */}
