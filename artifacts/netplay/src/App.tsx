@@ -992,7 +992,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           .select(SAFE_COLS)
           .eq('type', dbType)
           .ilike('title', `%${debouncedSearch}%`)
-          .neq('is_hidden', true)
+          .or('is_hidden.is.null,is_hidden.eq.false')
           .order('rating', { ascending: false })
           .limit(200);
 
@@ -5799,7 +5799,7 @@ export default function App() {
           supabase.from('movies')
             .select(COLS)
             .ilike('genres', `%${genre}%`)
-            .eq('is_hidden', false)
+            .or('is_hidden.is.null,is_hidden.eq.false')
             .order('rating', { ascending: false })
             .limit(80)
         )

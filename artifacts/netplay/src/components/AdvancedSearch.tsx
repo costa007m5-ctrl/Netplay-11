@@ -141,7 +141,7 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
               .from('movies')
               .select(DB_COLS)
               .ilike('title', `%${activeQuery}%`)
-              .neq('is_hidden', true)
+              .or('is_hidden.is.null,is_hidden.eq.false')
               .order('rating', { ascending: false })
               .limit(60);
             if (dbData && dbData.length > 0) {
