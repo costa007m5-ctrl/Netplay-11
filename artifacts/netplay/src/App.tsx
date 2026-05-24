@@ -1170,7 +1170,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
             </div>
             {!searchQuery && (
               <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest pl-1">
-                {baseItems.length} títulos personalizados · pesquise para acessar toda a biblioteca
+                Pesquise para explorar toda a biblioteca de 22 mil títulos
               </p>
             )}
           </div>
@@ -1267,7 +1267,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
             <div className="flex items-center gap-3 py-8 border-t border-white/5 mt-4">
               <Search size={14} className="text-gray-700 flex-none" />
               <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest">
-                Mostrando {baseItems.length} títulos personalizados · Para encontrar mais, use a busca acima
+                Use a busca acima para explorar toda a biblioteca · novos títulos aparecem conforme você assiste
               </p>
             </div>
           </div>
@@ -5587,7 +5587,7 @@ export default function App() {
 
     const queryBoth = async (cols: string) => Promise.all([
       supabase.from('movies').select(cols).eq('type', 'movie').order('created_at', { ascending: false }).limit(500),
-      supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).limit(250),
+      supabase.from('movies').select(cols).eq('type', 'series').order('created_at', { ascending: false }).limit(500),
     ]);
 
     const stripHeavyFields = (rows: any[]): any[] =>
@@ -6160,6 +6160,12 @@ export default function App() {
   useEffect(() => { locationPathRef.current = location.pathname; }, [location.pathname]);
 
   const handleSelectMovie = useCallback((movie: Movie) => {
+    // Adiciona o filme ao estado local se não estiver na lista (ex: veio de uma busca)
+    // Assim ele aparece nos carrosséis após ser acessado
+    setMyMovies(prev => {
+      if (prev.some(m => m.id === movie.id)) return prev;
+      return [movie, ...prev];
+    });
     navigate(`/movie/${movie.id}`, { state: { backgroundLocation: locationPathRef.current, movie } });
   }, [navigate]);
 
