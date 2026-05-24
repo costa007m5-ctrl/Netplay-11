@@ -136,14 +136,17 @@ const FlixCard = React.memo(({
 
 interface FlixNovitiesPageProps {
   onSelectMovie: (movie: any) => void;
+  defaultFilter?: 'all' | 'movies' | 'tvshows';
+  hideFilterBar?: boolean;
+  pageTitle?: string;
 }
 
-const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie }) => {
+const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defaultFilter = 'all', hideFilterBar = false, pageTitle }) => {
   const navigate = useNavigate();
   const [items, setItems] = useState<FlixItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>('all');
+  const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>(defaultFilter);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
@@ -204,28 +207,30 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie }) =>
           <div className="min-w-0">
             <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">API Flix</p>
             <h1 className="text-lg font-black text-white italic uppercase tracking-tighter leading-none truncate">
-              Novidades
+              {pageTitle || 'Novidades'}
             </h1>
           </div>
         </div>
 
-        {/* Filtros */}
-        <div className="flex bg-white/5 rounded-full p-0.5 border border-white/10 shrink-0">
-          {FILTERS.map(f => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value as any)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${
-                filter === f.value
-                  ? 'bg-red-600 text-white shadow-lg'
-                  : 'text-white/50 hover:text-white'
-              }`}
-            >
-              <f.icon size={10} />
-              <span className="hidden sm:inline">{f.label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Filtros — ocultos quando hideFilterBar */}
+        {!hideFilterBar && (
+          <div className="flex bg-white/5 rounded-full p-0.5 border border-white/10 shrink-0">
+            {FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value as any)}
+                className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${
+                  filter === f.value
+                    ? 'bg-red-600 text-white shadow-lg'
+                    : 'text-white/50 hover:text-white'
+                }`}
+              >
+                <f.icon size={10} />
+                <span className="hidden sm:inline">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="px-4 md:px-12 py-8">

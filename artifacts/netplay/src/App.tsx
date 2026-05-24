@@ -6381,7 +6381,11 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
-          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
+          <Route path="/filmes" element={
+            <React.Suspense fallback={<div className="min-h-screen bg-black" />}>
+              <FlixNovitiesPage onSelectMovie={handleSelectMovie} defaultFilter="movies" hideFilterBar={true} pageTitle="Filmes" />
+            </React.Suspense>
+          } />
           <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
