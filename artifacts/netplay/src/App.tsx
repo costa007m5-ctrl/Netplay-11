@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef, Suspense, useDeferredValue, startTransition } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Banner from './components/Banner';
@@ -886,10 +886,69 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
   );
 });
 
+// Renderiza o conteúdo do carousel só quando a linha entra no viewport
+// Evita renderizar 20+ gêneros × 10 cards de uma vez
+const LazyGenreRow = React.memo(({ genre, items, onExpand, MovieCard }: {
+  genre: string; items: Movie[]; onExpand: (g: string) => void; MovieCard: React.FC<{ m: any; idx: number }>;
+}) => {
+  const rowRef = React.useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    if (visible) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); obs.disconnect(); }
+    }, { rootMargin: '200px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [visible]);
+
+  return (
+    <div ref={rowRef}>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-black uppercase tracking-tighter text-white">{genre}</h2>
+        {items.length > 10 && (
+          <button onClick={() => onExpand(genre)} className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-red-400 transition-colors">
+            Ver todos ({items.length}) →
+          </button>
+        )}
+      </div>
+      {visible ? (
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          {items.slice(0, 10).map((m: any, idx: number) => (
+            <div key={m.id} className="flex-none w-[110px] sm:w-[140px] md:w-[150px]">
+              <MovieCard m={m} idx={idx} />
+            </div>
+          ))}
+          {items.length > 10 && (
+            <div className="flex-none w-[110px] sm:w-[140px] md:w-[150px]">
+              <button onClick={() => onExpand(genre)} className="aspect-[2/3] w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-red-600/50 transition-all flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-white">
+                <span className="text-xl font-black">+{items.length - 10}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest">Ver mais</span>
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        // Placeholder de altura aproximada enquanto não está visível
+        <div className="h-[220px] rounded-xl bg-white/5 animate-pulse" />
+      )}
+    </div>
+  );
+});
+
 const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading, loadingMoreCount }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean; loadingMoreCount?: number }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [expandedGenre, setExpandedGenre] = React.useState<string | null>(null);
   const [expandedCount, setExpandedCount] = React.useState(30);
+
+  // Debounce da busca: não refaz o filtro a cada tecla, mas sim 200ms após parar de digitar
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 200);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const label = type === 'series' ? 'Séries' : 'Filmes';
 
@@ -900,10 +959,10 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
   }, [myMovies, type]);
 
   const searchFiltered = React.useMemo(() => {
-    if (!searchQuery) return baseItems;
-    const q = searchQuery.toLowerCase();
+    if (!debouncedSearch) return baseItems;
+    const q = debouncedSearch.toLowerCase();
     return baseItems.filter((m: any) => ((m.title || m.name || '')).toLowerCase().includes(q));
-  }, [baseItems, searchQuery]);
+  }, [baseItems, debouncedSearch]);
 
   const genreGroups = React.useMemo(() => {
     const map = new Map<string, Movie[]>();
@@ -1041,7 +1100,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
             ))}
           </div>
 
-        ) : searchQuery ? (
+        ) : debouncedSearch ? (
           /* Search results */
           searchFiltered.length > 0 ? (
             <>
@@ -1081,40 +1140,16 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           </>
 
         ) : genreGroups.length > 0 ? (
-          /* Genre carousels */
+          /* Genre carousels — lazy rendering via IntersectionObserver */
           <div className="space-y-10">
             {genreGroups.map(({ genre, items }) => (
-              <div key={genre}>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-black uppercase tracking-tighter text-white">{genre}</h2>
-                  {items.length > 10 && (
-                    <button
-                      onClick={() => handleExpandGenre(genre)}
-                      className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-red-400 transition-colors"
-                    >
-                      Ver todos ({items.length}) →
-                    </button>
-                  )}
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                  {items.slice(0, 10).map((m: any, idx: number) => (
-                    <div key={m.id} className="flex-none w-[110px] sm:w-[140px] md:w-[150px]">
-                      <MovieCard m={m} idx={idx} />
-                    </div>
-                  ))}
-                  {items.length > 10 && (
-                    <div className="flex-none w-[110px] sm:w-[140px] md:w-[150px]">
-                      <button
-                        onClick={() => handleExpandGenre(genre)}
-                        className="aspect-[2/3] w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-red-600/50 transition-all flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-white"
-                      >
-                        <span className="text-xl font-black">+{items.length - 10}</span>
-                        <span className="text-[9px] font-black uppercase tracking-widest">Ver mais</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <LazyGenreRow
+                key={genre}
+                genre={genre}
+                items={items}
+                onExpand={handleExpandGenre}
+                MovieCard={MovieCard}
+              />
             ))}
           </div>
 
@@ -3563,6 +3598,9 @@ export default function App() {
   const [myMovies, setMyMovies] = useState<Movie[]>([]);
   const [isLoadingMovies, setIsLoadingMovies] = useState(true);
   const [loadingMoreCount, setLoadingMoreCount] = useState(0);
+  // useDeferredValue: computações pesadas (franquias, gêneros, etc.) só recomputam
+  // quando o browser estiver ocioso — evita travar a UI durante o carregamento em fundo
+  const deferredMyMovies = useDeferredValue(myMovies);
   const [continueWatching, setContinueWatching] = useState<Movie[]>([]);
   const [watchHistory, setWatchHistory] = useState<Record<number, number>>({});
   
@@ -3719,16 +3757,16 @@ export default function App() {
 
   const heroMovies = useMemo(() => {
     const heroKeywords = ['marvel', 'dc comics', 'batman', 'spider-man', 'spiderman', 'superman', 'avengers', 'vingadores', 'liga da justiça', 'justice league', 'x-men', 'herói', 'hero', 'super-herói'];
-    return myMovies.filter(m => {
+    return deferredMyMovies.filter(m => {
       const t = (m.title || '').toLowerCase();
       const o = (m.overview || '').toLowerCase();
       const g = (m.genres || '').toLowerCase();
       return heroKeywords.some(k => t.includes(k) || o.includes(k)) || g.includes('fantasia') || g.includes('ação');
     });
-  }, [myMovies]);
+  }, [deferredMyMovies]);
 
   const collectionMovies = useMemo(() => {
-    return myMovies.filter(m => {
+    return deferredMyMovies.filter(m => {
       const t = (m.title || '').toLowerCase();
       const o = (m.overview || '').toLowerCase();
       return FRANCHISES.some(f => f.keywords.some(k => t.includes(k) || o.includes(k)));
@@ -3737,7 +3775,7 @@ export default function App() {
       const dateB = String(b.release_date || (b as any).release_year || '0');
       return dateA.localeCompare(dateB);
     });
-  }, [myMovies]);
+  }, [deferredMyMovies]);
 
   const dynamicFranchises = useMemo(() => {
     const list: any[] = [];
@@ -3758,7 +3796,7 @@ export default function App() {
 
     // 1. Franquias definidas (Marvel, DC, Disney, etc.)
     FRANCHISES.forEach(f => {
-      const movies = myMovies.filter(m => matchesFranchise(m, f.keywords));
+      const movies = deferredMyMovies.filter(m => matchesFranchise(m, f.keywords));
       
       if (movies.length > 0) {
         const logoFromMovie = movies.find(m => m.logo_path)?.logo_path;
@@ -3775,7 +3813,7 @@ export default function App() {
 
     // 2a. Coleções TMDB por collection_id
     const collectionsById: Record<number, Movie[]> = {};
-    myMovies.forEach(m => {
+    deferredMyMovies.forEach(m => {
       if (m.collection_id && !coveredMovieIds.has(m.id)) {
         if (!collectionsById[m.collection_id]) collectionsById[m.collection_id] = [];
         collectionsById[m.collection_id].push(m);
@@ -3805,7 +3843,7 @@ export default function App() {
 
     // 2b. Coleções por collection_name (filmes que têm nome mas ainda não têm collection_id)
     const collectionsByName: Record<string, Movie[]> = {};
-    myMovies.forEach(m => {
+    deferredMyMovies.forEach(m => {
       const name = (m.collection_name || '').trim();
       if (name && !coveredMovieIds.has(m.id)) {
         if (!collectionsByName[name]) collectionsByName[name] = [];
@@ -3836,7 +3874,7 @@ export default function App() {
     });
 
     return list;
-  }, [myMovies]);
+  }, [deferredMyMovies]);
 
   // Enriquece filmes sem collection_id consultando o TMDB em background
   const enrichCollectionsInBackground = React.useCallback(async (movies: Movie[]) => {
@@ -5462,11 +5500,33 @@ export default function App() {
 
       setLoadingMoreCount(totalRemaining);
 
-      // 2. Carrega o restante de cada tipo em paralelo, atualizando a tela a cada lote
+      // Ref para rastrear IDs já carregados — evita criar new Set(prev.map…) a cada batch (O(n))
+      const loadedIds = new Set<number>(fmt(initialItems).map(m => m.id));
+
+      // 2. Carrega o restante em paralelo, acumulando 2 rodadas de CONCURRENCY antes de atualizar state
+      // startTransition: marca as atualizações de fundo como não-urgentes → UI não trava
       const loadRest = async (type: 'movie' | 'series', total: number) => {
         if (total <= INITIAL) return;
         const ranges: number[] = [];
         for (let s = INITIAL; s < total; s += BATCH) ranges.push(s);
+
+        // Acumula 2 rodadas (= CONCURRENCY*2 páginas = ~10.000 itens) antes de um único setState
+        const ACCUMULATE_ROUNDS = 2;
+        let accumulated: any[] = [];
+        let accumulatedCount = 0;
+
+        const flushAccumulated = () => {
+          if (accumulated.length === 0) return;
+          const toAdd = fmt(accumulated).filter(m => !loadedIds.has(m.id));
+          toAdd.forEach(m => loadedIds.add(m.id));
+          const count = accumulated.length;
+          accumulated = [];
+          accumulatedCount = 0;
+          startTransition(() => {
+            setMyMovies(prev => [...prev, ...toAdd]);
+            setLoadingMoreCount(c => Math.max(0, c - count));
+          });
+        };
 
         for (let i = 0; i < ranges.length; i += CONCURRENCY) {
           const slice = ranges.slice(i, i + CONCURRENCY);
@@ -5483,15 +5543,17 @@ export default function App() {
           for (const { data, error } of results) {
             if (error) console.error(`Erro paginando ${type}:`, error);
             if (data && data.length > 0) {
-              const newItems = fmt(data);
-              setMyMovies(prev => {
-                const existingIds = new Set(prev.map(m => m.id));
-                return [...prev, ...newItems.filter(m => !existingIds.has(m.id))];
-              });
-              setLoadingMoreCount(c => Math.max(0, c - data.length));
+              accumulated = accumulated.concat(data);
+              accumulatedCount++;
             }
           }
+          // Faz flush a cada ACCUMULATE_ROUNDS rodadas ou na última
+          if (accumulatedCount >= CONCURRENCY * ACCUMULATE_ROUNDS || i + CONCURRENCY >= ranges.length) {
+            flushAccumulated();
+          }
         }
+        // Garante que o restante seja enviado
+        flushAccumulated();
       };
 
       // Roda filmes e séries em paralelo no background
@@ -5760,8 +5822,8 @@ export default function App() {
   };
 
   const visibleMovies = useMemo(() => {
-    return myMovies.filter(m => !m.is_hidden);
-  }, [myMovies]);
+    return deferredMyMovies.filter(m => !m.is_hidden);
+  }, [deferredMyMovies]);
 
   // Filtrar filmes para Lançamentos (2025-2026)
   const newMovies = useMemo(() => {
@@ -5983,9 +6045,14 @@ export default function App() {
     }
   }, [profile]);
 
+  // Ref para evitar recriar handleSelectMovie a cada mudança de rota
+  // (evita re-render de todos os MovieCards ao navegar)
+  const locationPathRef = useRef(location.pathname);
+  useEffect(() => { locationPathRef.current = location.pathname; }, [location.pathname]);
+
   const handleSelectMovie = useCallback((movie: Movie) => {
-    navigate(`/movie/${movie.id}`, { state: { backgroundLocation: location.pathname, movie } });
-  }, [navigate, location.pathname]);
+    navigate(`/movie/${movie.id}`, { state: { backgroundLocation: locationPathRef.current, movie } });
+  }, [navigate]);
 
   const handlePlayMovie = useCallback((movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => {
     // Travamos a orientação e navegamos de forma síncrona
