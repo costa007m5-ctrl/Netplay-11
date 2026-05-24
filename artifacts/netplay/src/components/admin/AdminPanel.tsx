@@ -145,6 +145,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     priority: 0
   });
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+  const [adminVisibleCount, setAdminVisibleCount] = useState(20);
+  // Reseta a paginação ao mudar de aba ou ao pesquisar
+  React.useEffect(() => { setAdminVisibleCount(20); }, [activeTab, searchQuery]);
   const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
   const [isTmdbSearching, setIsTmdbSearching] = useState(false);
   const [tmdbSearchResults, setTmdbSearchResults] = useState<any[]>([]);
@@ -2972,7 +2975,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {filteredMovies.map((movie) => (
+                    {filteredMovies.slice(0, adminVisibleCount).map((movie) => (
                       <tr key={movie.id} className={`group hover:bg-white/[0.02] transition-colors ${selectedIds.has(movie.id) ? 'bg-red-600/5' : ''}`}>
                         <td className="px-3 md:px-6 py-4">
                           <button onClick={() => toggleSelect(movie.id)} className={`${selectedIds.has(movie.id) ? 'text-red-600' : 'text-gray-700 group-hover:text-gray-500'}`}>
@@ -3071,10 +3074,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     ))}
                   </tbody>
                 </table>
+                {adminVisibleCount < filteredMovies.length && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-white/5">
+                    <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">
+                      Mostrando {Math.min(adminVisibleCount, filteredMovies.length)} de {filteredMovies.length}
+                    </span>
+                    <button
+                      onClick={() => setAdminVisibleCount(c => c + 30)}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-black uppercase text-xs tracking-widest text-gray-300 hover:text-white transition-all"
+                    >
+                      Carregar mais 30
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {filteredMovies.map((movie) => (
+                {filteredMovies.slice(0, adminVisibleCount).map((movie) => (
                   <div 
                     key={movie.id}
                     className={`relative group rounded-2xl overflow-hidden border-2 transition-all duration-300 ${selectedIds.has(movie.id) ? 'border-red-600 ring-4 ring-red-600/20' : 'border-white/5 hover:border-white/20'}`}
@@ -3141,6 +3157,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 ))}
               </div>
+              {adminVisibleCount < filteredMovies.length && (
+                <div className="flex items-center justify-between px-2 py-4 mt-4">
+                  <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">
+                    Mostrando {Math.min(adminVisibleCount, filteredMovies.length)} de {filteredMovies.length}
+                  </span>
+                  <button
+                    onClick={() => setAdminVisibleCount(c => c + 30)}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-black uppercase text-xs tracking-widest text-gray-300 hover:text-white transition-all"
+                  >
+                    Carregar mais 30
+                  </button>
+                </div>
+              )}
             )}
 
             {filteredMovies.length === 0 && (

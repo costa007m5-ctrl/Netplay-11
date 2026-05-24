@@ -992,7 +992,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           .select(SAFE_COLS)
           .eq('type', dbType)
           .ilike('title', `%${debouncedSearch}%`)
-          .eq('is_hidden', false)
+          .neq('is_hidden', true)
           .order('rating', { ascending: false })
           .limit(200);
 

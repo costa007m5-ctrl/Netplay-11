@@ -1,10 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Settings, Film, Tv, Save, RefreshCw, CheckCircle } from 'lucide-react';
 
 const MOVIE_LIMIT_KEY = 'subaflix_movie_limit';
 const SERIES_LIMIT_KEY = 'subaflix_series_limit';
 
-const LIMIT_OPTIONS = [100, 200, 300, 500, 800, 1000, 1500, 2000];
+const QUICK_OPTIONS = [100, 200, 500, 800, 1000, 2000, 5000];
+
+const LimitControl: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}> = ({ icon, label, value, onChange }) => {
+  const [inputValue, setInputValue] = useState(String(value));
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '');
+    setInputValue(raw);
+    const n = parseInt(raw, 10);
+    if (!isNaN(n) && n > 0) onChange(n);
+  };
+
+  const handleQuickSelect = (opt: number) => {
+    onChange(opt);
+    setInputValue(String(opt));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="text-red-500">{icon}</span>
+        <span className="text-white font-black text-sm uppercase tracking-widest">{label}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={inputValue}
+            onChange={handleInputChange}
+            onBlur={() => {
+              const n = parseInt(inputValue, 10);
+              if (!isNaN(n) && n > 0) {
+                onChange(n);
+                setInputValue(String(n));
+              } else {
+                setInputValue(String(value));
+              }
+            }}
+            className="w-24 bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-red-400 font-black text-lg text-center outline-none focus:border-red-500 transition-colors"
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {QUICK_OPTIONS.map(opt => (
+          <button
+            key={opt}
+            onClick={() => handleQuickSelect(opt)}
+            className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
+              value === opt
+                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
+                : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10'
+            }`}
+          >
+            {opt >= 1000 ? `${opt / 1000}k` : opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const AdminSubaflixTab: React.FC = () => {
   const [movieLimit, setMovieLimit] = useState<number>(
@@ -39,85 +102,35 @@ const AdminSubaflixTab: React.FC = () => {
         </div>
         <div>
           <h2 className="text-white font-black text-xl italic uppercase tracking-tighter">Subaflix</h2>
-          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Configurações de carregamento de conteúdo</p>
+          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Quantidade de conteúdo carregada automaticamente</p>
         </div>
       </div>
 
-      <div className="bg-white/5 rounded-2xl border border-white/10 p-6 space-y-6">
-        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">
-          Define quantos títulos são carregados automaticamente nas abas Filmes e Séries. Quanto maior o número, mais conteúdo aparece nos carrosséis — mas o carregamento pode ser mais lento.
+      <div className="bg-white/5 rounded-2xl border border-white/10 p-6 space-y-8">
+        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
+          Define quantos títulos são carregados nas abas Filmes e Séries. Digite qualquer número ou escolha um valor rápido abaixo. Quanto maior, mais conteúdo nos carrosséis.
         </p>
 
-        {/* Filmes */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <Film size={16} className="text-red-500" />
-            <span className="text-white font-black text-sm uppercase tracking-widest">Filmes</span>
-            <span className="ml-auto text-red-400 font-black text-lg">{movieLimit}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {LIMIT_OPTIONS.map(opt => (
-              <button
-                key={opt}
-                onClick={() => setMovieLimit(opt)}
-                className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                  movieLimit === opt
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <input
-            type="range"
-            min={100}
-            max={2000}
-            step={100}
-            value={movieLimit}
-            onChange={e => setMovieLimit(Number(e.target.value))}
-            className="w-full accent-red-600"
-          />
-        </div>
+        <LimitControl
+          icon={<Film size={16} />}
+          label="Filmes"
+          value={movieLimit}
+          onChange={setMovieLimit}
+        />
 
-        {/* Séries */}
-        <div className="space-y-3 pt-4 border-t border-white/10">
-          <div className="flex items-center gap-3">
-            <Tv size={16} className="text-red-500" />
-            <span className="text-white font-black text-sm uppercase tracking-widest">Séries</span>
-            <span className="ml-auto text-red-400 font-black text-lg">{seriesLimit}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {LIMIT_OPTIONS.map(opt => (
-              <button
-                key={opt}
-                onClick={() => setSeriesLimit(opt)}
-                className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                  seriesLimit === opt
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <input
-            type="range"
-            min={100}
-            max={2000}
-            step={100}
+        <div className="border-t border-white/10 pt-6">
+          <LimitControl
+            icon={<Tv size={16} />}
+            label="Séries"
             value={seriesLimit}
-            onChange={e => setSeriesLimit(Number(e.target.value))}
-            className="w-full accent-red-600"
+            onChange={setSeriesLimit}
           />
         </div>
       </div>
 
       <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-4">
-        <p className="text-yellow-400 text-xs font-bold uppercase tracking-widest">
-          Após salvar, recarregue o app para que o novo limite entre em vigor. Os carrosséis serão preenchidos com a quantidade configurada.
+        <p className="text-yellow-400 text-xs font-bold uppercase tracking-widest leading-relaxed">
+          Após salvar, recarregue o app (F5 ou feche e abra) para que o novo limite entre em vigor.
         </p>
       </div>
 
