@@ -938,17 +938,60 @@ const LazyGenreRow = React.memo(({ genre, items, onExpand, MovieCard }: {
   );
 });
 
-const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading, loadingMoreCount }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean; loadingMoreCount?: number }) => {
+const MOVIE_COLS_SEARCH = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,release_year,rating,vote_average,runtime,genres,genre,video_url,video_url_2,preferred_quality,logo_path,watch_providers,is_hidden,last_rescanned_at,collection_id,collection_name,collection_poster_path,collection_backdrop_path,collection_logo_path,actors,overview,episodes,created_at,updated_at';
+
+const fmtMovieRow = (m: any): Movie => ({
+  ...m,
+  videoUrl: m.video_url,
+  videoUrl2: m.video_url_2,
+  preferredQuality: m.preferred_quality || undefined,
+  vote_average: m.vote_average || m.rating || 0,
+  rating: m.rating || m.vote_average || 0,
+  release_date: m.release_date || '',
+  release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
+  runtime: m.runtime || 0,
+  actors: m.actors || '',
+  is_hidden: m.is_hidden || false,
+  watch_providers: m.watch_providers || '',
+});
+
+const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading, newOnPlatform }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean; newOnPlatform?: Movie[] }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [expandedGenre, setExpandedGenre] = React.useState<string | null>(null);
   const [expandedCount, setExpandedCount] = React.useState(30);
+  const [isSearching, setIsSearching] = React.useState(false);
+  const [supabaseResults, setSupabaseResults] = React.useState<Movie[]>([]);
 
-  // Debounce da busca: não refaz o filtro a cada tecla, mas sim 200ms após parar de digitar
+  // Debounce 300ms antes de disparar busca
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery), 200);
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  // Busca no Supabase (biblioteca completa) quando o usuário pesquisa
+  React.useEffect(() => {
+    if (!debouncedSearch || debouncedSearch.length < 2) {
+      setSupabaseResults([]);
+      setIsSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearching(true);
+    supabase
+      .from('movies')
+      .select(MOVIE_COLS_SEARCH)
+      .eq('type', type === 'series' ? 'series' : 'movie')
+      .ilike('title', `%${debouncedSearch}%`)
+      .order('rating', { ascending: false })
+      .limit(200)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSupabaseResults((data || []).map(fmtMovieRow));
+        setIsSearching(false);
+      });
+    return () => { cancelled = true; };
+  }, [debouncedSearch, type]);
 
   const label = type === 'series' ? 'Séries' : 'Filmes';
 
@@ -957,12 +1000,6 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
       ? myMovies.filter((m: any) => m.type === 'series')
       : myMovies.filter((m: any) => m.type === 'movie' || (!m.type && m.type !== 'series'));
   }, [myMovies, type]);
-
-  const searchFiltered = React.useMemo(() => {
-    if (!debouncedSearch) return baseItems;
-    const q = debouncedSearch.toLowerCase();
-    return baseItems.filter((m: any) => ((m.title || m.name || '')).toLowerCase().includes(q));
-  }, [baseItems, debouncedSearch]);
 
   const genreGroups = React.useMemo(() => {
     const map = new Map<string, Movie[]>();
@@ -1024,6 +1061,28 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     </motion.div>
   ), [onSelectMovie, type]);
 
+  const NewCard = React.useCallback(({ m, idx }: { m: any; idx: number }) => (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: Math.min(idx * 0.04, 0.5) }}
+      className="flex-none w-28 sm:w-36 cursor-pointer group"
+      onClick={() => onSelectMovie(m)}
+    >
+      <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/60 transition-all shadow-lg">
+        <img
+          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : 'https://via.placeholder.com/342x513?text=Sem+Poster'}
+          alt={m.title || m.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute top-2 left-2 bg-red-600 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full">Novo</div>
+      </div>
+      <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
+    </motion.div>
+  ), [onSelectMovie]);
+
   return (
     <div className="min-h-screen bg-[#111] text-white pb-32 pt-20 md:pt-28">
       <div className="px-5 md:px-12 max-w-[1920px] mx-auto">
@@ -1053,27 +1112,16 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           )}
         </div>
 
-        {/* Banner de carregamento em background */}
-        {!isLoading && (loadingMoreCount ?? 0) > 0 && (
-          <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl w-fit">
-            <div className="w-3.5 h-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin flex-none" />
-            <span className="text-gray-400 text-[11px] font-bold uppercase tracking-widest">
-              Carregando mais {(loadingMoreCount ?? 0).toLocaleString('pt-BR')} títulos...
-            </span>
-            <span className="text-gray-600 text-[10px]">você já pode navegar e buscar</span>
-          </div>
-        )}
-
-        {/* Search bar — always visible */}
+        {/* Search bar — sempre visível */}
         {!expandedGenre && (
-          <div className="flex flex-col gap-3 mb-10">
+          <div className="flex flex-col gap-2 mb-10">
             <div className="relative max-w-lg">
               <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder={`Buscar ${label.toLowerCase()}...`}
+                placeholder={`Buscar em toda a biblioteca de ${label.toLowerCase()}...`}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-10 pr-10 text-sm font-bold text-white placeholder-gray-600 outline-none focus:border-red-600 transition-colors"
               />
               {searchQuery && (
@@ -1082,6 +1130,11 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
                 </button>
               )}
             </div>
+            {!searchQuery && (
+              <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest pl-1">
+                {baseItems.length} títulos personalizados · pesquise para acessar toda a biblioteca
+              </p>
+            )}
           </div>
         )}
 
@@ -1101,14 +1154,19 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           </div>
 
         ) : debouncedSearch ? (
-          /* Search results */
-          searchFiltered.length > 0 ? (
+          /* Resultados do Supabase (biblioteca completa) */
+          isSearching ? (
+            <div className="flex items-center gap-3 py-20">
+              <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-gray-400 font-bold uppercase tracking-widest text-xs">Buscando na biblioteca completa...</span>
+            </div>
+          ) : supabaseResults.length > 0 ? (
             <>
               <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-6">
-                {searchFiltered.length} resultado{searchFiltered.length !== 1 ? 's' : ''} para "{searchQuery}"
+                {supabaseResults.length} resultado{supabaseResults.length !== 1 ? 's' : ''} para "{debouncedSearch}"
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
-                {searchFiltered.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
+                {supabaseResults.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
               </div>
             </>
           ) : (
@@ -1116,13 +1174,13 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
               <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
                 <Search size={40} className="text-gray-700" />
               </div>
-              <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum resultado para "{searchQuery}"</p>
+              <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum resultado para "{debouncedSearch}"</p>
               <button onClick={() => setSearchQuery('')} className="mt-6 px-8 py-3 bg-red-600 rounded-full font-black uppercase text-[10px] tracking-widest">Limpar busca</button>
             </div>
           )
 
         ) : expandedGenre ? (
-          /* Expanded genre grid */
+          /* Grade expandida por gênero */
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
               {expandedItems.map((m: any, idx: number) => <MovieCard key={m.id} m={m} idx={idx} />)}
@@ -1140,8 +1198,23 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           </>
 
         ) : genreGroups.length > 0 ? (
-          /* Genre carousels — lazy rendering via IntersectionObserver */
+          /* Carrosséis por gênero + Novos na Plataforma no topo */
           <div className="space-y-10">
+
+            {/* Novos na Plataforma — 20 conteúdos adicionados hoje */}
+            {newOnPlatform && newOnPlatform.length > 0 && (
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-white font-black uppercase tracking-widest text-xs">Novos na Plataforma</h2>
+                  <span className="bg-red-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Hoje</span>
+                  <span className="text-gray-600 font-black uppercase tracking-widest text-[10px]">{newOnPlatform.length} adicionados</span>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+                  {newOnPlatform.map((m, idx) => <NewCard key={m.id} m={m} idx={idx} />)}
+                </div>
+              </div>
+            )}
+
             {genreGroups.map(({ genre, items }) => (
               <LazyGenreRow
                 key={genre}
@@ -1151,10 +1224,18 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
                 MovieCard={MovieCard}
               />
             ))}
+
+            {/* Rodapé: dica de busca */}
+            <div className="flex items-center gap-3 py-8 border-t border-white/5 mt-4">
+              <Search size={14} className="text-gray-700 flex-none" />
+              <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest">
+                Mostrando {baseItems.length} títulos personalizados · Para encontrar mais, use a busca acima
+              </p>
+            </div>
           </div>
 
         ) : (
-          /* Empty state */
+          /* Estado vazio */
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
               <Search size={40} className="text-gray-700" />
@@ -3598,6 +3679,8 @@ export default function App() {
   const [myMovies, setMyMovies] = useState<Movie[]>([]);
   const [isLoadingMovies, setIsLoadingMovies] = useState(true);
   const [loadingMoreCount, setLoadingMoreCount] = useState(0);
+  const [newOnPlatformMovies, setNewOnPlatformMovies] = useState<Movie[]>([]);
+  const [newOnPlatformSeries, setNewOnPlatformSeries] = useState<Movie[]>([]);
   // useDeferredValue: computações pesadas (franquias, gêneros, etc.) só recomputam
   // quando o browser estiver ocioso — evita travar a UI durante o carregamento em fundo
   const deferredMyMovies = useDeferredValue(myMovies);
@@ -5439,23 +5522,6 @@ export default function App() {
       return;
     }
 
-    const fmt = (rawData: any[]): Movie[] =>
-      rawData.map(m => ({
-        ...m,
-        id: m.id,
-        videoUrl: m.video_url,
-        videoUrl2: m.video_url_2,
-        preferredQuality: m.preferred_quality || undefined,
-        vote_average: m.vote_average || m.rating || 0,
-        rating: m.rating || m.vote_average || 0,
-        release_date: m.release_date || '',
-        release_year: m.release_year || (m.release_date ? new Date(m.release_date).getFullYear() : 0),
-        runtime: m.runtime || 0,
-        actors: m.actors || '',
-        is_hidden: m.is_hidden || false,
-        watch_providers: m.watch_providers || '',
-      }));
-
     const saveCache = (movies: Movie[]) => {
       try {
         const str = JSON.stringify(movies);
@@ -5470,118 +5536,50 @@ export default function App() {
     };
 
     try {
-      const INITIAL = 300;
-      const BATCH = 1000;
-      const CONCURRENCY = 2;
+      // Carrega 500 filmes + 250 séries imediatamente.
+      // O restante da biblioteca (2000+) é acessível via pesquisa — busca direto no Supabase.
+      const INITIAL_MOVIES = 500;
+      const INITIAL_SERIES = 250;
 
-      // Colunas necessárias para exibição — evita carregar texto longo (overview, actors) desnecessariamente
-      const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,release_year,rating,vote_average,runtime,genres,genre,video_url,video_url_2,preferred_quality,logo_path,watch_providers,is_hidden,last_rescanned_at,collection_id,collection_name,collection_poster_path,collection_backdrop_path,collection_logo_path,actors,overview,episodes,created_at,updated_at';
-
-      // 1. Em paralelo: conta totais + busca os primeiros itens de cada tipo
       const [
-        { count: totalMovies },
-        { count: totalSeries },
         { data: firstMovies, error: errM },
         { data: firstSeries, error: errS },
       ] = await Promise.all([
-        supabase.from('movies').select('id', { count: 'exact', head: true }).eq('type', 'movie'),
-        supabase.from('movies').select('id', { count: 'exact', head: true }).eq('type', 'series'),
-        supabase.from('movies').select(COLS).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL - 1),
-        supabase.from('movies').select(COLS).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL - 1),
+        supabase.from('movies').select(MOVIE_COLS_SEARCH).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL_MOVIES - 1),
+        supabase.from('movies').select(MOVIE_COLS_SEARCH).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL_SERIES - 1),
       ]);
 
       if (errM) throw errM;
       if (errS) throw errS;
 
-      const initialItems = [...(firstMovies || []), ...(firstSeries || [])];
-      setMyMovies(fmt(initialItems));
-      setIsLoadingMovies(false);
-
-      const remainMovies = Math.max(0, (totalMovies || 0) - INITIAL);
-      const remainSeries = Math.max(0, (totalSeries || 0) - INITIAL);
-      const totalRemaining = remainMovies + remainSeries;
-
-      if (totalRemaining === 0) {
-        saveCache(fmt(initialItems));
-        setLoadingMoreCount(0);
-        return;
-      }
-
-      setLoadingMoreCount(totalRemaining);
-
-      // Ref para rastrear IDs já carregados — evita criar new Set(prev.map…) a cada batch (O(n))
-      const loadedIds = new Set<number>(fmt(initialItems).map(m => m.id));
-
-      // 2. Carrega o restante em paralelo, acumulando 2 rodadas de CONCURRENCY antes de atualizar state
-      // startTransition: marca as atualizações de fundo como não-urgentes → UI não trava
-      const loadRest = async (type: 'movie' | 'series', total: number) => {
-        if (total <= INITIAL) return;
-        const ranges: number[] = [];
-        for (let s = INITIAL; s < total; s += BATCH) ranges.push(s);
-
-        // Acumula 8 rodadas antes de um único setState para reduzir re-renders
-        const ACCUMULATE_ROUNDS = 8;
-        let accumulated: any[] = [];
-        let accumulatedCount = 0;
-
-        const flushAccumulated = () => {
-          if (accumulated.length === 0) return;
-          const toAdd = fmt(accumulated).filter(m => !loadedIds.has(m.id));
-          toAdd.forEach(m => loadedIds.add(m.id));
-          const count = accumulated.length;
-          accumulated = [];
-          accumulatedCount = 0;
-          startTransition(() => {
-            setMyMovies(prev => [...prev, ...toAdd]);
-            setLoadingMoreCount(c => Math.max(0, c - count));
-          });
-        };
-
-        for (let i = 0; i < ranges.length; i += CONCURRENCY) {
-          const slice = ranges.slice(i, i + CONCURRENCY);
-          const results = await Promise.all(
-            slice.map(start =>
-              supabase
-                .from('movies')
-                .select(COLS)
-                .eq('type', type)
-                .order('created_at', { ascending: false })
-                .range(start, start + BATCH - 1)
-            )
-          );
-          for (const { data, error } of results) {
-            if (error) console.error(`Erro paginando ${type}:`, error);
-            if (data && data.length > 0) {
-              accumulated = accumulated.concat(data);
-              accumulatedCount++;
-            }
-          }
-          // Faz flush a cada ACCUMULATE_ROUNDS rodadas ou na última
-          if (accumulatedCount >= CONCURRENCY * ACCUMULATE_ROUNDS || i + CONCURRENCY >= ranges.length) {
-            flushAccumulated();
-          }
-        }
-        // Garante que o restante seja enviado
-        flushAccumulated();
-      };
-
-      // Roda filmes e séries em paralelo no background
-      await Promise.all([
-        loadRest('movie', totalMovies || 0),
-        loadRest('series', totalSeries || 0),
-      ]);
-
+      const initialItems = [...(firstMovies || []), ...(firstSeries || [])].map(fmtMovieRow);
+      setMyMovies(initialItems);
       setLoadingMoreCount(0);
-      // Salva cache com tudo carregado
-      setMyMovies(prev => {
-        saveCache(prev);
-        return prev;
-      });
+      setIsLoadingMovies(false);
+      saveCache(initialItems);
     } catch (error) {
       console.error('Erro ao buscar filmes do Supabase:', error);
       setLoadingMoreCount(0);
     } finally {
       setIsLoadingMovies(false);
+    }
+  };
+
+  // Busca os 20 conteúdos adicionados hoje para o carrossel "Novos na Plataforma"
+  const fetchNewOnPlatform = async () => {
+    if (!hasSupabase) return;
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const COLS_NEW = 'id,title,type,poster_path,backdrop_path,release_date,release_year,rating,vote_average,video_url,video_url_2,logo_path,genres,is_hidden,created_at';
+      const [{ data: movies }, { data: series }] = await Promise.all([
+        supabase.from('movies').select(COLS_NEW).eq('type', 'movie').gte('created_at', today.toISOString()).order('created_at', { ascending: false }).limit(20),
+        supabase.from('movies').select(COLS_NEW).eq('type', 'series').gte('created_at', today.toISOString()).order('created_at', { ascending: false }).limit(20),
+      ]);
+      setNewOnPlatformMovies((movies || []).map(fmtMovieRow));
+      setNewOnPlatformSeries((series || []).map(fmtMovieRow));
+    } catch (e) {
+      console.error('Erro ao buscar novidades na plataforma:', e);
     }
   };
 
@@ -5642,10 +5640,36 @@ export default function App() {
     }
   };
 
+  // Personalização: reordena myMovies conforme gêneros mais assistidos pelo usuário
+  const hasPersonalizedRef = React.useRef(false);
+  useEffect(() => {
+    if (hasPersonalizedRef.current || continueWatching.length === 0 || myMovies.length === 0) return;
+    const genreScores: Record<string, number> = {};
+    continueWatching.forEach(m => {
+      const genres = (m.genres || '').split(',').map((g: string) => g.trim().toLowerCase()).filter(Boolean);
+      genres.forEach(g => { genreScores[g] = (genreScores[g] || 0) + 1; });
+    });
+    if (Object.keys(genreScores).length === 0) return;
+    hasPersonalizedRef.current = true;
+    const scoreMovie = (m: Movie) => {
+      const genres = (m.genres || '').split(',').map((g: string) => g.trim().toLowerCase()).filter(Boolean);
+      return genres.reduce((sum, g) => sum + (genreScores[g] || 0), 0);
+    };
+    startTransition(() => {
+      setMyMovies(prev => {
+        const movies = prev.filter(m => m.type === 'movie' || !m.type);
+        const series = prev.filter(m => m.type === 'series');
+        const sortByScore = (arr: Movie[]) => [...arr].sort((a, b) => scoreMovie(b) - scoreMovie(a));
+        return [...sortByScore(movies), ...sortByScore(series)];
+      });
+    });
+  }, [continueWatching]);
+
   useEffect(() => {
     if (user) {
       fetchMyMovies();
       fetchContinueWatching();
+      fetchNewOnPlatform();
 
       // Adicionar listener em tempo real para a tabela de filmes
       const channel = supabase
@@ -6674,8 +6698,8 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
-          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} loadingMoreCount={loadingMoreCount} />} />
-          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} loadingMoreCount={loadingMoreCount} />} />
+          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} />} />
+          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
