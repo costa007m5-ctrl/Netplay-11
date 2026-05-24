@@ -886,14 +886,14 @@ const NewEpisodesView = React.memo(({ myMovies, onEpisodeClick, onSelectMovie }:
   );
 });
 
-const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void }) => {
+const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoading }: { myMovies: Movie[]; type: 'filmes' | 'series'; onSelectMovie: (m: Movie) => void; isLoading?: boolean }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedGenre, setSelectedGenre] = React.useState('');
 
   const filtered = React.useMemo(() => {
     let items = type === 'series'
       ? myMovies.filter((m: any) => m.type === 'series')
-      : myMovies.filter((m: any) => m.type !== 'series');
+      : myMovies.filter((m: any) => m.type === 'movie' || (!m.type && m.type !== 'series'));
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       items = items.filter((m: any) => ((m.title || m.name || '')).toLowerCase().includes(q));
@@ -906,7 +906,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie }: { myM
 
   const genres = React.useMemo(() => {
     const all = myMovies
-      .filter((m: any) => type === 'series' ? m.type === 'series' : m.type !== 'series')
+      .filter((m: any) => type === 'series' ? m.type === 'series' : m.type === 'movie' || !m.type)
       .flatMap((m: any) => (m.genres || '').split(',').map((g: string) => g.trim()))
       .filter(Boolean);
     return [...new Set(all)].sort().slice(0, 14) as string[];
@@ -919,7 +919,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie }: { myM
       <div className="px-5 md:px-12 max-w-[1920px] mx-auto">
         <div className="flex items-end gap-4 mb-8">
           <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter text-white leading-none">{label}</h1>
-          <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-2">{filtered.length} títulos</span>
+          <span className="text-gray-600 font-black uppercase tracking-widest text-xs mb-2">{isLoading ? 'Carregando...' : `${filtered.length} títulos`}</span>
         </div>
 
         <div className="flex flex-col gap-3 mb-8">
@@ -953,7 +953,13 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie }: { myM
           )}
         </div>
 
-        {filtered.length > 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse border border-white/5" />
+            ))}
+          </div>
+        ) : filtered.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
             {filtered.map((m: any, idx: number) => (
               <motion.div
@@ -3418,6 +3424,7 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isPlansScreenOpen, setIsPlansScreenOpen] = useState(false);
   const [myMovies, setMyMovies] = useState<Movie[]>([]);
+  const [isLoadingMovies, setIsLoadingMovies] = useState(true);
   const [continueWatching, setContinueWatching] = useState<Movie[]>([]);
   const [watchHistory, setWatchHistory] = useState<Record<number, number>>({});
   
@@ -5237,11 +5244,14 @@ export default function App() {
     // Tentar carregar do cache primeiro
     const cached = localStorage.getItem('cached_my_movies');
     if (cached) {
-      setMyMovies(JSON.parse(cached));
+      try {
+        setMyMovies(JSON.parse(cached));
+      } catch {}
     }
 
     if (!hasSupabase || !user) {
       console.log('fetchMyMovies: Sem Supabase ou Usuário', { hasSupabase, user: !!user });
+      setIsLoadingMovies(false);
       return;
     }
     
@@ -5289,6 +5299,8 @@ export default function App() {
       }
     } catch (error) {
       console.error('Erro ao buscar filmes do Supabase:', error);
+    } finally {
+      setIsLoadingMovies(false);
     }
   };
 
@@ -6369,8 +6381,8 @@ export default function App() {
           } />
           
           <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} />} />
-          <Route path="/filmes" element={<ContentFilteredPage myMovies={myMovies} type="filmes" onSelectMovie={handleSelectMovie} />} />
-          <Route path="/series" element={<ContentFilteredPage myMovies={myMovies} type="series" onSelectMovie={handleSelectMovie} />} />
+          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
+          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
