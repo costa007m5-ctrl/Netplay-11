@@ -938,6 +938,9 @@ const LazyGenreRow = React.memo(({ genre, items, onExpand, MovieCard }: {
   );
 });
 
+// Colunas leves para carregamento inicial (sem episodes/actors/overview — campos grandes que atrasam o load)
+const MOVIE_COLS_BROWSE = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,release_year,rating,vote_average,runtime,genres,genre,video_url,video_url_2,preferred_quality,logo_path,watch_providers,is_hidden,last_rescanned_at,collection_id,collection_name,collection_poster_path,collection_backdrop_path,collection_logo_path,created_at,updated_at';
+// Colunas completas para pesquisa (inclui episodes, actors, overview)
 const MOVIE_COLS_SEARCH = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,release_year,rating,vote_average,runtime,genres,genre,video_url,video_url_2,preferred_quality,logo_path,watch_providers,is_hidden,last_rescanned_at,collection_id,collection_name,collection_poster_path,collection_backdrop_path,collection_logo_path,actors,overview,episodes,created_at,updated_at';
 
 const fmtMovieRow = (m: any): Movie => ({
@@ -5507,13 +5510,13 @@ export default function App() {
 
   const fetchMyMovies = async () => {
     // Mostra cache imediatamente enquanto busca dados frescos
-    const cached = localStorage.getItem('cached_my_movies_v3');
+    const cached = localStorage.getItem('cached_my_movies_v4');
     if (cached) {
       try {
         setMyMovies(JSON.parse(cached));
         setIsLoadingMovies(false);
       } catch {
-        localStorage.removeItem('cached_my_movies_v3');
+        localStorage.removeItem('cached_my_movies_v4');
       }
     }
 
@@ -5526,17 +5529,18 @@ export default function App() {
       try {
         const str = JSON.stringify(movies);
         if (str.length < 4 * 1024 * 1024) {
-          localStorage.setItem('cached_my_movies_v3', str);
+          localStorage.setItem('cached_my_movies_v4', str);
         } else {
-          localStorage.removeItem('cached_my_movies_v3');
+          localStorage.removeItem('cached_my_movies_v4');
         }
       } catch {
-        localStorage.removeItem('cached_my_movies_v3');
+        localStorage.removeItem('cached_my_movies_v4');
       }
     };
 
     try {
-      // Carrega 500 filmes + 250 séries imediatamente.
+      // Carrega 500 filmes + 250 séries imediatamente usando colunas leves (sem episodes/actors/overview).
+      // Isso reduz o payload de ~10MB para ~500KB, tornando o load muito mais rápido.
       // O restante da biblioteca (2000+) é acessível via pesquisa — busca direto no Supabase.
       const INITIAL_MOVIES = 500;
       const INITIAL_SERIES = 250;
@@ -5545,8 +5549,8 @@ export default function App() {
         { data: firstMovies, error: errM },
         { data: firstSeries, error: errS },
       ] = await Promise.all([
-        supabase.from('movies').select(MOVIE_COLS_SEARCH).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL_MOVIES - 1),
-        supabase.from('movies').select(MOVIE_COLS_SEARCH).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL_SERIES - 1),
+        supabase.from('movies').select(MOVIE_COLS_BROWSE).eq('type', 'movie').order('created_at', { ascending: false }).range(0, INITIAL_MOVIES - 1),
+        supabase.from('movies').select(MOVIE_COLS_BROWSE).eq('type', 'series').order('created_at', { ascending: false }).range(0, INITIAL_SERIES - 1),
       ]);
 
       if (errM) throw errM;
