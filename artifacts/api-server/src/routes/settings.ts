@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { db, settingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -11,6 +10,15 @@ router.get("/settings", async (_req, res) => {
     for (const row of rows) {
       result[row.key] = row.value;
     }
+
+    if (!result["betterflix_b2b_key"]) {
+      const envKey =
+        process.env.BETTERFLIX_API_KEY ||
+        process.env.VITE_BETTERFLIX_API_KEY ||
+        "";
+      if (envKey) result["betterflix_b2b_key"] = envKey;
+    }
+
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || "Erro ao buscar configurações" });
