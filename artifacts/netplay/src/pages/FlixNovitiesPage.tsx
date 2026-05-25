@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw, Bell } from 'lucide-react';
+import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw, Bell, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { buildBetterFlixUrl } from '../components/admin/AdminFlixAPITab';
@@ -62,7 +62,26 @@ const FILTERS = [
 const TABS = [
   { label: 'API Flix', value: 'apiflix' },
   { label: 'Episódios Novos', value: 'episodes' },
+  { label: 'Recentes BetterFlix', value: 'betterflix-recents' },
 ];
+
+interface BetterFlixRecentItem {
+  id: string;
+  tmdb_id: number;
+  title: string;
+  type: 'movie' | 'series' | 'episode';
+  poster_path?: string;
+  source?: string;
+  added_at?: number;
+}
+
+const fetchBetterFlixRecents = async (filter: string): Promise<BetterFlixRecentItem[]> => {
+  const subpath = filter === 'movies' ? '/movies' : filter === 'tvshows' ? '/series' : '';
+  const res = await fetch(`/api/betterflix/recents${subpath}?limit=24`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.titles || [];
+};
 
 const FlixCard = React.memo(({
   item,
@@ -264,25 +283,33 @@ const fetchRecentEpisodes = async (): Promise<PlatformEpisode[]> => {
 
 const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defaultFilter = 'all', hideFilterBar = false, pageTitle }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'apiflix' | 'episodes'>('apiflix');
+  const [activeTab, setActiveTab] = useState<'apiflix' | 'episodes' | 'betterflix-recents'>('apiflix');
   const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>(defaultFilter);
   const [page, setPage] = useState(1);
   const [extraItems, setExtraItems] = useState<FlixItem[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
 
   // React Query — página 1 fica em cache; voltar para a tela não rebusca
-  const { data: baseItems = [], isFetching: loading } = useQuery({
+  const { data: baseItems = [], isFetching: loading, refetch: refetchApiflix } = useQuery({
     queryKey: ['flixNovidadesPage', filter],
     queryFn: () => fetchFlixPage(filter, 1),
     staleTime: 10 * 60 * 1000,
   });
 
   // React Query — episódios recentes (busca no Supabase, cache 10 min)
-  const { data: episodes = [], isFetching: loadingEpisodes } = useQuery({
+  const { data: episodes = [], isFetching: loadingEpisodes, refetch: refetchEpisodes } = useQuery({
     queryKey: ['flixEpisodiosRecentes'],
     queryFn: fetchRecentEpisodes,
     enabled: activeTab === 'episodes',
     staleTime: 10 * 60 * 1000,
+  });
+
+  // React Query — recentes BetterFlix
+  const { data: bfRecents = [], isFetching: loadingBfRecents, refetch: refetchBfRecents } = useQuery({
+    queryKey: ['bfRecents', filter],
+    queryFn: () => fetchBetterFlixRecents(filter),
+    enabled: activeTab === 'betterflix-recents',
+    staleTime: 5 * 60 * 1000,
   });
 
   const hasMore = extraItems.length === 0
@@ -382,6 +409,7 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             }`}
           >
             {tab.value === 'episodes' && <Bell size={10} className="inline mr-1.5 mb-0.5" />}
+            {tab.value === 'betterflix-recents' && <Clock size={10} className="inline mr-1.5 mb-0.5" />}
             {tab.label}
           </button>
         ))}
@@ -417,7 +445,7 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
               <div className="flex flex-col items-center justify-center py-32 gap-4">
                 <Zap size={48} className="text-white/10" />
                 <p className="text-white/30 font-bold text-lg">Nenhum conteúdo encontrado</p>
-                <button onClick={() => fetchItems(filter, 1, true)} className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-full text-sm font-bold transition-all">
+                <button onClick={() => refetchApiflix()} className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-full text-sm font-bold transition-all">
                   <RefreshCw size={14} />
                   Tentar novamente
                 </button>
@@ -459,7 +487,7 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
                 <p className="text-white font-black text-lg italic uppercase tracking-tighter">Episódios da Plataforma</p>
                 <p className="text-white/30 text-xs mt-0.5">Séries atualizadas nos últimos 30 dias</p>
               </div>
-              <button onClick={fetchEpisodes} disabled={loadingEpisodes} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-black uppercase tracking-widest text-white/60 hover:text-white border border-white/10 transition-all disabled:opacity-40">
+              <button onClick={() => refetchEpisodes()} disabled={loadingEpisodes} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-black uppercase tracking-widest text-white/60 hover:text-white border border-white/10 transition-all disabled:opacity-40">
                 <RefreshCw size={12} className={loadingEpisodes ? 'animate-spin' : ''} />
                 Atualizar
               </button>
@@ -486,6 +514,120 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
                   {episodes.length} episódios recentes · Da biblioteca da plataforma
                 </p>
               </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'betterflix-recents' && (
+          <>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <p className="text-white font-black text-lg italic uppercase tracking-tighter">Recém Adicionados</p>
+                <p className="text-white/30 text-xs mt-0.5">Conteúdos mais recentes na plataforma BetterFlix</p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {FILTERS.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => handleFilterChange(f.value as typeof filter)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                      filter === f.value
+                        ? 'bg-orange-600 text-white shadow-lg'
+                        : 'text-white/40 hover:text-white bg-white/5'
+                    }`}
+                  >
+                    <f.icon size={9} />
+                    {f.label}
+                  </button>
+                ))}
+                <button onClick={() => refetchBfRecents()} disabled={loadingBfRecents} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-white border border-white/10 transition-all disabled:opacity-40">
+                  <RefreshCw size={10} className={loadingBfRecents ? 'animate-spin' : ''} />
+                  Atualizar
+                </button>
+              </div>
+            </div>
+
+            {loadingBfRecents ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.05}s` }} />
+                ))}
+              </div>
+            ) : bfRecents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <Clock size={48} className="text-white/10" />
+                <p className="text-white/30 font-bold text-lg">Nenhum conteúdo recente encontrado</p>
+                <button onClick={() => refetchBfRecents()} className="flex items-center gap-2 px-4 py-2 bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 rounded-full text-sm font-bold transition-all">
+                  <RefreshCw size={14} />
+                  Tentar novamente
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                  {bfRecents.map((item, idx) => {
+                    const posterUrl = item.poster_path
+                      ? (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w342${item.poster_path}`)
+                      : null;
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25, delay: Math.min(idx * 0.03, 0.5) }}
+                        className="group cursor-pointer"
+                        onClick={() => {
+                          if (item.type === 'movie' || item.type === 'series') {
+                            const url = buildBetterFlixUrl(item.tmdb_id, item.type === 'series' ? 'tv' : 'movie');
+                            onSelectMovie({
+                              id: item.tmdb_id,
+                              title: item.type === 'movie' ? item.title : undefined,
+                              name: item.type === 'series' ? item.title : undefined,
+                              type: item.type,
+                              poster_path: item.poster_path,
+                              videoUrl: url,
+                              playerStyle: 'betterflix',
+                            });
+                          }
+                        }}
+                      >
+                        <div className="relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-white/5 group-hover:border-orange-500/50 transition-all duration-300 shadow-lg">
+                          {posterUrl ? (
+                            <img src={posterUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-full h-full bg-white/5 flex items-center justify-center">
+                              {item.type === 'series' ? <Tv size={36} className="text-white/15" /> : <Film size={36} className="text-white/15" />}
+                            </div>
+                          )}
+                          <div className="absolute top-2 left-2">
+                            <div className="bg-orange-600/90 backdrop-blur-sm text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
+                              <Clock size={7} />
+                              Novo
+                            </div>
+                          </div>
+                          <div className="absolute top-2 right-2">
+                            <div className={`backdrop-blur-sm text-white text-[7px] font-black uppercase px-2 py-0.5 rounded-full ${item.type === 'series' ? 'bg-blue-600/70' : item.type === 'episode' ? 'bg-emerald-600/70' : 'bg-white/10'}`}>
+                              {item.type === 'series' ? 'Série' : item.type === 'episode' ? 'Ep.' : 'Filme'}
+                            </div>
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
+                            <div className="mt-2 w-full bg-orange-600 text-white text-[9px] font-black uppercase tracking-widest py-1.5 rounded-lg text-center">
+                              Assistir
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 px-0.5">
+                          <p className="text-white text-xs font-bold leading-tight line-clamp-2">{item.title}</p>
+                          {item.source && <p className="text-white/25 text-[10px] mt-0.5 font-mono">{item.source}</p>}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+                <p className="text-center text-white/20 text-xs mt-6 font-mono">
+                  {bfRecents.length} títulos · Fonte: BetterFlix Recents API
+                </p>
+              </>
             )}
           </>
         )}

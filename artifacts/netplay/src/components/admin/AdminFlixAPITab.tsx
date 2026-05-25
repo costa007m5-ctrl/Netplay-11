@@ -1,9 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Tv2, Key, CheckCircle2, ExternalLink, Save, Trash2, Radio, Trophy } from 'lucide-react';
+import { Tv2, Key, CheckCircle2, ExternalLink, Save, Trash2, Radio, Trophy, Globe } from 'lucide-react';
 
 export const BETTERFLIX_KEY_STORAGE = 'netplay_betterflix_b2b_key';
+const SETTINGS_API_KEY = 'betterflix_b2b_key';
+
+let _globalKeyCache: string | null = null;
+let _globalKeyLoaded = false;
+
+export async function loadGlobalBetterFlixKey(): Promise<string> {
+  if (_globalKeyLoaded && _globalKeyCache !== null) return _globalKeyCache;
+  try {
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const data: Record<string, string> = await res.json();
+      const key = data[SETTINGS_API_KEY] || '';
+      _globalKeyCache = key;
+      _globalKeyLoaded = true;
+      if (key) {
+        try { localStorage.setItem(BETTERFLIX_KEY_STORAGE, key); } catch {}
+      }
+      return key;
+    }
+  } catch {}
+  const local = (() => { try { return localStorage.getItem(BETTERFLIX_KEY_STORAGE) || ''; } catch { return ''; } })();
+  _globalKeyCache = local;
+  _globalKeyLoaded = true;
+  return local;
+}
 
 export function getBetterFlixKey(): string {
+  if (_globalKeyLoaded && _globalKeyCache !== null) return _globalKeyCache;
   try {
     return localStorage.getItem(BETTERFLIX_KEY_STORAGE)
       || import.meta.env.VITE_BETTERFLIX_API_KEY
@@ -11,12 +37,23 @@ export function getBetterFlixKey(): string {
   } catch { return import.meta.env.VITE_BETTERFLIX_API_KEY || ''; }
 }
 
-export function setBetterFlixKey(key: string) {
+export async function setBetterFlixKey(key: string) {
+  _globalKeyCache = key;
+  _globalKeyLoaded = true;
   try {
     if (key) localStorage.setItem(BETTERFLIX_KEY_STORAGE, key);
     else localStorage.removeItem(BETTERFLIX_KEY_STORAGE);
   } catch {}
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [SETTINGS_API_KEY]: key }),
+    });
+  } catch {}
 }
+
+loadGlobalBetterFlixKey();
 
 export function buildBetterFlixUrl(
   tmdbId: number,
@@ -49,15 +86,15 @@ export function AdminFlixAPITab() {
     setKey(getBetterFlixKey());
   }, []);
 
-  const handleSave = () => {
-    setBetterFlixKey(key.trim());
+  const handleSave = async () => {
+    await setBetterFlixKey(key.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     setKey('');
-    setBetterFlixKey('');
+    await setBetterFlixKey('');
   };
 
   const fetchChannels = async () => {
@@ -171,9 +208,10 @@ export function AdminFlixAPITab() {
               Chave configurada — será incluída automaticamente em todas as requisições do player.
             </div>
           )}
-          <p className="text-xs text-gray-700 mt-3 italic">
-            A chave é salva localmente no navegador. Cada admin precisa configurá-la no seu dispositivo.
-          </p>
+          <div className="flex items-center gap-2 mt-3 text-xs text-emerald-400/70 font-bold">
+            <Globe size={11} />
+            Configuração global — salva no banco e aplicada a todos os dispositivos automaticamente.
+          </div>
         </div>
       </section>
 

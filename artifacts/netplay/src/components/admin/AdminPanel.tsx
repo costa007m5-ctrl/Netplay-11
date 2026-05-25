@@ -7,7 +7,7 @@ import {
   ArrowUpDown, Download, Settings, Database, Plus, Upload,
   Sparkles, Calendar, Shield, Copy, Star, Send, Image as ImageIcon,
   Activity, Users, Heart, DollarSign, Server, Bell, RefreshCw,
-  Loader2, Zap, Film, Tv, BookOpen, Layers, StopCircle, ToggleRight
+  Loader2, Zap, Film, Tv, BookOpen, Layers, StopCircle, ToggleRight, Clock
 } from 'lucide-react';
 import { Movie, ScannerState, ReScannerState, StreamingProvider, LogoScannerState, LogoScanScope, LogoScanMode } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -25,6 +25,7 @@ import AdminTeraboxV3Tab from './AdminTeraboxV3Tab';
 import AdminQuenteTab from './AdminQuenteTab';
 import AdminEpisodeSettingsTab from './AdminEpisodeSettingsTab';
 import AdminFlixAPITab from './AdminFlixAPITab';
+import AdminFlixRecentsTab from './AdminFlixRecentsTab';
 import AdminNet2Tab from './AdminNet2Tab';
 import AdminFlix3Tab from './AdminFlix3Tab';
 import AdminSubaflixTab from './AdminSubaflixTab';
@@ -60,7 +61,7 @@ interface AdminPanelProps {
   onRefresh?: () => void;
 }
 
-type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'net2' | 'flix3' | 'player-apis' | 'subaflix';
+type AdminTab = 'dashboard' | 'all' | 'drive' | 'kingx' | 'others' | 'pending' | 'providers' | 'app' | 'duplicates' | 'collections' | 'supabase' | 'requests' | 'genres' | 'users' | 'mercadopago' | 'referrals' | 'apis' | 'onesignal' | 'terabox' | 'terabox2' | 'terabox3' | 'quente' | 'episode-settings' | 'flixapi' | 'flix-recents' | 'net2' | 'flix3' | 'player-apis' | 'subaflix';
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
   movies,
@@ -1703,6 +1704,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               { id: 'quente', label: 'Quente', icon: Activity },
               { id: 'net2', label: 'Net 2.0', icon: Tv },
               { id: 'flixapi', label: 'API Flix', icon: Tv },
+              { id: 'flix-recents', label: 'Recentes BetterFlix', icon: Clock },
               { id: 'flix3', label: 'Flix 3.0', icon: Tv },
               { id: 'player-apis', label: 'Players Ativos', icon: ToggleRight },
               { id: 'apis', label: 'APIs (Status)', icon: Server },
@@ -2286,6 +2288,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <AdminNet2Tab />
             ) : activeTab === 'flixapi' ? (
               <AdminFlixAPITab />
+            ) : activeTab === 'flix-recents' ? (
+              <AdminFlixRecentsTab />
             ) : activeTab === 'flix3' ? (
               <AdminFlix3Tab onRefresh={onRefresh} />
             ) : activeTab === 'player-apis' ? (

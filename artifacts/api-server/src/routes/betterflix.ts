@@ -354,4 +354,31 @@ router.get("/epg/channel", async (req, res) => {
   }
 });
 
+// ── Proxy /betterflix/recents/* → betterflix.click/api/recents/* ──────────────
+async function proxyBetterFlixRecents(subpath: string, query: Record<string, any>, res: any) {
+  const qs = new URLSearchParams(query).toString();
+  const targetUrl = `https://betterflix.click/api/recents${subpath}${qs ? '?' + qs : ''}`;
+  try {
+    const { data } = await axios.get(targetUrl, {
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': 'https://betterflix.click/',
+        'Accept': 'application/json',
+      },
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: 'Falha ao buscar recentes BetterFlix', detail: err.message });
+  }
+}
+
+router.get("/betterflix/recents", async (req, res) => {
+  await proxyBetterFlixRecents('', req.query as any, res);
+});
+
+router.get("/betterflix/recents/:subpath", async (req, res) => {
+  await proxyBetterFlixRecents(`/${req.params.subpath}`, req.query as any, res);
+});
+
 export default router;
