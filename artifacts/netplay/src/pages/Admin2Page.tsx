@@ -1,113 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Image, Tv2, CheckCircle2, XCircle, Loader2, RotateCcw, Zap } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import tmdb, { requests, getMovieLogo } from '../services/tmdb';
-
-interface SyncState {
-  running: boolean;
-  done: boolean;
-  current: number;
-  total: number;
-  updated: number;
-  skipped: number;
-  errors: number;
-  status: string;
-}
-
-const emptySyncState = (): SyncState => ({
-  running: false, done: false, current: 0, total: 0,
-  updated: 0, skipped: 0, errors: 0, status: ''
-});
-
-const PAGE = 1000;
-
-async function fetchAllMovies(): Promise<any[]> {
-  let all: any[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await supabase
-      .from('movies')
-      .select('id,title,type,logo_path,watch_providers')
-      .order('id', { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    all = all.concat(data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return all;
-}
+import { ArrowLeft, Image, Tv2, CheckCircle2, Loader2, RotateCcw, Zap, Pause, Play, X } from 'lucide-react';
+import { useSyncContext, SyncJob } from '../contexts/SyncContext';
 
 export default function Admin2Page({ navigate }: { navigate: (to: any) => void }) {
-  const [logoSync, setLogoSync] = useState<SyncState>(emptySyncState());
-  const [providerSync, setProviderSync] = useState<SyncState>(emptySyncState());
-  const logoAbort = useRef(false);
-  const providerAbort = useRef(false);
-
-  const startLogoSync = async () => {
-    logoAbort.current = false;
-    setLogoSync({ running: true, done: false, current: 0, total: 0, updated: 0, skipped: 0, errors: 0, status: 'Carregando catálogo...' });
-
-    const all = await fetchAllMovies();
-    const toSync = all.filter(m => !m.logo_path || m.logo_path === '');
-    setLogoSync(s => ({ ...s, total: toSync.length, status: `${toSync.length} conteúdos sem logo encontrados` }));
-
-    let updated = 0, skipped = 0, errors = 0;
-    for (let i = 0; i < toSync.length; i++) {
-      if (logoAbort.current) break;
-      const movie = toSync[i];
-      setLogoSync(s => ({ ...s, current: i + 1, status: `Buscando logo: ${movie.title}` }));
-      try {
-        const searchRes = await tmdb.get(requests.searchMulti, { params: { query: movie.title } });
-        const result = searchRes.data.results?.[0];
-        if (!result) { skipped++; continue; }
-        const isTv = result.media_type === 'tv' || movie.type === 'series';
-        const logoUrl = await getMovieLogo(result.id, isTv ? 'tv' : 'movie');
-        if (logoUrl) {
-          await supabase.from('movies').update({ logo_path: logoUrl }).eq('id', movie.id);
-          updated++;
-        } else {
-          skipped++;
-        }
-      } catch {
-        errors++;
-      }
-      setLogoSync(s => ({ ...s, updated, skipped, errors }));
-    }
-    setLogoSync(s => ({ ...s, running: false, done: true, status: logoAbort.current ? 'Pausado pelo usuário' : 'Sincronização de logos concluída!' }));
-  };
-
-  const startProviderSync = async () => {
-    providerAbort.current = false;
-    setProviderSync({ running: true, done: false, current: 0, total: 0, updated: 0, skipped: 0, errors: 0, status: 'Carregando catálogo...' });
-
-    const all = await fetchAllMovies();
-    setProviderSync(s => ({ ...s, total: all.length, status: `${all.length} conteúdos no catálogo` }));
-
-    let updated = 0, skipped = 0, errors = 0;
-    for (let i = 0; i < all.length; i++) {
-      if (providerAbort.current) break;
-      const movie = all[i];
-      setProviderSync(s => ({ ...s, current: i + 1, status: `Buscando streaming: ${movie.title}` }));
-      try {
-        const searchRes = await tmdb.get(requests.searchMulti, { params: { query: movie.title } });
-        const result = searchRes.data.results?.[0];
-        if (!result) { skipped++; setProviderSync(s => ({ ...s, skipped })); continue; }
-        const isTv = result.media_type === 'tv' || movie.type === 'series';
-        const providersPath = isTv ? requests.tvWatchProviders(result.id) : requests.movieWatchProviders(result.id);
-        const providersRes = await tmdb.get(providersPath).catch(() => ({ data: { results: {} } }));
-        const providersBR = providersRes.data.results?.BR?.flatrate || [];
-        const watch_providers = providersBR.map((p: any) => `${p.provider_name}|https://image.tmdb.org/t/p/original${p.logo_path}`).join(';;');
-        await supabase.from('movies').update({ watch_providers: watch_providers || '' }).eq('id', movie.id);
-        updated++;
-      } catch {
-        errors++;
-      }
-      setProviderSync(s => ({ ...s, updated, skipped, errors }));
-    }
-    setProviderSync(s => ({ ...s, running: false, done: true, status: providerAbort.current ? 'Pausado pelo usuário' : 'Sincronização de streamings concluída!' }));
-  };
+  const { logoJob, providerJob, startLogos, startProviders, pauseLogos, pauseProviders, cancelLogos, cancelProviders, resetLogos, resetProviders } = useSyncContext();
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white pt-20 pb-32 px-4 md:px-12">
@@ -137,10 +34,12 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
             icon={<Image size={28} />}
             title="Sincronizar Logos"
             description="Busca e salva a logo oficial (PNG transparente) no TMDB para todos os filmes e séries que ainda não têm logo. Ideal para rodar após importações em massa."
-            state={logoSync}
-            onStart={startLogoSync}
-            onStop={() => { logoAbort.current = true; }}
-            onReset={() => setLogoSync(emptySyncState())}
+            job={logoJob}
+            onStart={() => startLogos(0)}
+            onResume={() => startLogos(logoJob.resumeFrom)}
+            onPause={pauseLogos}
+            onCancel={cancelLogos}
+            onReset={resetLogos}
             color="blue"
           />
 
@@ -148,10 +47,12 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
             icon={<Tv2 size={28} />}
             title="Sincronizar Streamings"
             description='Busca no TMDB onde cada filme/série está disponível para assistir no Brasil (Netflix, Max, Prime, etc.) e salva o campo "Onde Assistir" de cada conteúdo.'
-            state={providerSync}
-            onStart={startProviderSync}
-            onStop={() => { providerAbort.current = true; }}
-            onReset={() => setProviderSync(emptySyncState())}
+            job={providerJob}
+            onStart={() => startProviders(0)}
+            onResume={() => startProviders(providerJob.resumeFrom)}
+            onPause={pauseProviders}
+            onCancel={cancelProviders}
+            onReset={resetProviders}
             color="orange"
           />
         </div>
@@ -162,21 +63,28 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
 }
 
 function SyncCard({
-  icon, title, description, state, onStart, onStop, onReset, color
+  icon, title, description, job, onStart, onResume, onPause, onCancel, onReset, color
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
-  state: SyncState;
+  job: SyncJob;
   onStart: () => void;
-  onStop: () => void;
+  onResume: () => void;
+  onPause: () => void;
+  onCancel: () => void;
   onReset: () => void;
   color: 'blue' | 'orange';
 }) {
   const accent = color === 'blue' ? 'text-blue-400 border-blue-600/30 bg-blue-600/10' : 'text-orange-400 border-orange-600/30 bg-orange-600/10';
   const bar = color === 'blue' ? 'bg-blue-500' : 'bg-orange-500';
   const btn = color === 'blue' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-orange-600 hover:bg-orange-500';
-  const pct = state.total > 0 ? Math.round((state.current / state.total) * 100) : 0;
+  const pct = job.total > 0 ? Math.round((job.current / job.total) * 100) : 0;
+
+  const isIdle = job.status === 'idle';
+  const isRunning = job.status === 'running' || job.status === 'loading';
+  const isPaused = job.status === 'paused';
+  const isDone = job.status === 'done';
 
   return (
     <motion.div
@@ -192,15 +100,16 @@ function SyncCard({
         </div>
       </div>
 
-      {(state.running || state.done) && (
+      {!isIdle && (
         <div className="mb-6 space-y-3">
           <div className="flex items-center gap-2">
-            {state.running && <Loader2 size={14} className="animate-spin text-gray-400" />}
-            {state.done && !state.running && <CheckCircle2 size={14} className="text-green-400" />}
-            <span className="text-gray-300 text-xs font-bold truncate">{state.status}</span>
+            {isRunning && <Loader2 size={14} className="animate-spin text-gray-400" />}
+            {isDone && <CheckCircle2 size={14} className="text-green-400" />}
+            {isPaused && <Pause size={14} className="text-yellow-400" />}
+            <span className="text-gray-300 text-xs font-bold truncate">{job.message}</span>
           </div>
 
-          {state.total > 0 && (
+          {job.total > 0 && (
             <>
               <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
                 <motion.div
@@ -210,21 +119,32 @@ function SyncCard({
                 />
               </div>
               <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
-                <span>{state.current} / {state.total}</span>
+                <span>{job.current} / {job.total}</span>
                 <div className="flex gap-4">
-                  <span className="text-green-400">{state.updated} atualizados</span>
-                  <span className="text-gray-600">{state.skipped} sem dados</span>
-                  {state.errors > 0 && <span className="text-red-400">{state.errors} erros</span>}
+                  <span className="text-green-400">{job.updated} atualizados</span>
+                  <span className="text-gray-600">{job.skipped} sem dados</span>
+                  {job.errors > 0 && <span className="text-red-400">{job.errors} erros</span>}
                 </div>
                 <span>{pct}%</span>
               </div>
             </>
           )}
+
+          {isPaused && job.total > 0 && (
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={onResume}
+              className="w-full flex items-center justify-center gap-2 py-3 mt-2 bg-green-600/20 border border-green-600/30 rounded-2xl text-green-400 font-black uppercase text-[10px] tracking-widest hover:bg-green-600/30 transition-colors"
+            >
+              <Play size={12} /> Continuar de onde parou ({pct}%)
+            </motion.button>
+          )}
         </div>
       )}
 
-      <div className="flex gap-3">
-        {!state.running && !state.done && (
+      <div className="flex gap-3 flex-wrap">
+        {isIdle && (
           <button
             onClick={onStart}
             className={`flex items-center gap-2 px-6 py-3 ${btn} text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl`}
@@ -232,15 +152,43 @@ function SyncCard({
             <Zap size={14} /> Iniciar Sincronização
           </button>
         )}
-        {state.running && (
+
+        {isRunning && (
           <button
-            onClick={onStop}
-            className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/10"
+            onClick={onPause}
+            className="flex items-center gap-2 px-6 py-3 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-yellow-600/30"
           >
-            <XCircle size={14} /> Pausar
+            <Pause size={14} /> Pausar
           </button>
         )}
-        {state.done && (
+
+        {isPaused && (
+          <>
+            <button
+              onClick={onResume}
+              className={`flex items-center gap-2 px-6 py-3 ${btn} text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl`}
+            >
+              <Play size={14} /> Continuar
+            </button>
+            <button
+              onClick={onStart}
+              className="flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/10"
+            >
+              <Zap size={12} /> Reiniciar do zero
+            </button>
+          </>
+        )}
+
+        {(isRunning || isPaused) && (
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 px-4 py-3 bg-red-900/20 hover:bg-red-900/30 text-red-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-red-900/30"
+          >
+            <X size={14} /> Cancelar
+          </button>
+        )}
+
+        {isDone && (
           <button
             onClick={onReset}
             className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 text-gray-300 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/10"

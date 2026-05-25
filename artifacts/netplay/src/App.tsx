@@ -41,6 +41,7 @@ const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSel
 const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
 const FranchiseCarousels = React.lazy(() => import('./components/FranchiseCarousels'));
 const Admin2Page = React.lazy(() => import('./pages/Admin2Page'));
+const SyncIsland = React.lazy(() => import('./components/SyncIsland'));
 
 import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, ChevronRight, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map as MapIcon, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
 
@@ -7469,6 +7470,11 @@ export default function App() {
         <p>&copy; 2026 Netflix Clone. Desenvolvido para fins educacionais.</p>
         <p className="mt-2">Dados fornecidos por TMDb API.</p>
       </footer>
+
+      {/* Floating sync island — aparece quando há uma sincronização ativa fora do /admin2 */}
+      <Suspense fallback={null}>
+        <SyncIsland />
+      </Suspense>
     </div>
   </ThemeContext.Provider>
   );

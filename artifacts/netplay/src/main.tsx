@@ -2,6 +2,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
+import { SyncProvider } from './contexts/SyncContext.tsx';
 import './index.css';
 
 // Captura erros globais que travam a tela e mostra mensagem em vez de tela preta
@@ -61,7 +62,9 @@ if (bootLoader) bootLoader.style.display = 'none';
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
     <BrowserRouter>
-      <App />
+      <SyncProvider>
+        <App />
+      </SyncProvider>
     </BrowserRouter>
   </ErrorBoundary>,
 );
