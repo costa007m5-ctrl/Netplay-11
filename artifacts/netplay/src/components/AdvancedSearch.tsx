@@ -35,10 +35,14 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
   const [year, setYear] = useState<string>('');
   const [minRating, setMinRating] = useState<number>(0);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
+  const [displayCount, setDisplayCount] = useState(30);
 
   const popularTags = ['Novidades', 'Top 10', 'Oscar 2024', 'Marvel', 'DC', 'Dublados'];
 
   const isLoading = isTmdbLoading || isDbLoading;
+
+  // Reseta paginação ao mudar a busca
+  useEffect(() => { setDisplayCount(30); }, [debouncedQuery]);
 
   // Debounce 600ms para TMDB + DB
   useEffect(() => {
@@ -379,19 +383,23 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
                         <Loader2 size={10} className="animate-spin" /> Sugestões...
                       </span>
                     )}
-                    <span className="text-gray-500 font-bold uppercase tracking-widest text-[10px]">{mergedDisplayResults.length} Títulos</span>
+                    <span className="text-gray-500 font-bold uppercase tracking-widest text-[10px]">
+                      {displayCount < mergedDisplayResults.length
+                        ? `${displayCount} de ${mergedDisplayResults.length}`
+                        : `${mergedDisplayResults.length}`} Títulos
+                    </span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-10">
-                  {mergedDisplayResults.map((m: any, idx) => {
+                  {mergedDisplayResults.slice(0, displayCount).map((m: any, idx) => {
                     const wasSaved = savedIds.has(m.id);
                     return (
                       <motion.div
                         key={`${m.id}-${m._isLocal ? 'local' : 'ext'}`}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: Math.min(idx * 0.04, 0.4) }}
+                        transition={{ delay: Math.min(idx * 0.03, 0.3) }}
                         className="group cursor-pointer relative"
                         onClick={() => handleResultClick(m)}
                       >
@@ -402,14 +410,10 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
                             referrerPolicy="no-referrer"
                             loading="lazy"
                           />
-
-                          {/* Overlay hover */}
                           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-6 flex flex-col justify-end">
                             <span className="text-red-600 font-black text-[10px] mb-2">{m.vote_average?.toFixed(1) || '-'} ★</span>
                             <h4 className="text-white font-black text-sm md:text-lg uppercase leading-none truncate">{m.title}</h4>
                           </div>
-
-                          {/* Badge: na biblioteca */}
                           {(m._isLocal || wasSaved) && (
                             <div className="absolute top-2 left-2 md:top-3 md:left-3 flex items-center gap-1.5 bg-red-600 px-2 py-1 md:px-3 md:py-1.5 rounded-full border border-red-500 shadow-lg shadow-red-600/30 z-10">
                               <div className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,1)] animate-pulse" />
@@ -422,6 +426,20 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
                     );
                   })}
                 </div>
+
+                {displayCount < mergedDisplayResults.length && (
+                  <div className="flex flex-col items-center gap-3 pt-4">
+                    <button
+                      onClick={() => setDisplayCount(c => c + 30)}
+                      className="px-10 py-3 bg-white/5 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-gray-300 hover:bg-white/10 hover:text-white hover:border-red-600/40 transition-all"
+                    >
+                      Carregar mais 30
+                    </button>
+                    <span className="text-gray-700 text-[9px] font-bold uppercase tracking-widest">
+                      {mergedDisplayResults.length - displayCount} títulos restantes
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

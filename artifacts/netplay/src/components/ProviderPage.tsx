@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, Play, Plus, Info } from 'lucide-react';
+import { ChevronLeft, Play, Plus, Info, ChevronRight } from 'lucide-react';
 import { Movie } from '../types';
 import Row from './Row';
 import { getMovieLogo } from '../services/tmdb';
@@ -157,6 +157,8 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
   const featuredMovie = movies[0];
   const [featuredLogo, setFeaturedLogo] = useState<string | null>(null);
   const [brandFilter, setBrandFilter] = useState<string | null>(null);
+  const [expandedGenre, setExpandedGenre] = useState<string | null>(null);
+  const [expandedCount, setExpandedCount] = useState(30);
 
   useEffect(() => {
     if (featuredMovie) {
@@ -188,6 +190,21 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
       return acc;
     }, {} as Record<string, Movie[]>);
   }, [displayedMovies]);
+
+  const expandedItems = useMemo(() => {
+    if (!expandedGenre) return [];
+    const list = expandedGenre === '__all__' ? displayedMovies : (moviesByGenre[expandedGenre] || []);
+    return list.slice(0, expandedCount);
+  }, [expandedGenre, expandedCount, moviesByGenre, displayedMovies]);
+
+  const expandedTotal = expandedGenre === '__all__'
+    ? displayedMovies.length
+    : (moviesByGenre[expandedGenre || '']?.length || 0);
+
+  const handleExpandGenre = (genre: string) => {
+    setExpandedGenre(genre);
+    setExpandedCount(30);
+  };
 
   return (
     <motion.div 
@@ -322,32 +339,103 @@ const ProviderPage: React.FC<ProviderPageProps> = ({
           </div>
         )}
 
-        {/* Top 10 Section */}
-        <Row 
-          title={`Top 10 ${provider} Hoje`}
-          movies={movies.slice(0, 10)}
-          isLargeRow={true}
-          onSelectMovie={onSelectMovie}
-          onToggleMyList={onToggleMyList}
-          onToggleFavorite={onToggleFavorite}
-          myListIds={myListIds}
-          favoriteIds={favoriteIds}
-          cardStyle={config.cardStyle}
-        />
+        {/* Grade expandida por gênero */}
+        {expandedGenre ? (
+          <div className="px-4 md:px-12">
+            <div className="flex items-center gap-4 mb-6">
+              <button
+                onClick={() => { setExpandedGenre(null); setExpandedCount(30); }}
+                className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors font-black uppercase tracking-widest text-xs"
+              >
+                <ChevronLeft size={16} /> Voltar
+              </button>
+              <h2 className="text-2xl md:text-4xl font-black uppercase italic tracking-tighter text-white">
+                {expandedGenre === '__all__' ? `Todo o Catálogo ${provider}` : expandedGenre}
+              </h2>
+              <span className="text-gray-600 font-black uppercase tracking-widest text-xs">{expandedTotal} títulos</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+              {expandedItems.map((m, idx) => (
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(idx * 0.015, 0.3) }}
+                  className="group cursor-pointer"
+                  onClick={() => onSelectMovie(m)}
+                >
+                  <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
+                    <img
+                      src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : 'https://via.placeholder.com/342x513?text=Sem+Poster'}
+                      alt={m.title || (m as any).name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+                      <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{m.title || (m as any).name}</p>
+                      {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors">{m.title || (m as any).name}</p>
+                </motion.div>
+              ))}
+            </div>
+            {expandedCount < expandedTotal && (
+              <div className="flex justify-center mt-10">
+                <button
+                  onClick={() => setExpandedCount(c => c + 30)}
+                  className="px-10 py-3 bg-white/5 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-gray-300 hover:bg-white/10 hover:text-white hover:border-red-600/40 transition-all"
+                >
+                  Carregar mais 30
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Top 10 Section */}
+            <Row 
+              title={`Top 10 ${provider} Hoje`}
+              movies={movies.slice(0, 10)}
+              isLargeRow={true}
+              onSelectMovie={onSelectMovie}
+              onToggleMyList={onToggleMyList}
+              onToggleFavorite={onToggleFavorite}
+              myListIds={myListIds}
+              favoriteIds={favoriteIds}
+              cardStyle={config.cardStyle}
+            />
 
-        {Object.entries(moviesByGenre).map(([genre, genreMovies]) => (
-          <Row 
-            key={genre}
-            title={genre}
-            movies={genreMovies}
-            onSelectMovie={onSelectMovie}
-            onToggleMyList={onToggleMyList}
-            onToggleFavorite={onToggleFavorite}
-            myListIds={myListIds}
-            favoriteIds={favoriteIds}
-            cardStyle={config.cardStyle}
-          />
-        ))}
+            {/* Ver Tudo button */}
+            {displayedMovies.length > 10 && (
+              <div className="flex items-center gap-4 px-4 md:px-12">
+                <button
+                  onClick={() => handleExpandGenre('__all__')}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-white/5 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-gray-300 hover:bg-white/10 hover:text-white hover:border-red-600/40 transition-all"
+                >
+                  Ver todo o catálogo <ChevronRight size={13} className="text-red-500" />
+                </button>
+                <span className="text-gray-700 font-bold text-[10px] uppercase tracking-widest">{displayedMovies.length} títulos</span>
+              </div>
+            )}
+
+            {Object.entries(moviesByGenre).map(([genre, genreMovies]) => (
+              <Row 
+                key={genre}
+                title={genre}
+                movies={genreMovies}
+                onSelectMovie={onSelectMovie}
+                onToggleMyList={onToggleMyList}
+                onToggleFavorite={onToggleFavorite}
+                myListIds={myListIds}
+                favoriteIds={favoriteIds}
+                cardStyle={config.cardStyle}
+                onViewAll={() => handleExpandGenre(genre)}
+              />
+            ))}
+          </>
+        )}
       </div>
     </motion.div>
   );
