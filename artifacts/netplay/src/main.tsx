@@ -1,9 +1,24 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.tsx';
 import { SyncProvider } from './contexts/SyncContext.tsx';
 import './index.css';
+
+// Cache global: dados ficam 10 min frescos, 30 min na memória
+// Navegar entre telas não dispara nova requisição se o dado ainda é recente
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 10 * 60 * 1000,       // 10 min — não rebusca se ainda fresco
+      gcTime: 30 * 60 * 1000,          // 30 min — mantém na memória
+      retry: 1,
+      refetchOnWindowFocus: false,     // não rebusca ao trocar de aba
+      refetchOnReconnect: 'always',
+    },
+  },
+});
 
 // Captura erros globais que travam a tela e mostra mensagem em vez de tela preta
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -61,10 +76,12 @@ if (bootLoader) bootLoader.style.display = 'none';
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    <BrowserRouter>
-      <SyncProvider>
-        <App />
-      </SyncProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <SyncProvider>
+          <App />
+        </SyncProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   </ErrorBoundary>,
 );

@@ -1,7 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Zap, Film, Tv, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useQuery } from '@tanstack/react-query';
 import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 
 interface FlixItem {
@@ -119,43 +120,45 @@ const FILTER_OPTIONS = [
   { label: 'Séries', value: 'tvshows' },
 ];
 
+const fetchFlixLatest = async (type: string, page: number): Promise<FlixItem[]> => {
+  const res = await fetch(`/api/betterflix/latest?type=${type}&page=${page}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results || [];
+};
+
 const FlixLatestRow = ({ onSelectMovie }: FlixLatestRowProps) => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [items, setItems] = useState<FlixItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>('all');
   const [page, setPage] = useState(1);
+  const [extraItems, setExtraItems] = useState<FlixItem[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/betterflix/latest?type=${filter}&page=1`)
-      .then(r => r.json())
-      .then(data => {
-        if (!cancelled) {
-          setItems(data.results || []);
-          setPage(1);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [filter]);
+  // React Query cuida do cache: voltar para esta tela não dispara nova requisição
+  const { data: baseItems = [], isLoading: loading } = useQuery({
+    queryKey: ['flixLatest', filter],
+    queryFn: () => fetchFlixLatest(filter, 1),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Reseta extras ao trocar filtro
+  const items = page === 1 ? baseItems : [...baseItems, ...extraItems];
+
+  const handleFilterChange = (f: typeof filter) => {
+    setFilter(f);
+    setPage(1);
+    setExtraItems([]);
+  };
 
   const loadMore = async () => {
     if (loadingMore) return;
     setLoadingMore(true);
     try {
-      const res = await fetch(`/api/betterflix/latest?type=${filter}&page=${page + 1}`);
-      const data = await res.json();
-      const newItems = data.results || [];
+      const newItems = await fetchFlixLatest(filter, page + 1);
       if (newItems.length > 0) {
-        setItems(prev => {
-          const existingIds = new Set(prev.map(i => i.tmdb_id));
+        setExtraItems(prev => {
+          const existingIds = new Set([...baseItems, ...prev].map(i => i.tmdb_id));
           return [...prev, ...newItems.filter((i: FlixItem) => !existingIds.has(i.tmdb_id))];
         });
         setPage(p => p + 1);
@@ -208,7 +211,7 @@ const FlixLatestRow = ({ onSelectMovie }: FlixLatestRowProps) => {
             {FILTER_OPTIONS.map(opt => (
               <button
                 key={opt.value}
-                onClick={() => setFilter(opt.value as any)}
+                onClick={() => handleFilterChange(opt.value as typeof filter)}
                 className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
                   filter === opt.value
                     ? 'bg-red-600 text-white shadow-lg'

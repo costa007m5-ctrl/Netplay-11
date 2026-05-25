@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useQuery } from '@tanstack/react-query';
 import { buildBetterFlixUrl } from '../components/admin/AdminFlixAPITab';
 import { supabase } from '../lib/supabase';
 
@@ -212,115 +213,104 @@ interface FlixNovitiesPageProps {
   pageTitle?: string;
 }
 
+const fetchFlixPage = async (filter: string, page: number): Promise<FlixItem[]> => {
+  const res = await fetch(`/api/betterflix/latest?type=${filter}&page=${page}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results || [];
+};
+
+const fetchRecentEpisodes = async (): Promise<PlatformEpisode[]> => {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id,title,name,poster_path,backdrop_path,episodes,updated_at')
+    .eq('type', 'series')
+    .eq('is_hidden', false)
+    .gte('updated_at', cutoff)
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (error || !data) return [];
+
+  const eps: PlatformEpisode[] = [];
+  for (const series of data) {
+    const rawEps: any[] = Array.isArray(series.episodes) ? series.episodes : [];
+    const sorted = [...rawEps].sort((a, b) => {
+      const sA = (a.season || 0) * 1000 + (a.episode || 0);
+      const sB = (b.season || 0) * 1000 + (b.episode || 0);
+      return sB - sA;
+    });
+    for (const ep of sorted.slice(0, 3)) {
+      if (!ep.videoUrl && !ep.videoUrl2) continue;
+      eps.push({
+        seriesId: series.id,
+        seriesTitle: series.title || series.name || '',
+        seriesPoster: series.poster_path || null,
+        seriesBackdrop: series.backdrop_path || null,
+        episodeTitle: ep.title || ep.name || `Episódio ${ep.episode}`,
+        season: ep.season || 1,
+        episode: ep.episode || 1,
+        videoUrl: ep.videoUrl || ep.videoUrl2 || '',
+        addedAt: series.updated_at || new Date().toISOString(),
+        runtime: ep.runtime,
+        overview: ep.overview,
+        still_path: ep.still_path,
+      });
+    }
+  }
+  return eps;
+};
+
 const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defaultFilter = 'all', hideFilterBar = false, pageTitle }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'apiflix' | 'episodes'>('apiflix');
-  const [items, setItems] = useState<FlixItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>(defaultFilter);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [extraItems, setExtraItems] = useState<FlixItem[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  // Estado da aba episódios
-  const [episodes, setEpisodes] = useState<PlatformEpisode[]>([]);
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  // React Query — página 1 fica em cache; voltar para a tela não rebusca
+  const { data: baseItems = [], isFetching: loading } = useQuery({
+    queryKey: ['flixNovidadesPage', filter],
+    queryFn: () => fetchFlixPage(filter, 1),
+    staleTime: 10 * 60 * 1000,
+  });
 
-  const fetchItems = useCallback(async (f: string, p: number, reset: boolean) => {
+  // React Query — episódios recentes (busca no Supabase, cache 10 min)
+  const { data: episodes = [], isFetching: loadingEpisodes } = useQuery({
+    queryKey: ['flixEpisodiosRecentes'],
+    queryFn: fetchRecentEpisodes,
+    enabled: activeTab === 'episodes',
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const hasMore = extraItems.length === 0
+    ? baseItems.length >= 20
+    : extraItems.slice(-20).length >= 20;
+
+  const items = page === 1 ? baseItems : [...baseItems, ...extraItems];
+
+  const handleFilterChange = (f: typeof filter) => {
+    setFilter(f);
+    setPage(1);
+    setExtraItems([]);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
     try {
-      if (reset) setLoading(true);
-      else setLoadingMore(true);
-
-      const res = await fetch(`/api/betterflix/latest?type=${f}&page=${p}`);
-      const data = await res.json();
-      const newItems: FlixItem[] = data.results || [];
-
-      setHasMore(newItems.length >= 20);
-
-      if (reset) {
-        setItems(newItems);
-      } else {
-        setItems(prev => {
-          const existingIds = new Set(prev.map(i => i.tmdb_id));
+      const newItems = await fetchFlixPage(filter, page + 1);
+      if (newItems.length > 0) {
+        setExtraItems(prev => {
+          const existingIds = new Set([...baseItems, ...prev].map(i => i.tmdb_id));
           return [...prev, ...newItems.filter(i => !existingIds.has(i.tmdb_id))];
         });
+        setPage(p => p + 1);
       }
-    } catch {
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, []);
-
-  const fetchEpisodes = useCallback(async () => {
-    setLoadingEpisodes(true);
-    try {
-      // Busca séries atualizadas recentemente com episódios
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
-        .from('movies')
-        .select('id,title,name,poster_path,backdrop_path,episodes,updated_at')
-        .eq('type', 'series')
-        .eq('is_hidden', false)
-        .gte('updated_at', cutoff)
-        .order('updated_at', { ascending: false })
-        .limit(50);
-
-      if (error || !data) return;
-
-      const eps: PlatformEpisode[] = [];
-      for (const series of data) {
-        const rawEps: any[] = Array.isArray(series.episodes) ? series.episodes : [];
-        // Ordena episódios por data de atualização ou mais recentes (última temporada, último ep)
-        const sorted = [...rawEps].sort((a, b) => {
-          const sA = (a.season || 0) * 1000 + (a.episode || 0);
-          const sB = (b.season || 0) * 1000 + (b.episode || 0);
-          return sB - sA;
-        });
-        // Pega os 3 episódios mais recentes por série
-        for (const ep of sorted.slice(0, 3)) {
-          if (!ep.videoUrl && !ep.videoUrl2) continue;
-          eps.push({
-            seriesId: series.id,
-            seriesTitle: series.title || series.name || '',
-            seriesPoster: series.poster_path || null,
-            seriesBackdrop: series.backdrop_path || null,
-            episodeTitle: ep.title || ep.name || `Episódio ${ep.episode}`,
-            season: ep.season || 1,
-            episode: ep.episode || 1,
-            videoUrl: ep.videoUrl || ep.videoUrl2 || '',
-            addedAt: series.updated_at || new Date().toISOString(),
-            runtime: ep.runtime,
-            overview: ep.overview,
-            still_path: ep.still_path,
-          });
-        }
-      }
-      setEpisodes(eps);
-    } catch (e) {
-      console.warn('[FlixNovitiesPage] Erro ao buscar episódios:', e);
-    } finally {
-      setLoadingEpisodes(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-    setHasMore(true);
-    fetchItems(filter, 1, true);
-  }, [filter, fetchItems]);
-
-  useEffect(() => {
-    if (activeTab === 'episodes' && episodes.length === 0) {
-      fetchEpisodes();
-    }
-  }, [activeTab, fetchEpisodes, episodes.length]);
-
-  const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    fetchItems(filter, nextPage, false);
+    } catch {}
+    setLoadingMore(false);
   };
 
   const handleEpisodePlay = (ep: PlatformEpisode) => {
@@ -364,7 +354,7 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             {FILTERS.map(f => (
               <button
                 key={f.value}
-                onClick={() => setFilter(f.value as any)}
+                onClick={() => handleFilterChange(f.value as typeof filter)}
                 className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${
                   filter === f.value
                     ? 'bg-red-600 text-white shadow-lg'
