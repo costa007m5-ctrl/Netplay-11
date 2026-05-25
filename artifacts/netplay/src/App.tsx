@@ -40,8 +40,9 @@ const AdvancedSearch = React.lazy(() => import('./components/AdvancedSearch'));
 const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSelector'));
 const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
 const FranchiseCarousels = React.lazy(() => import('./components/FranchiseCarousels'));
+const Admin2Page = React.lazy(() => import('./pages/Admin2Page'));
 
-import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map as MapIcon, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
+import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, ChevronRight, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map as MapIcon, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
 
 // Basic title cleaner to replace AI cleaning
 const cleanTitle = (fileName: string) => {
@@ -7203,6 +7204,16 @@ export default function App() {
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
               <FlixNovitiesPage onSelectMovie={handleSelectMovie} />
             </Suspense>
+          } />
+
+          <Route path="/admin2" element={
+            isAdmin
+              ? (
+                <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
+                  <Admin2Page navigate={navigate} />
+                </Suspense>
+              )
+              : <Navigate to="/menu" replace />
           } />
 
           <Route path="/perfil" element={

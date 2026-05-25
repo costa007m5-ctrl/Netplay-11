@@ -5,7 +5,7 @@ import {
   Play, ChevronRight, Clock, Award, HardDrive, Crown,
   Trash2, Search, Film, Tv, Sliders, Type, Bell, Monitor,
   Palette, UserCircle, Edit3, Lock, LogOut, CheckCircle2, AlertCircle, Heart,
-  Save, X, Smartphone, List, Download, Sparkles, Users, Copy, Share2
+  Save, X, Smartphone, List, Download, Sparkles, Users, Copy, Share2, Zap
 } from 'lucide-react';
 import AdminContentEditTab from './admin/AdminContentEditTab';
 import { supabase } from '../lib/supabase';
@@ -329,6 +329,11 @@ export default function ProfileDashboard({
               {isAdmin && (
                 <button onClick={() => navigate('/admin')} className="bg-red-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-red-500 transition-all shadow-xl flex items-center gap-2">
                   <Shield size={14} /> Multi-Admin
+                </button>
+              )}
+              {isAdmin && (
+                <button onClick={() => navigate('/admin2')} className="bg-gradient-to-r from-purple-700 to-red-700 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:opacity-90 transition-all shadow-xl flex items-center gap-2 border border-purple-500/30">
+                  <Zap size={14} /> Admin 2.0
                 </button>
               )}
               <button onClick={handleSwitchProfile} className="bg-white/10 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] border border-white/10 hover:bg-white/20 transition-all flex items-center gap-2 shadow-xl">

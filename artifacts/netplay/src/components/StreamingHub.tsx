@@ -65,6 +65,14 @@ const defaultProviders = [
     bg: 'bg-[#1a1a1a]',
     accent: '#fb132b',
     glow: 'rgba(251,13,27,0.4)'
+  },
+  {
+    name: 'Crunchyroll',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Crunchyroll_Logo.png',
+    color: 'from-[#F47521] via-[#e05e10] to-[#1a0a00]',
+    bg: 'bg-[#1a0a00]',
+    accent: '#F47521',
+    glow: 'rgba(244,117,33,0.45)'
   }
 ];
 
