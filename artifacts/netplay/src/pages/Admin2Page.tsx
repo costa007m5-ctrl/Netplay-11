@@ -1,10 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Image, Tv2, CheckCircle2, Loader2, RotateCcw, Zap, Pause, Play, X } from 'lucide-react';
+import { ArrowLeft, Image, Tv2, CheckCircle2, Loader2, RotateCcw, Zap, Pause, Play, X, RefreshCcw, ToggleLeft, ToggleRight, Clock } from 'lucide-react';
 import { useSyncContext, SyncJob } from '../contexts/SyncContext';
+import AdminFlix3Tab from '../components/admin/AdminFlix3Tab';
+
+const AUTO_SYNC_KEY = 'netplay_admin2_autosync';
+const LAST_FLIX3_SYNC_KEY = 'netplay_last_flix3_sync';
 
 export default function Admin2Page({ navigate }: { navigate: (to: any) => void }) {
   const { logoJob, providerJob, startLogos, startProviders, pauseLogos, pauseProviders, cancelLogos, cancelProviders, resetLogos, resetProviders } = useSyncContext();
+  const [autoSync, setAutoSync] = useState(() => localStorage.getItem(AUTO_SYNC_KEY) === 'true');
+  const [lastSync, setLastSync] = useState<Date | null>(() => {
+    const raw = localStorage.getItem(LAST_FLIX3_SYNC_KEY);
+    return raw ? new Date(raw) : null;
+  });
+  const [showFlix3, setShowFlix3] = useState(true);
+  const flix3Ref = useRef<{ syncAll: () => void } | null>(null);
+
+  const triggerFlix3SyncAll = () => {
+    const event = new CustomEvent('flix3-sync-all');
+    window.dispatchEvent(event);
+    const now = new Date();
+    localStorage.setItem(LAST_FLIX3_SYNC_KEY, now.toISOString());
+    setLastSync(now);
+  };
+
+  useEffect(() => {
+    if (!autoSync) return;
+    const stored = localStorage.getItem(LAST_FLIX3_SYNC_KEY);
+    if (stored) {
+      const last = new Date(stored);
+      const hoursSince = (Date.now() - last.getTime()) / (1000 * 60 * 60);
+      if (hoursSince < 24) return;
+    }
+    triggerFlix3SyncAll();
+  }, [autoSync]);
+
+  const toggleAutoSync = () => {
+    const next = !autoSync;
+    setAutoSync(next);
+    localStorage.setItem(AUTO_SYNC_KEY, String(next));
+    if (next) triggerFlix3SyncAll();
+  };
+
+  const hoursAgo = lastSync
+    ? Math.round((Date.now() - lastSync.getTime()) / (1000 * 60 * 60))
+    : null;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white pt-20 pb-32 px-4 md:px-12">
@@ -28,6 +69,83 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
         <p className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-10 pl-5 border-l-2 border-red-600/30">
           Ferramentas de sincronização em massa para todo o catálogo
         </p>
+
+        {/* ── Flix API 3.0 ── */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-6 bg-emerald-500 rounded-full" />
+              <h2 className="text-xl font-black uppercase italic tracking-tighter text-emerald-400">
+                Flix API 3.0 — Sincronização de Catálogo
+              </h2>
+            </div>
+            <button
+              onClick={() => setShowFlix3(v => !v)}
+              className="text-gray-600 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors"
+            >
+              {showFlix3 ? 'Recolher' : 'Expandir'}
+            </button>
+          </div>
+
+          {/* Auto-sync + Sync-all bar */}
+          <div className="flex flex-wrap items-center gap-3 mb-4 p-4 bg-white/5 border border-white/10 rounded-2xl">
+            <button
+              onClick={triggerFlix3SyncAll}
+              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl shadow-emerald-600/20"
+            >
+              <RefreshCcw size={13} /> Sincronizar Tudo Agora
+            </button>
+
+            <button
+              onClick={toggleAutoSync}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all border ${
+                autoSync
+                  ? 'bg-emerald-600/20 border-emerald-600/40 text-emerald-400'
+                  : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+              }`}
+            >
+              {autoSync ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+              Automático
+            </button>
+
+            {autoSync && (
+              <div className="flex items-center gap-1.5 text-[9px] text-gray-500 font-bold uppercase tracking-widest">
+                <Clock size={10} className="text-emerald-600" />
+                {lastSync
+                  ? hoursAgo === 0 ? 'Sincronizado há pouco' : `Última sync: ${hoursAgo}h atrás`
+                  : 'Aguardando primeira sync...'}
+              </div>
+            )}
+
+            {autoSync && (
+              <span className="ml-auto text-[9px] text-gray-600 font-bold uppercase tracking-widest">
+                Verifica novos conteúdos a cada 24h ao abrir o painel
+              </span>
+            )}
+          </div>
+
+          {showFlix3 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8"
+            >
+              <AdminFlix3Tab onRefresh={() => {
+                const now = new Date();
+                localStorage.setItem(LAST_FLIX3_SYNC_KEY, now.toISOString());
+                setLastSync(now);
+              }} />
+            </motion.div>
+          )}
+        </section>
+
+        {/* ── Ferramentas de Metadados ── */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-2 h-6 bg-red-600 rounded-full" />
+          <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">
+            Sincronização de Metadados
+          </h2>
+        </div>
 
         <div className="space-y-6">
           <SyncCard

@@ -97,8 +97,11 @@ function AdminFlix3Tab({ onRefresh }: { onRefresh?: () => void }) {
   };
 
   useEffect(() => {
+    const handler = () => syncAll();
+    window.addEventListener('flix3-sync-all', handler);
     return () => {
       CONTENT_TYPES.forEach(t => stopPoll(t.key));
+      window.removeEventListener('flix3-sync-all', handler);
     };
   }, []);
 

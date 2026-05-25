@@ -7146,7 +7146,18 @@ export default function App() {
              />
           } />
           
-          <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} onMovieAdded={(movie) => setMyMovies(prev => prev.some(m => m.id === movie.id) ? prev : [movie, ...prev])} />} />
+          <Route path="/search" element={<AdvancedSearch onSelectMovie={handleSelectMovie} myMovies={myMovies} moviesByGenre={moviesByGenre} dynamicFranchises={dynamicFranchises} onSelectFranchise={setActiveFranchise} categories={categories} onMovieAdded={(movie) => {
+            setMyMovies(prev => {
+              if (prev.some(m => m.id === movie.id)) return prev;
+              const next = [movie as Movie, ...prev];
+              // Atualiza o cache para persistir entre refreshes
+              try {
+                const str = JSON.stringify(next);
+                if (str.length < 4 * 1024 * 1024) localStorage.setItem('cached_my_movies_v4', str);
+              } catch {}
+              return next;
+            });
+          }} />} />
           <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} totalCount={totalMoviesCount} />} />
           <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} totalCount={totalSeriesCount} />} />
           <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />

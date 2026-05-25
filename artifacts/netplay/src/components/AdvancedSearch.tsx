@@ -200,7 +200,9 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
 
     // Salva em background silenciosamente via API server (evita RLS do Supabase)
     try {
-      const endpoint = m.type === 'series' ? `/tv/${m.id}` : `/movie/${m.id}`;
+      // Deriva tipo correto — resultados TMDB externos têm media_type, não type
+      const derivedType = m.type || (m.media_type === 'tv' ? 'series' : 'movie');
+      const endpoint = derivedType === 'series' ? `/tv/${m.id}` : `/movie/${m.id}`;
       const { data: details } = await tmdb.get(endpoint, { params: { language: 'pt-BR' } });
 
       const genres = (details.genres || []).map((g: any) => g.name).join(', ');
@@ -210,7 +212,7 @@ const AdvancedSearch = React.memo(({ onSelectMovie, myMovies, moviesByGenre, dyn
       const movieData = {
         id: m.id,
         title: details.title || details.name || m.title,
-        type: m.type,
+        type: derivedType,
         overview: details.overview || '',
         poster_path: details.poster_path || m.poster_path || '',
         backdrop_path: details.backdrop_path || m.backdrop_path || '',

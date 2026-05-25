@@ -23,7 +23,7 @@ export default function AdminContentEditTab() {
   const [savedOk, setSavedOk] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [page, setPage] = useState(0);
-  const PAGE = 60;
+  const PAGE = 20;
 
   const load = useCallback(async () => {
     setLoading(true);
