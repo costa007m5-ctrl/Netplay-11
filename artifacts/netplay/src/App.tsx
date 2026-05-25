@@ -1467,6 +1467,41 @@ const HomeView = React.memo(({
     return optimized;
   }, [moviesByGenre, profile?.id]);
 
+  // Adicionados Recentemente — estado de expansão
+  const [recentlyAddedExpanded, setRecentlyAddedExpanded] = useState(false);
+  const [recentlyAddedCount, setRecentlyAddedCount] = useState(30);
+
+  const recentlyAddedSorted = useMemo(() =>
+    [...myMovies].sort((a: any, b: any) =>
+      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    ), [myMovies]);
+
+  const RecentlyAddedCard = React.useCallback(({ m, idx }: { m: any; idx: number }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(idx * 0.015, 0.3) }}
+      className="group cursor-pointer"
+      onClick={() => handleSelectMovie(m)}
+    >
+      <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
+        <img
+          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w342${m.backdrop_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster')}
+          alt={m.title || m.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+          <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{m.title || m.name}</p>
+          {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
+        </div>
+        <div className="absolute top-2 left-2 bg-red-600/90 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full">Novo</div>
+      </div>
+      <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
+    </motion.div>
+  ), [handleSelectMovie]);
+
   if (searchQuery) {
     return (
       <div
@@ -1948,16 +1983,61 @@ const HomeView = React.memo(({
 
             <Row 
               title="Adicionados Recentemente"
-              movies={myMovies}
+              movies={recentlyAddedSorted.slice(0, 20)}
               type="wide"
               onSelectMovie={handleSelectMovie}
               onToggleMyList={toggleMyList}
               onToggleFavorite={toggleFavorite}
               myListIds={myListIds}
               favoriteIds={favoriteIds}
-              onViewAll={setViewAllGenre}
               streamingProviders={streamingProviders}
             />
+
+            {/* Expansão "Ver mais" do Adicionados Recentemente */}
+            {!recentlyAddedExpanded ? (
+              recentlyAddedSorted.length > 20 && (
+                <div className="flex items-center justify-center gap-4 -mt-2 mb-2 ml-2 md:ml-12">
+                  <button
+                    onClick={() => setRecentlyAddedExpanded(true)}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-white/5 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-gray-300 hover:bg-white/10 hover:text-white hover:border-red-600/40 transition-all"
+                  >
+                    Ver mais <ChevronRight size={13} className="text-red-500" />
+                  </button>
+                  <span className="text-gray-700 font-bold text-[10px] uppercase tracking-widest">
+                    {recentlyAddedSorted.length - 20} títulos a mais
+                  </span>
+                </div>
+              )
+            ) : (
+              <div className="ml-2 md:ml-12 pr-2 md:pr-12">
+                <div className="flex items-center gap-3 mb-4">
+                  <button
+                    onClick={() => { setRecentlyAddedExpanded(false); setRecentlyAddedCount(30); }}
+                    className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors font-black uppercase tracking-widest text-xs"
+                  >
+                    ← Recolher
+                  </button>
+                  <span className="text-gray-600 font-black uppercase tracking-widest text-xs">
+                    {recentlyAddedSorted.length} títulos
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 md:gap-5">
+                  {recentlyAddedSorted.slice(0, recentlyAddedCount).map((m: any, idx: number) =>
+                    <RecentlyAddedCard key={m.id} m={m} idx={idx} />
+                  )}
+                </div>
+                {recentlyAddedCount < recentlyAddedSorted.length && (
+                  <div className="flex justify-center mt-10">
+                    <button
+                      onClick={() => setRecentlyAddedCount(c => c + 30)}
+                      className="px-10 py-3 bg-white/5 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-gray-300 hover:bg-white/10 hover:text-white hover:border-red-600/40 transition-all"
+                    >
+                      Carregar mais 30
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {newMovies.length > 0 && (
               <NewReleasesRow 
