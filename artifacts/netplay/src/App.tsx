@@ -5755,46 +5755,30 @@ export default function App() {
     // Nível 3: seleciona tudo (exatamente como fetchMyList faz com movies(*)) e filtra no cliente
     const COLS_LEVEL3 = '*';
 
-    // Lê limites configurados pelo admin (Subaflix) do servidor (global para todos os usuários)
-    let movieLimit = 800;
-    let seriesLimit = 800;
-    try {
-      const settingsRes = await fetch('/api/settings');
-      if (settingsRes.ok) {
-        const settings = await settingsRes.json();
-        if (settings.movie_limit) movieLimit = parseInt(settings.movie_limit, 10);
-        if (settings.series_limit) seriesLimit = parseInt(settings.series_limit, 10);
-      }
-    } catch (_e) {
-      // Fallback para 800 se API falhar
-    }
-
-    // Supabase PostgREST retorna no máximo 1000 linhas por requisição.
-    // Quando o limite é maior, paginamos em blocos de 1000 e combinamos os resultados.
+    // Sem limite — busca tudo que estiver no banco, página por página
     const PAGE_SIZE = 1000;
-    const fetchPaginated = async (cols: string, type: string, totalLimit: number) => {
+    const fetchPaginated = async (cols: string, type: string) => {
       let all: any[] = [];
       let from = 0;
-      while (all.length < totalLimit) {
-        const batchSize = Math.min(PAGE_SIZE, totalLimit - all.length);
+      while (true) {
         const { data, error } = await supabase
           .from('movies')
           .select(cols)
           .eq('type', type)
           .order('updated_at', { ascending: false })
-          .range(from, from + batchSize - 1);
+          .range(from, from + PAGE_SIZE - 1);
         if (error) return { data: null, error };
         if (!data || data.length === 0) break;
         all = all.concat(data);
-        if (data.length < batchSize) break;
-        from += batchSize;
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
       return { data: all, error: null };
     };
 
     const queryBoth = async (cols: string) => Promise.all([
-      fetchPaginated(cols, 'movie', movieLimit),
-      fetchPaginated(cols, 'series', seriesLimit),
+      fetchPaginated(cols, 'movie'),
+      fetchPaginated(cols, 'series'),
     ]);
 
     const stripHeavyFields = (rows: any[]): any[] =>
