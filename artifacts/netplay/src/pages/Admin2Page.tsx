@@ -4,6 +4,7 @@ import { ArrowLeft, Image, Tv2, CheckCircle2, Loader2, RotateCcw, Zap, Pause, Pl
 import { useSyncContext, SyncJob } from '../contexts/SyncContext';
 import AdminFlix3Tab from '../components/admin/AdminFlix3Tab';
 import { AdminPlayerAPIsTab } from '../components/admin/AdminPlayerAPIsTab';
+import { AdminFlixAPITab } from '../components/admin/AdminFlixAPITab';
 
 const AUTO_SYNC_KEY = 'netplay_admin2_autosync';
 const LAST_FLIX3_SYNC_KEY = 'netplay_last_flix3_sync';
@@ -138,6 +139,19 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
               }} />
             </motion.div>
           )}
+        </section>
+
+        {/* ── Configurações BetterFlix API ── */}
+        <section className="mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-2 h-6 bg-red-500 rounded-full" />
+            <h2 className="text-xl font-black uppercase italic tracking-tighter text-red-400">
+              BetterFlix — API &amp; Chave B2B
+            </h2>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8">
+            <AdminFlixAPITab />
+          </div>
         </section>
 
         {/* ── Players Ativos ── */}

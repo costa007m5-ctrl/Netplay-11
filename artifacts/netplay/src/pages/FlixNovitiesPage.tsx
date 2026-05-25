@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw, Bell, Clock } from 'lucide-react';
+import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw, Bell, Clock, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { buildBetterFlixUrl } from '../components/admin/AdminFlixAPITab';
@@ -61,6 +61,7 @@ const FILTERS = [
 
 const TABS = [
   { label: 'API Flix', value: 'apiflix' },
+  { label: 'Chegou Agora', value: 'chegou-agora' },
   { label: 'Episódios Novos', value: 'episodes' },
   { label: 'Recentes BetterFlix', value: 'betterflix-recents' },
 ];
@@ -239,6 +240,50 @@ const fetchFlixPage = async (filter: string, page: number): Promise<FlixItem[]> 
   return data.results || [];
 };
 
+const fetchChegouAgora = async (): Promise<PlatformEpisode[]> => {
+  const cutoff7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('movies')
+    .select('id,title,name,poster_path,backdrop_path,episodes,updated_at,type')
+    .in('type', ['series', 'movie'])
+    .eq('is_hidden', false)
+    .gte('updated_at', cutoff7)
+    .order('updated_at', { ascending: false })
+    .limit(80);
+
+  if (error || !data) return [];
+
+  const eps: PlatformEpisode[] = [];
+  for (const item of data) {
+    if (item.type === 'series') {
+      const rawEps: any[] = Array.isArray(item.episodes) ? item.episodes : [];
+      const sorted = [...rawEps].sort((a, b) => {
+        const sA = (a.season || 0) * 1000 + (a.episode || 0);
+        const sB = (b.season || 0) * 1000 + (b.episode || 0);
+        return sB - sA;
+      });
+      for (const ep of sorted.slice(0, 2)) {
+        if (!ep.videoUrl && !ep.videoUrl2) continue;
+        eps.push({
+          seriesId: item.id,
+          seriesTitle: item.title || item.name || '',
+          seriesPoster: item.poster_path || null,
+          seriesBackdrop: item.backdrop_path || null,
+          episodeTitle: ep.title || ep.name || `Episódio ${ep.episode}`,
+          season: ep.season || 1,
+          episode: ep.episode || 1,
+          videoUrl: ep.videoUrl || ep.videoUrl2 || '',
+          addedAt: item.updated_at || new Date().toISOString(),
+          runtime: ep.runtime,
+          overview: ep.overview,
+          still_path: ep.still_path,
+        });
+      }
+    }
+  }
+  return eps;
+};
+
 const fetchRecentEpisodes = async (): Promise<PlatformEpisode[]> => {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
@@ -283,7 +328,7 @@ const fetchRecentEpisodes = async (): Promise<PlatformEpisode[]> => {
 
 const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defaultFilter = 'all', hideFilterBar = false, pageTitle }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'apiflix' | 'episodes' | 'betterflix-recents'>('apiflix');
+  const [activeTab, setActiveTab] = useState<'apiflix' | 'chegou-agora' | 'episodes' | 'betterflix-recents'>('apiflix');
   const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>(defaultFilter);
   const [page, setPage] = useState(1);
   const [extraItems, setExtraItems] = useState<FlixItem[]>([]);
@@ -302,6 +347,14 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
     queryFn: fetchRecentEpisodes,
     enabled: activeTab === 'episodes',
     staleTime: 10 * 60 * 1000,
+  });
+
+  // React Query — chegou agora (últimos 7 dias)
+  const { data: chegouAgora = [], isFetching: loadingChegou, refetch: refetchChegou } = useQuery({
+    queryKey: ['chegouAgora'],
+    queryFn: fetchChegouAgora,
+    enabled: activeTab === 'chegou-agora',
+    staleTime: 5 * 60 * 1000,
   });
 
   // React Query — recentes BetterFlix
@@ -408,6 +461,7 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
                 : 'text-white/40 hover:text-white bg-white/5'
             }`}
           >
+            {tab.value === 'chegou-agora' && <Sparkles size={10} className="inline mr-1.5 mb-0.5" />}
             {tab.value === 'episodes' && <Bell size={10} className="inline mr-1.5 mb-0.5" />}
             {tab.value === 'betterflix-recents' && <Clock size={10} className="inline mr-1.5 mb-0.5" />}
             {tab.label}
@@ -476,6 +530,56 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
                   {items.length} títulos · Fonte: API Flix + Vidsrc PT-BR
                 </p>
               </>
+            )}
+          </>
+        )}
+
+        {activeTab === 'chegou-agora' && (
+          <>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles size={14} className="text-purple-400" />
+                  <p className="text-white font-black text-lg italic uppercase tracking-tighter">Chegou Agora</p>
+                </div>
+                <p className="text-white/30 text-xs">Séries e episódios adicionados nos últimos 7 dias · Some após esse período</p>
+              </div>
+              <button onClick={() => refetchChegou()} disabled={loadingChegou} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-black uppercase tracking-widest text-white/60 hover:text-white border border-white/10 transition-all disabled:opacity-40">
+                <RefreshCw size={12} className={loadingChegou ? 'animate-spin' : ''} />
+                Atualizar
+              </button>
+            </div>
+
+            {loadingChegou ? (
+              <div className="space-y-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-24 rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.06}s` }} />
+                ))}
+              </div>
+            ) : chegouAgora.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <Sparkles size={48} className="text-white/10" />
+                <p className="text-white/30 font-bold text-lg">Nenhum conteúdo novo nos últimos 7 dias</p>
+                <p className="text-white/15 text-sm text-center max-w-xs">Séries e episódios adicionados à plataforma nos últimos 7 dias aparecerão aqui automaticamente</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {chegouAgora.map((ep, idx) => {
+                  const hoursAgo = Math.floor((Date.now() - new Date(ep.addedAt).getTime()) / (1000 * 60 * 60));
+                  const label = hoursAgo < 1 ? 'Agora mesmo' : hoursAgo < 24 ? `${hoursAgo}h atrás` : `${Math.floor(hoursAgo / 24)}d atrás`;
+                  return (
+                    <EpisodeCard
+                      key={`chegou-${ep.seriesId}-${ep.season}-${ep.episode}`}
+                      ep={{ ...ep, addedAt: ep.addedAt }}
+                      idx={idx}
+                      onPlay={handleEpisodePlay}
+                    />
+                  );
+                })}
+                <p className="text-center text-white/20 text-xs mt-6 font-mono pt-4">
+                  {chegouAgora.length} episódios · Adicionados nos últimos 7 dias
+                </p>
+              </div>
             )}
           </>
         )}
