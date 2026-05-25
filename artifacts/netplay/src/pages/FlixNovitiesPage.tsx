@@ -240,48 +240,17 @@ const fetchFlixPage = async (filter: string, page: number): Promise<FlixItem[]> 
   return data.results || [];
 };
 
-const fetchChegouAgora = async (): Promise<PlatformEpisode[]> => {
-  const cutoff7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from('movies')
-    .select('id,title,name,poster_path,backdrop_path,episodes,updated_at,type')
-    .in('type', ['series', 'movie'])
-    .eq('is_hidden', false)
-    .gte('updated_at', cutoff7)
-    .order('updated_at', { ascending: false })
-    .limit(80);
+const SEVEN_DAYS_SECS = 7 * 24 * 60 * 60;
 
-  if (error || !data) return [];
-
-  const eps: PlatformEpisode[] = [];
-  for (const item of data) {
-    if (item.type === 'series') {
-      const rawEps: any[] = Array.isArray(item.episodes) ? item.episodes : [];
-      const sorted = [...rawEps].sort((a, b) => {
-        const sA = (a.season || 0) * 1000 + (a.episode || 0);
-        const sB = (b.season || 0) * 1000 + (b.episode || 0);
-        return sB - sA;
-      });
-      for (const ep of sorted.slice(0, 2)) {
-        if (!ep.videoUrl && !ep.videoUrl2) continue;
-        eps.push({
-          seriesId: item.id,
-          seriesTitle: item.title || item.name || '',
-          seriesPoster: item.poster_path || null,
-          seriesBackdrop: item.backdrop_path || null,
-          episodeTitle: ep.title || ep.name || `Episódio ${ep.episode}`,
-          season: ep.season || 1,
-          episode: ep.episode || 1,
-          videoUrl: ep.videoUrl || ep.videoUrl2 || '',
-          addedAt: item.updated_at || new Date().toISOString(),
-          runtime: ep.runtime,
-          overview: ep.overview,
-          still_path: ep.still_path,
-        });
-      }
-    }
-  }
-  return eps;
+const fetchChegouAgora = async (): Promise<BetterFlixRecentItem[]> => {
+  const cutoffSecs = Math.floor(Date.now() / 1000) - SEVEN_DAYS_SECS;
+  const res = await fetch('/api/betterflix/recents?limit=100');
+  if (!res.ok) return [];
+  const data = await res.json();
+  const titles: BetterFlixRecentItem[] = data.titles || [];
+  return titles.filter(t =>
+    t.added_at == null || t.added_at >= cutoffSecs
+  );
 };
 
 const fetchRecentEpisodes = async (): Promise<PlatformEpisode[]> => {
@@ -349,8 +318,8 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
     staleTime: 10 * 60 * 1000,
   });
 
-  // React Query — chegou agora (últimos 7 dias)
-  const { data: chegouAgora = [], isFetching: loadingChegou, refetch: refetchChegou } = useQuery({
+  // React Query — chegou agora (últimos 7 dias via BetterFlix recents)
+  const { data: chegouAgora = [], isFetching: loadingChegou, refetch: refetchChegou } = useQuery<BetterFlixRecentItem[]>({
     queryKey: ['chegouAgora'],
     queryFn: fetchChegouAgora,
     enabled: activeTab === 'chegou-agora',
@@ -551,35 +520,92 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             </div>
 
             {loadingChegou ? (
-              <div className="space-y-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-24 rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.06}s` }} />
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.05}s` }} />
                 ))}
               </div>
             ) : chegouAgora.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-32 gap-4">
                 <Sparkles size={48} className="text-white/10" />
                 <p className="text-white/30 font-bold text-lg">Nenhum conteúdo novo nos últimos 7 dias</p>
-                <p className="text-white/15 text-sm text-center max-w-xs">Séries e episódios adicionados à plataforma nos últimos 7 dias aparecerão aqui automaticamente</p>
+                <p className="text-white/15 text-sm text-center max-w-xs">Filmes, séries e episódios adicionados nos últimos 7 dias aparecem aqui automaticamente</p>
+                <button onClick={() => refetchChegou()} className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-full text-sm font-bold transition-all">
+                  <RefreshCw size={14} /> Tentar novamente
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {chegouAgora.map((ep, idx) => {
-                  const hoursAgo = Math.floor((Date.now() - new Date(ep.addedAt).getTime()) / (1000 * 60 * 60));
-                  const label = hoursAgo < 1 ? 'Agora mesmo' : hoursAgo < 24 ? `${hoursAgo}h atrás` : `${Math.floor(hoursAgo / 24)}d atrás`;
-                  return (
-                    <EpisodeCard
-                      key={`chegou-${ep.seriesId}-${ep.season}-${ep.episode}`}
-                      ep={{ ...ep, addedAt: ep.addedAt }}
-                      idx={idx}
-                      onPlay={handleEpisodePlay}
-                    />
-                  );
-                })}
-                <p className="text-center text-white/20 text-xs mt-6 font-mono pt-4">
-                  {chegouAgora.length} episódios · Adicionados nos últimos 7 dias
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                  {chegouAgora.map((item, idx) => {
+                    const posterUrl = item.poster_path
+                      ? (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w342${item.poster_path}`)
+                      : null;
+                    const addedSecs = item.added_at ?? 0;
+                    const hoursAgo = Math.floor((Date.now() / 1000 - addedSecs) / 3600);
+                    const timeLabel = addedSecs === 0 ? null
+                      : hoursAgo < 1 ? 'Agora mesmo'
+                      : hoursAgo < 24 ? `${hoursAgo}h atrás`
+                      : `${Math.floor(hoursAgo / 24)}d atrás`;
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25, delay: Math.min(idx * 0.03, 0.5) }}
+                        className="group cursor-pointer"
+                        onClick={() => {
+                          if (item.type === 'movie' || item.type === 'series') {
+                            const url = buildBetterFlixUrl(item.tmdb_id, item.type === 'series' ? 'tv' : 'movie');
+                            onSelectMovie({
+                              id: item.tmdb_id,
+                              title: item.type === 'movie' ? item.title : undefined,
+                              name: item.type === 'series' ? item.title : undefined,
+                              type: item.type,
+                              poster_path: item.poster_path,
+                              videoUrl: url,
+                              playerStyle: 'betterflix',
+                            });
+                          }
+                        }}
+                      >
+                        <div className="relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-white/5 group-hover:border-purple-500/50 transition-all duration-300 shadow-lg">
+                          {posterUrl ? (
+                            <img src={posterUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-full h-full bg-white/5 flex items-center justify-center">
+                              {item.type === 'series' ? <Tv size={36} className="text-white/15" /> : <Film size={36} className="text-white/15" />}
+                            </div>
+                          )}
+                          <div className="absolute top-2 left-2">
+                            <div className="bg-purple-600/90 backdrop-blur-sm text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
+                              <Sparkles size={7} />
+                              {timeLabel ?? 'Novo'}
+                            </div>
+                          </div>
+                          <div className="absolute top-2 right-2">
+                            <div className={`backdrop-blur-sm text-white text-[7px] font-black uppercase px-2 py-0.5 rounded-full ${item.type === 'series' ? 'bg-blue-600/70' : item.type === 'episode' ? 'bg-emerald-600/70' : 'bg-white/10'}`}>
+                              {item.type === 'series' ? 'Série' : item.type === 'episode' ? 'Ep.' : 'Filme'}
+                            </div>
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
+                            <div className="mt-2 w-full bg-purple-600 text-white text-[9px] font-black uppercase tracking-widest py-1.5 rounded-lg text-center">
+                              Assistir
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 px-0.5">
+                          <p className="text-white text-xs font-bold leading-tight line-clamp-2">{item.title}</p>
+                          {item.source && <p className="text-white/25 text-[10px] mt-0.5 font-mono">{item.source}</p>}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+                <p className="text-center text-white/20 text-xs mt-6 font-mono">
+                  {chegouAgora.length} títulos · Adicionados nos últimos 7 dias · Fonte: BetterFlix
                 </p>
-              </div>
+              </>
             )}
           </>
         )}
