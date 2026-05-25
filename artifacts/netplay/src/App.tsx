@@ -30,6 +30,7 @@ import { notificationService } from './services/notificationService';
 import { Movie, Profile, WatchHistory, ScannerState, ReScannerState, CollectionScannerState, LogoScannerState, LogoScanScope, LogoScanMode, MyList, AppSettings, Episode, StreamingProvider } from './types';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { loadGlobalPlayerApiSettings } from './services/playerApiSettings';
 import { motion, AnimatePresence } from 'motion/react';
 
 const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
@@ -41,6 +42,7 @@ const SmartPlayerSelector = React.lazy(() => import('./components/SmartPlayerSel
 const TMDBCategoryCarousels = React.lazy(() => import('./components/TMDBCategoryCarousels'));
 const FranchiseCarousels = React.lazy(() => import('./components/FranchiseCarousels'));
 const Admin2Page = React.lazy(() => import('./pages/Admin2Page'));
+const Admin3Page = React.lazy(() => import('./pages/Admin3Page'));
 const SyncIsland = React.lazy(() => import('./components/SyncIsland'));
 
 import { Loader2, Play, Pause, Square, RefreshCcw, RotateCcw, Sparkles, ChevronLeft, ChevronRight, Plus, Search, Calendar, Heart, Settings, Cloud, TrendingUp, Home, User as UserIcon, List, ThumbsUp, Send, Bookmark, Shield, ArrowLeft, History, Zap, Ghost, CheckCircle2, ShieldCheck, LogOut, X, Star, Clock, Check, LayoutGrid, Activity, ArrowRight, UserCircle, Map as MapIcon, ListPlus, Shuffle, Info, Trophy, Tv2 } from 'lucide-react';
@@ -1970,6 +1972,19 @@ const HomeView = React.memo(({
             onSelectMovie={handleSelectMovie}
             onPlayMovie={handlePlayMovie}
             profileName={profile.name}
+          />
+        )}
+
+        {profile && personalizedMovies.length > 0 && (
+          <Row
+            title={`Só para Você, ${profile.name.split(' ')[0]}`}
+            movies={personalizedMovies}
+            onSelectMovie={handleSelectMovie}
+            onToggleMyList={toggleMyList}
+            onToggleFavorite={toggleFavorite}
+            myListIds={myListIds}
+            favoriteIds={favoriteIds}
+            isLargeRow
           />
         )}
 
@@ -3925,6 +3940,10 @@ export default function App() {
   const [providerData, setProviderData] = useState<any>(null);
 
   useEffect(() => {
+    loadGlobalPlayerApiSettings();
+  }, []);
+
+  useEffect(() => {
     // Defer OneSignal init until browser is idle (after first paint) — saves ~150kb on initial render
     const initOneSignal = () => {
       import('react-onesignal').then(({ default: OneSignal }) => {
@@ -3974,6 +3993,7 @@ export default function App() {
   const deferredMyMovies = useDeferredValue(myMovies);
   const [continueWatching, setContinueWatching] = useState<Movie[]>([]);
   const [watchHistory, setWatchHistory] = useState<Record<number, number>>({});
+  const [personalizedMovies, setPersonalizedMovies] = useState<Movie[]>([]);
   
   // Novos estados para Abas e Pesquisa
   const activeTab = useMemo(() => {
@@ -6065,6 +6085,7 @@ export default function App() {
 
       if (newItems.length > 0) {
         startTransition(() => {
+          setPersonalizedMovies(newItems.slice(0, 30));
           setMyMovies(prev => [...prev, ...newItems]);
         });
       }
@@ -7223,6 +7244,16 @@ export default function App() {
               ? (
                 <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
                   <Admin2Page navigate={navigate} />
+                </Suspense>
+              )
+              : <Navigate to="/menu" replace />
+          } />
+
+          <Route path="/admin3" element={
+            isAdmin
+              ? (
+                <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
+                  <Admin3Page navigate={navigate} />
                 </Suspense>
               )
               : <Navigate to="/menu" replace />

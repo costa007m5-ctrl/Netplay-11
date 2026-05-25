@@ -11,6 +11,7 @@
   --animate-sheen: sheen 2s infinite;
   --animate-scan: scan 3s linear infinite;
   --animate-marquee: marquee 15s linear infinite;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
 
   @keyframes marquee {
     0% { transform: translateX(50%); }
@@ -29,6 +30,11 @@
 
   @keyframes sheen {
     100% { transform: translateX(100%) rotate(35deg); }
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
   }
 }
 

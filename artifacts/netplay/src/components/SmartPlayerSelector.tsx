@@ -7,6 +7,7 @@ import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 import { buildVidsrcMovieUrlSafe, buildVidsrcTvUrlSafe } from './admin/AdminNet2Tab';
 import { buildRedeFlixMovieUrl, buildRedeFlixSerieUrl } from './admin/AdminFlix3Tab';
 import { lookupTmdbId } from '../services/tmdb';
+import { useGlobalPlayerApiSettings } from '../services/playerApiSettings';
 
 export const NATIVE_API_STORAGE_KEY = 'netplay_native_terabox_api';
 
@@ -107,6 +108,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
   const [isBfLoading, setIsBfLoading] = useState(false);
   const [isVidsrcLoading, setIsVidsrcLoading] = useState(false);
   const [isFlix3Loading, setIsFlix3Loading] = useState(false);
+  const { disabledApis: globalDisabledApis } = useGlobalPlayerApiSettings();
 
   const currentUrl = episodeUrl || movie.videoUrl || '';
   const hasTeraboxUrl = isDynamicRef(currentUrl);
@@ -392,8 +394,7 @@ const SmartPlayerSelector: React.FC<SmartPlayerSelectorProps> = ({
     },
   ];
 
-  const disabledApis = getDisabledPlayerApis();
-  const visibleOptions = options.filter(o => o.available && !disabledApis.has(o.id));
+  const visibleOptions = options.filter(o => o.available && !globalDisabledApis.has(o.id));
 
   const savePref = useCallback((optionId: string) => {
     try { localStorage.setItem(SERVER_PREF_KEY(movie.id), optionId); } catch {}

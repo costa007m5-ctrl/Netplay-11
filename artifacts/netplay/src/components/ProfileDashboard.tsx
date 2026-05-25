@@ -336,6 +336,11 @@ export default function ProfileDashboard({
                   <Zap size={14} /> Admin 2.0
                 </button>
               )}
+              {isAdmin && (
+                <button onClick={() => navigate('/admin3')} className="bg-gradient-to-r from-orange-700 to-red-800 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:opacity-90 transition-all shadow-xl flex items-center gap-2 border border-orange-500/30">
+                  <Copy size={14} /> Admin 3.0
+                </button>
+              )}
               <button onClick={handleSwitchProfile} className="bg-white/10 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] border border-white/10 hover:bg-white/20 transition-all flex items-center gap-2 shadow-xl">
                 <RefreshCcw size={14} /> Trocar Perfil
               </button>

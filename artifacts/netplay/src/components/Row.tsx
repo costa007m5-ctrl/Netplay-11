@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 interface RowProps {
   title: string;
   movies: Movie[];
+  isLoading?: boolean;
   isLargeRow?: boolean;
   isContinueWatching?: boolean;
   onSelectMovie: (movie: Movie) => void;
@@ -28,8 +29,6 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
 
   const parseWatchProviders = useCallback((providersString?: string) => {
     if (!providersString) return [];
-
-    // Formato enriquecido: "Nome|logo_url;;Nome2|logo_url2"
     if (providersString.includes('|')) {
       return providersString.split(';;').map(p => {
         const [name, logo] = p.split('|');
@@ -39,8 +38,6 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
         return acc;
       }, []);
     }
-
-    // Formato legado: "Netflix,Disney+" — associa logos conhecidas
     const KNOWN: Record<string, string> = {
       'netflix': 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
       'disney+': 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg',
@@ -58,12 +55,11 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
     return providersString.split(',').map(p => p.trim()).filter(Boolean).map(name => ({
       name,
       logo: KNOWN[name.toLowerCase()] || '',
-    })).filter(p => p.logo); // só mostra se tiver logo conhecida
+    })).filter(p => p.logo);
   }, []);
 
   const providers = parseWatchProviders(movie.watch_providers);
 
-  // Smaller image sizes for faster loading
   const posterSrc = movie.poster_path
     ? (movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w342/${movie.poster_path}`)
     : null;
@@ -109,7 +105,7 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
                 }
                 return 0;
               })
-              .slice(0, highlightProvider ? 1 : 3).map((provider: any, i: number) => (
+              .slice(0, highlightProvider ? 1 : 3).map((provider: any) => (
               <div
                 key={provider.name}
                 className={`p-1 px-1.5 bg-black/60 rounded-lg border shadow-xl ${highlightProvider && provider.name.toLowerCase().includes(highlightProvider.toLowerCase()) ? 'border-red-600 scale-110' : 'border-white/10'}`}
@@ -126,14 +122,23 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
           </div>
         )}
 
-        {/* Skeleton */}
+        {/* Skeleton shimmer enquanto imagem carrega */}
         {!isLoaded && (
-          <div className="absolute inset-0 bg-white/5 animate-pulse" />
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 bg-[#1a1a1a]" />
+            <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+            {type !== 'circle' && (
+              <>
+                <div className="absolute bottom-4 left-3 right-3 h-3 rounded-full bg-white/[0.07]" />
+                <div className="absolute bottom-10 left-3 right-8 h-2.5 rounded-full bg-white/[0.05]" />
+              </>
+            )}
+          </div>
         )}
 
         {imgSrc ? (
           <img
-            className={`object-cover w-full h-full transition-transform duration-300 group-hover/card:scale-105 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+            className={`object-cover w-full h-full transition-opacity duration-500 group-hover/card:scale-105 transition-transform duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
             src={imgSrc}
             alt={movie.title || movie.name}
             onLoad={() => setIsLoaded(true)}
@@ -142,7 +147,7 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-[#181818] to-black flex items-center justify-center p-8 text-center border border-white/5">
+          <div className="w-full h-full bg-gradient-to-br from-[#181818] to-black flex items-center justify-center p-8 text-center border border-white/5" onLoad={() => setIsLoaded(true)}>
             <span className="text-white font-black text-sm md:text-xl uppercase tracking-tighter italic">{movie.title || movie.name}</span>
           </div>
         )}
@@ -184,10 +189,32 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
   );
 });
 
+function SkeletonCard({ type, isLargeRow, isContinueWatching }: { type: string; isLargeRow?: boolean; isContinueWatching?: boolean }) {
+  return (
+    <div
+      className={`flex-none overflow-hidden rounded-[0.8rem] md:rounded-[1.5rem] bg-[#1a1a1a] relative ${
+        isContinueWatching || type === 'landscape' ? 'w-[160px] md:w-[340px] aspect-video' :
+        type === 'circle' ? 'w-[90px] md:w-[180px] aspect-square rounded-full' :
+        type === 'wide' ? 'w-[220px] md:w-[440px] aspect-[21/9]' :
+        isLargeRow ? 'w-[110px] md:w-[260px] aspect-[2/3]' : 'w-[110px] md:w-[220px] aspect-[2/3]'
+      }`}
+    >
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+      {type !== 'circle' && (
+        <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+          <div className="h-3 rounded-full bg-white/[0.08] w-3/4" />
+          <div className="h-2 rounded-full bg-white/[0.05] w-1/2" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Row renders lazily — only mounts when it enters the viewport
 const Row = React.memo(({
   title,
   movies,
+  isLoading = false,
   isLargeRow,
   isContinueWatching,
   onSelectMovie,
@@ -211,7 +238,7 @@ const Row = React.memo(({
     if (!containerRef.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); observer.disconnect(); } },
-      { rootMargin: '200px' }
+      { rootMargin: '300px' }
     );
     observer.observe(containerRef.current);
     return () => observer.disconnect();
@@ -224,7 +251,9 @@ const Row = React.memo(({
     }
   }, []);
 
-  if (!movies || movies.length === 0) return null;
+  if (!isLoading && (!movies || movies.length === 0)) return null;
+
+  const skeletonCount = isLoading ? 8 : Math.min(movies.length, 8);
 
   return (
     <div ref={containerRef} className="ml-2 md:ml-12 text-white relative group mb-4 md:mb-6 overflow-x-hidden">
@@ -234,9 +263,11 @@ const Row = React.memo(({
             <span className="block w-1.5 md:w-3 h-6 md:h-14 bg-red-600 rounded-full" />
             <Sparkles className="absolute -top-1 -right-1 text-red-600 opacity-0 group-hover/title:opacity-100 transition-opacity duration-200" size={12} />
           </div>
-          {title}
+          {isLoading ? (
+            <span className="block h-6 md:h-10 w-40 md:w-64 rounded-lg bg-white/[0.07] animate-pulse" />
+          ) : title}
         </h2>
-        {onViewAll && (
+        {onViewAll && !isLoading && (
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -261,7 +292,11 @@ const Row = React.memo(({
           className="flex overflow-y-visible overflow-x-scroll scrollbar-hide gap-3 md:gap-4 pb-6 pt-4 pr-5 snap-x"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {isVisible ? movies.map((movie, idx) => (
+          {isLoading ? (
+            Array.from({ length: skeletonCount }).map((_, i) => (
+              <SkeletonCard key={i} type={type} isLargeRow={isLargeRow} isContinueWatching={isContinueWatching} />
+            ))
+          ) : isVisible ? movies.map((movie, idx) => (
             <MovieCard
               key={movie.id}
               movie={movie}
@@ -281,17 +316,8 @@ const Row = React.memo(({
               highlightProvider={highlightProvider}
             />
           )) : (
-            // Placeholder slots while row is off-screen
-            Array.from({ length: Math.min(movies.length, 8) }).map((_, i) => (
-              <div
-                key={i}
-                className={`flex-none bg-white/5 rounded-[1rem] ${
-                  isContinueWatching || type === 'landscape' ? 'w-[160px] md:w-[340px] aspect-video' :
-                  type === 'circle' ? 'w-[90px] md:w-[180px] aspect-square rounded-full' :
-                  type === 'wide' ? 'w-[220px] md:w-[440px] aspect-[21/9]' :
-                  isLargeRow ? 'w-[110px] md:w-[260px] aspect-[2/3]' : 'w-[110px] md:w-[220px] aspect-[2/3]'
-                }`}
-              />
+            Array.from({ length: skeletonCount }).map((_, i) => (
+              <SkeletonCard key={i} type={type} isLargeRow={isLargeRow} isContinueWatching={isContinueWatching} />
             ))
           )}
         </div>

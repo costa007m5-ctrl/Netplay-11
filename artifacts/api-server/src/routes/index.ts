@@ -15,6 +15,7 @@ import moviesRouter from "./movies";
 import syncRouter from "./sync";
 import settingsRouter from "./settings";
 import contentTrackerRouter from "./content-tracker";
+import adminDuplicatesRouter from "./admin-duplicates";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(moviesRouter);
 router.use(syncRouter);
 router.use(settingsRouter);
 router.use(contentTrackerRouter);
+router.use(adminDuplicatesRouter);
 
 export default router;

@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { ToggleLeft, ToggleRight, Server, RefreshCcw, Zap, ExternalLink, Tv2 } from 'lucide-react';
-import { getDisabledPlayerApis, setPlayerApiEnabled } from '../SmartPlayerSelector';
+import React, { useCallback } from 'react';
+import { ToggleLeft, ToggleRight, Server, RefreshCcw, Zap, ExternalLink, Tv2, Globe, Loader2 } from 'lucide-react';
+import { useGlobalPlayerApiSettings } from '../../services/playerApiSettings';
 
 interface ApiOption {
   id: string;
@@ -135,15 +135,13 @@ const ALL_APIS: ApiOption[] = [
 ];
 
 export function AdminPlayerAPIsTab() {
-  const [disabled, setDisabled] = useState<Set<string>>(() => getDisabledPlayerApis());
+  const { disabledApis, loading, toggleApi } = useGlobalPlayerApiSettings();
 
-  const toggle = useCallback((id: string) => {
-    const isCurrentlyEnabled = !disabled.has(id);
-    setPlayerApiEnabled(id, !isCurrentlyEnabled);
-    setDisabled(getDisabledPlayerApis());
-  }, [disabled]);
+  const enabledCount = ALL_APIS.length - [...disabledApis].filter(id => ALL_APIS.some(a => a.id === id)).length;
 
-  const enabledCount = ALL_APIS.length - disabled.size;
+  const handleToggle = useCallback((id: string) => {
+    toggleApi(id);
+  }, [toggleApi]);
 
   return (
     <div className="space-y-6 md:space-y-10 pb-12">
@@ -153,18 +151,29 @@ export function AdminPlayerAPIsTab() {
           Players Ativos
         </h2>
         <p className="text-base md:text-lg text-gray-400 font-medium max-w-3xl">
-          Ative ou desative cada opção de player que aparece no seletor "Como deseja assistir?".
-          APIs desativadas ficam ocultas para todos os usuários.
+          Ative ou desative cada opção de player. As configurações são <strong className="text-white">globais</strong> — afetam todos os usuários imediatamente.
         </p>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-gray-400">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span><strong className="text-white">{enabledCount}</strong> de <strong className="text-white">{ALL_APIS.length}</strong> players ativos</span>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span><strong className="text-white">{enabledCount}</strong> de <strong className="text-white">{ALL_APIS.length}</strong> players ativos</span>
+          </div>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-400">
+            <Globe size={12} />
+            <span className="font-bold">Global · Todos os usuários</span>
+          </div>
+          {loading && (
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-gray-500">
+              <Loader2 size={12} className="animate-spin" />
+              <span>Sincronizando...</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {ALL_APIS.map((api) => {
-          const enabled = !disabled.has(api.id);
+          const enabled = !disabledApis.has(api.id);
           const Icon = api.icon;
           return (
             <div
@@ -174,7 +183,7 @@ export function AdminPlayerAPIsTab() {
                   ? `${api.gradient} ${api.border} opacity-100`
                   : 'from-gray-900/40 to-gray-900/20 border-white/5 opacity-50 grayscale'
                 }`}
-              onClick={() => toggle(api.id)}
+              onClick={() => handleToggle(api.id)}
             >
               <div className={`w-10 h-10 rounded-xl ${enabled ? api.iconBg : 'bg-white/5'} border border-white/10 flex items-center justify-center shrink-0 mt-0.5`}>
                 <Icon size={18} className={enabled ? api.iconColor : 'text-gray-600'} />
@@ -210,9 +219,8 @@ export function AdminPlayerAPIsTab() {
         })}
       </div>
 
-      <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 text-sm text-amber-300/70">
-        <strong className="text-amber-300">Atenção:</strong> as configurações são salvas localmente neste navegador.
-        Cada dispositivo ou navegador terá seu próprio estado independente.
+      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5 text-sm text-emerald-300/70">
+        <strong className="text-emerald-300">Configurações globais:</strong> alterações aqui afetam todos os usuários instantaneamente. APIs desativadas não aparecem no seletor de player para ninguém.
       </div>
     </div>
   );
