@@ -3511,18 +3511,30 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
     const fetchFromDb = async () => {
       try {
         const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,rating,vote_average,runtime,genres,video_url,video_url_2,logo_path,watch_providers,is_hidden,created_at,updated_at';
-        // Busca usando OR de ILIKE para todos os termos
         const orClause = searchTerms.map(t => `watch_providers.ilike.%${t}%`).join(',');
-        const { data, error } = await supabase
-          .from('movies')
-          .select(COLS)
-          .or(orClause)
-          .eq('is_hidden', false)
-          .order('updated_at', { ascending: false })
-          .limit(400);
+        const PAGE_SIZE = 1000;
+        let offset = 0;
+        let allData: any[] = [];
 
-        if (!error && data) {
-          setDbProviderMovies(data.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
+        // Pagina até buscar todos os resultados
+        while (true) {
+          const { data, error } = await supabase
+            .from('movies')
+            .select(COLS)
+            .or(orClause)
+            .eq('is_hidden', false)
+            .order('updated_at', { ascending: false })
+            .range(offset, offset + PAGE_SIZE - 1);
+
+          if (error || !data || data.length === 0) break;
+
+          allData = [...allData, ...data];
+
+          // Atualiza estado progressivamente para mostrar resultados enquanto carrega
+          setDbProviderMovies(allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
+
+          if (data.length < PAGE_SIZE) break;
+          offset += PAGE_SIZE;
         }
       } catch (e) {
         console.warn('[ProviderViewWrapper] Erro ao buscar no DB:', e);

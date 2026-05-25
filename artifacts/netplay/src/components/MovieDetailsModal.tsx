@@ -946,7 +946,20 @@ const MovieDetailsModal = React.memo(({
                     <span className="text-red-400 font-black uppercase tracking-widest text-[8px] md:text-[10px] italic">Na Plataforma</span>
                   </div>
                 )}
-                {providers.length > 0 ? (
+                {realWatchProviders.length > 0 ? (
+                  realWatchProviders.map((p: any) => (
+                    <div key={p.provider_id} className="group relative" title={p.provider_name}>
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/5 border border-white/10 backdrop-blur-2xl hover:bg-white/10 transition-all hover:scale-110 shadow-xl flex items-center justify-center overflow-hidden p-1">
+                        <img 
+                          src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
+                          alt={p.provider_name} 
+                          className="w-full h-full object-contain rounded-lg" 
+                          referrerPolicy="no-referrer" 
+                        />
+                      </div>
+                    </div>
+                  ))
+                ) : providers.length > 0 ? (
                   providers.map((p: any, i: number) => (
                     <div key={i} className="group relative">
                       <div className="px-4 py-2 rounded-xl md:rounded-2xl bg-white/5 border border-white/10 backdrop-blur-2xl hover:bg-white/10 transition-all hover:scale-110 shadow-xl flex items-center gap-2">
@@ -955,19 +968,6 @@ const MovieDetailsModal = React.memo(({
                         ) : (
                           <span className="text-white font-black uppercase tracking-widest text-[8px] md:text-[10px] italic">{p.name}</span>
                         )}
-                      </div>
-                    </div>
-                  ))
-                ) : realWatchProviders.length > 0 ? (
-                  realWatchProviders.map((p: any) => (
-                    <div key={p.provider_id} className="group relative">
-                      <div className="px-4 py-2 rounded-xl md:rounded-2xl bg-white/5 border border-white/10 backdrop-blur-2xl hover:bg-white/10 transition-all hover:scale-110 shadow-xl flex items-center gap-2">
-                        <img 
-                          src={`https://image.tmdb.org/t/p/original${p.logo_path}`} 
-                          alt={p.provider_name} 
-                          className="h-4 md:h-5 object-contain" 
-                          referrerPolicy="no-referrer" 
-                        />
                       </div>
                     </div>
                   ))

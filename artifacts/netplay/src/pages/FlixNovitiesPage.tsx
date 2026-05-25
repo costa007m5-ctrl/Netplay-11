@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw } from 'lucide-react';
+import { Zap, ArrowLeft, Film, Tv, Star, RefreshCw, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { buildBetterFlixUrl } from '../components/admin/AdminFlixAPITab';
+import { supabase } from '../lib/supabase';
 
 interface FlixItem {
   tmdb_id: number;
@@ -15,6 +16,21 @@ interface FlixItem {
   overview: string;
   genres: string;
   source?: 'apiflix' | 'vidsrc';
+}
+
+interface PlatformEpisode {
+  seriesId: number;
+  seriesTitle: string;
+  seriesPoster: string | null;
+  seriesBackdrop: string | null;
+  episodeTitle: string;
+  season: number;
+  episode: number;
+  videoUrl: string;
+  addedAt: string;
+  runtime?: number;
+  overview?: string;
+  still_path?: string;
 }
 
 function buildVirtualMovie(item: FlixItem): any {
@@ -40,6 +56,11 @@ const FILTERS = [
   { label: 'Todos', value: 'all', icon: Zap },
   { label: 'Filmes', value: 'movies', icon: Film },
   { label: 'Séries', value: 'tvshows', icon: Tv },
+];
+
+const TABS = [
+  { label: 'API Flix', value: 'apiflix' },
+  { label: 'Episódios Novos', value: 'episodes' },
 ];
 
 const FlixCard = React.memo(({
@@ -87,7 +108,6 @@ const FlixCard = React.memo(({
           </div>
         )}
 
-        {/* Badge fonte */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           <div className="bg-red-600/90 backdrop-blur-sm text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
             <Zap size={7} fill="currentColor" />
@@ -100,14 +120,12 @@ const FlixCard = React.memo(({
           )}
         </div>
 
-        {/* Badge tipo */}
         <div className="absolute top-2 right-2">
           <div className={`backdrop-blur-sm text-white text-[7px] font-black uppercase px-2 py-0.5 rounded-full ${item.type === 'series' ? 'bg-blue-600/70' : 'bg-white/10'}`}>
             {item.type === 'series' ? 'Série' : 'Filme'}
           </div>
         </div>
 
-        {/* Hover overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
           {rating && (
             <div className="flex items-center gap-1 mb-1">
@@ -134,6 +152,59 @@ const FlixCard = React.memo(({
   );
 });
 
+const EpisodeCard = React.memo(({ ep, idx, onPlay }: { ep: PlatformEpisode; idx: number; onPlay: (ep: PlatformEpisode) => void }) => {
+  const imgUrl = ep.still_path
+    ? (ep.still_path.startsWith('http') ? ep.still_path : `https://image.tmdb.org/t/p/w300${ep.still_path}`)
+    : ep.seriesBackdrop
+    ? (ep.seriesBackdrop.startsWith('http') ? ep.seriesBackdrop : `https://image.tmdb.org/t/p/w500${ep.seriesBackdrop}`)
+    : null;
+
+  const daysAgo = Math.floor((Date.now() - new Date(ep.addedAt).getTime()) / (1000 * 60 * 60 * 24));
+  const daysLabel = daysAgo === 0 ? 'Hoje' : daysAgo === 1 ? 'Ontem' : `${daysAgo}d atrás`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: Math.min(idx * 0.04, 0.6) }}
+      className="group cursor-pointer flex gap-3 p-3 rounded-2xl bg-white/3 hover:bg-white/6 border border-white/5 hover:border-red-500/30 transition-all"
+      onClick={() => onPlay(ep)}
+    >
+      <div className="relative w-32 md:w-48 aspect-video rounded-xl overflow-hidden flex-none bg-white/5">
+        {imgUrl ? (
+          <img src={imgUrl} alt={ep.episodeTitle} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" loading="lazy" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center"><Tv size={20} className="text-white/20" /></div>
+        )}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <Film size={14} className="text-white" />
+          </div>
+        </div>
+        <div className="absolute top-1.5 left-1.5">
+          <span className="bg-black/70 backdrop-blur-sm text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md">
+            T{ep.season}·E{ep.episode}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+        <div>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-[8px] font-black uppercase tracking-widest text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full border border-green-400/20">{daysLabel}</span>
+            {ep.runtime && ep.runtime > 0 && (
+              <span className="text-[8px] font-bold text-white/30">{ep.runtime}min</span>
+            )}
+          </div>
+          <p className="text-white/60 text-[10px] font-black uppercase tracking-widest truncate">{ep.seriesTitle}</p>
+          <p className="text-white text-sm font-bold leading-tight line-clamp-2 mt-0.5">{ep.episodeTitle || `Episódio ${ep.episode}`}</p>
+          {ep.overview && <p className="text-white/30 text-[10px] mt-1 line-clamp-2 hidden md:block">{ep.overview}</p>}
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
 interface FlixNovitiesPageProps {
   onSelectMovie: (movie: any) => void;
   defaultFilter?: 'all' | 'movies' | 'tvshows';
@@ -143,12 +214,17 @@ interface FlixNovitiesPageProps {
 
 const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defaultFilter = 'all', hideFilterBar = false, pageTitle }) => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'apiflix' | 'episodes'>('apiflix');
   const [items, setItems] = useState<FlixItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<'all' | 'movies' | 'tvshows'>(defaultFilter);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+
+  // Estado da aba episódios
+  const [episodes, setEpisodes] = useState<PlatformEpisode[]>([]);
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
 
   const fetchItems = useCallback(async (f: string, p: number, reset: boolean) => {
     try {
@@ -177,16 +253,86 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
     }
   }, []);
 
+  const fetchEpisodes = useCallback(async () => {
+    setLoadingEpisodes(true);
+    try {
+      // Busca séries atualizadas recentemente com episódios
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('movies')
+        .select('id,title,name,poster_path,backdrop_path,episodes,updated_at')
+        .eq('type', 'series')
+        .eq('is_hidden', false)
+        .gte('updated_at', cutoff)
+        .order('updated_at', { ascending: false })
+        .limit(50);
+
+      if (error || !data) return;
+
+      const eps: PlatformEpisode[] = [];
+      for (const series of data) {
+        const rawEps: any[] = Array.isArray(series.episodes) ? series.episodes : [];
+        // Ordena episódios por data de atualização ou mais recentes (última temporada, último ep)
+        const sorted = [...rawEps].sort((a, b) => {
+          const sA = (a.season || 0) * 1000 + (a.episode || 0);
+          const sB = (b.season || 0) * 1000 + (b.episode || 0);
+          return sB - sA;
+        });
+        // Pega os 3 episódios mais recentes por série
+        for (const ep of sorted.slice(0, 3)) {
+          if (!ep.videoUrl && !ep.videoUrl2) continue;
+          eps.push({
+            seriesId: series.id,
+            seriesTitle: series.title || series.name || '',
+            seriesPoster: series.poster_path || null,
+            seriesBackdrop: series.backdrop_path || null,
+            episodeTitle: ep.title || ep.name || `Episódio ${ep.episode}`,
+            season: ep.season || 1,
+            episode: ep.episode || 1,
+            videoUrl: ep.videoUrl || ep.videoUrl2 || '',
+            addedAt: series.updated_at || new Date().toISOString(),
+            runtime: ep.runtime,
+            overview: ep.overview,
+            still_path: ep.still_path,
+          });
+        }
+      }
+      setEpisodes(eps);
+    } catch (e) {
+      console.warn('[FlixNovitiesPage] Erro ao buscar episódios:', e);
+    } finally {
+      setLoadingEpisodes(false);
+    }
+  }, []);
+
   useEffect(() => {
     setPage(1);
     setHasMore(true);
     fetchItems(filter, 1, true);
   }, [filter, fetchItems]);
 
+  useEffect(() => {
+    if (activeTab === 'episodes' && episodes.length === 0) {
+      fetchEpisodes();
+    }
+  }, [activeTab, fetchEpisodes, episodes.length]);
+
   const loadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
     fetchItems(filter, nextPage, false);
+  };
+
+  const handleEpisodePlay = (ep: PlatformEpisode) => {
+    // Cria objeto de filme para reprodução
+    const movieObj = {
+      id: ep.seriesId,
+      name: ep.seriesTitle,
+      type: 'series',
+      poster_path: ep.seriesPoster,
+      backdrop_path: ep.seriesBackdrop,
+    };
+    onSelectMovie({ ...movieObj, videoUrl: ep.videoUrl });
   };
 
   return (
@@ -205,15 +351,15 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             <Zap size={14} className="text-red-500" fill="currentColor" />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">API Flix</p>
+            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Novidades</p>
             <h1 className="text-lg font-black text-white italic uppercase tracking-tighter leading-none truncate">
-              {pageTitle || 'Novidades'}
+              {pageTitle || 'Lançamentos'}
             </h1>
           </div>
         </div>
 
-        {/* Filtros — ocultos quando hideFilterBar */}
-        {!hideFilterBar && (
+        {/* Filtros API Flix — só na aba apiflix */}
+        {activeTab === 'apiflix' && !hideFilterBar && (
           <div className="flex bg-white/5 rounded-full p-0.5 border border-white/10 shrink-0">
             {FILTERS.map(f => (
               <button
@@ -233,88 +379,124 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
         )}
       </div>
 
-      <div className="px-4 md:px-12 py-8">
-        {/* Legenda das fontes */}
-        <div className="flex items-center gap-4 mb-8 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-red-600/20 border border-red-600/30 text-red-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
-              <Zap size={8} fill="currentColor" />
-              API Flix
-            </div>
-            <span className="text-gray-600 text-[10px]">= Em cartaz / No ar agora</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-blue-600/20 border border-blue-600/30 text-blue-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
-              PT-BR
-            </div>
-            <span className="text-gray-600 text-[10px]">= Com dublagem em português</span>
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 px-4 md:px-12 pt-6 pb-2 border-b border-white/5">
+        {TABS.map(tab => (
+          <button
+            key={tab.value}
+            onClick={() => setActiveTab(tab.value as any)}
+            className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              activeTab === tab.value
+                ? 'bg-red-600 text-white shadow-lg'
+                : 'text-white/40 hover:text-white bg-white/5'
+            }`}
+          >
+            {tab.value === 'episodes' && <Bell size={10} className="inline mr-1.5 mb-0.5" />}
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Grid */}
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
-            {Array.from({ length: 18 }).map((_, i) => (
-              <div
-                key={i}
-                className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse"
-                style={{ animationDelay: `${i * 0.05}s` }}
-              />
-            ))}
-          </div>
-        ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 gap-4">
-            <Zap size={48} className="text-white/10" />
-            <p className="text-white/30 font-bold text-lg">Nenhum conteúdo encontrado</p>
-            <button
-              onClick={() => fetchItems(filter, 1, true)}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-full text-sm font-bold transition-all"
-            >
-              <RefreshCw size={14} />
-              Tentar novamente
-            </button>
-          </div>
-        ) : (
+      <div className="px-4 md:px-12 py-8">
+        {activeTab === 'apiflix' && (
           <>
-            <AnimatePresence mode="wait">
+            {/* Legenda das fontes */}
+            <div className="flex items-center gap-4 mb-8 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-red-600/20 border border-red-600/30 text-red-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
+                  <Zap size={8} fill="currentColor" />
+                  API Flix
+                </div>
+                <span className="text-gray-600 text-[10px]">= Em cartaz / No ar agora</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-blue-600/20 border border-blue-600/30 text-blue-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full">
+                  PT-BR
+                </div>
+                <span className="text-gray-600 text-[10px]">= Com dublagem em português</span>
+              </div>
+            </div>
+
+            {loading ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
-                {items.map((item, idx) => (
-                  <FlixCard
-                    key={`${item.tmdb_id}-${item.type}`}
-                    item={item}
-                    idx={idx}
-                    onSelect={onSelectMovie}
-                  />
+                {Array.from({ length: 18 }).map((_, i) => (
+                  <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.05}s` }} />
                 ))}
               </div>
-            </AnimatePresence>
-
-            {/* Botão Carregar Mais */}
-            {hasMore && (
-              <div className="flex justify-center mt-12">
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="flex items-center gap-3 px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-red-600/40 rounded-full text-sm font-black uppercase tracking-widest text-white transition-all disabled:opacity-50"
-                >
-                  {loadingMore ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
-                      Carregando...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw size={14} />
-                      Carregar mais
-                    </>
-                  )}
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <Zap size={48} className="text-white/10" />
+                <p className="text-white/30 font-bold text-lg">Nenhum conteúdo encontrado</p>
+                <button onClick={() => fetchItems(filter, 1, true)} className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-full text-sm font-bold transition-all">
+                  <RefreshCw size={14} />
+                  Tentar novamente
                 </button>
               </div>
-            )}
+            ) : (
+              <>
+                <AnimatePresence mode="wait">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+                    {items.map((item, idx) => (
+                      <FlixCard key={`${item.tmdb_id}-${item.type}`} item={item} idx={idx} onSelect={onSelectMovie} />
+                    ))}
+                  </div>
+                </AnimatePresence>
 
-            <p className="text-center text-white/20 text-xs mt-6 font-mono">
-              {items.length} títulos · Fonte: API Flix + Vidsrc PT-BR
-            </p>
+                {hasMore && (
+                  <div className="flex justify-center mt-12">
+                    <button onClick={loadMore} disabled={loadingMore} className="flex items-center gap-3 px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-red-600/40 rounded-full text-sm font-black uppercase tracking-widest text-white transition-all disabled:opacity-50">
+                      {loadingMore ? (
+                        <><div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />Carregando...</>
+                      ) : (
+                        <><RefreshCw size={14} />Carregar mais</>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-center text-white/20 text-xs mt-6 font-mono">
+                  {items.length} títulos · Fonte: API Flix + Vidsrc PT-BR
+                </p>
+              </>
+            )}
+          </>
+        )}
+
+        {activeTab === 'episodes' && (
+          <>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <p className="text-white font-black text-lg italic uppercase tracking-tighter">Episódios da Plataforma</p>
+                <p className="text-white/30 text-xs mt-0.5">Séries atualizadas nos últimos 30 dias</p>
+              </div>
+              <button onClick={fetchEpisodes} disabled={loadingEpisodes} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-black uppercase tracking-widest text-white/60 hover:text-white border border-white/10 transition-all disabled:opacity-40">
+                <RefreshCw size={12} className={loadingEpisodes ? 'animate-spin' : ''} />
+                Atualizar
+              </button>
+            </div>
+
+            {loadingEpisodes ? (
+              <div className="space-y-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-24 rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.06}s` }} />
+                ))}
+              </div>
+            ) : episodes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <Bell size={48} className="text-white/10" />
+                <p className="text-white/30 font-bold text-lg">Nenhum episódio recente encontrado</p>
+                <p className="text-white/15 text-sm text-center max-w-xs">Episódios de séries adicionadas à plataforma nos últimos 30 dias aparecerão aqui</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {episodes.map((ep, idx) => (
+                  <EpisodeCard key={`${ep.seriesId}-${ep.season}-${ep.episode}`} ep={ep} idx={idx} onPlay={handleEpisodePlay} />
+                ))}
+                <p className="text-center text-white/20 text-xs mt-6 font-mono pt-4">
+                  {episodes.length} episódios recentes · Da biblioteca da plataforma
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>
