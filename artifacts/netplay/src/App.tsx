@@ -1426,6 +1426,7 @@ const HomeView = React.memo(({
   categories,
   franchises,
   isGlobalSearching,
+  personalizedMovies,
 }: any) => {
   const navigate = useNavigate();
   
@@ -7153,6 +7154,7 @@ export default function App() {
               categories={categories}
               franchises={dynamicFranchises}
               isGlobalSearching={isGlobalSearching}
+              personalizedMovies={personalizedMovies}
             />
           } />
           
