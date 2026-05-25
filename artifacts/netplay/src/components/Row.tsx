@@ -27,14 +27,38 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
   const matchPercentage = 80 + (movie.id % 20);
 
   const parseWatchProviders = useCallback((providersString?: string) => {
-    if (!providersString || !providersString.includes('|')) return [];
-    return providersString.split(';;').map(p => {
-      const [name, logo] = p.split('|');
-      return { name, logo };
-    }).reduce((acc: any[], current) => {
-      if (!acc.find(item => item.name === current.name)) acc.push(current);
-      return acc;
-    }, []);
+    if (!providersString) return [];
+
+    // Formato enriquecido: "Nome|logo_url;;Nome2|logo_url2"
+    if (providersString.includes('|')) {
+      return providersString.split(';;').map(p => {
+        const [name, logo] = p.split('|');
+        return { name, logo };
+      }).reduce((acc: any[], current) => {
+        if (!acc.find(item => item.name === current.name)) acc.push(current);
+        return acc;
+      }, []);
+    }
+
+    // Formato legado: "Netflix,Disney+" — associa logos conhecidas
+    const KNOWN: Record<string, string> = {
+      'netflix': 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg',
+      'disney+': 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg',
+      'disney plus': 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg',
+      'max': 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg',
+      'hbo max': 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg',
+      'prime video': 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png',
+      'amazon prime': 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png',
+      'apple tv+': 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
+      'apple tv plus': 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg',
+      'paramount+': 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg',
+      'paramount plus': 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg',
+      'globoplay': 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg',
+    };
+    return providersString.split(',').map(p => p.trim()).filter(Boolean).map(name => ({
+      name,
+      logo: KNOWN[name.toLowerCase()] || '',
+    })).filter(p => p.logo); // só mostra se tiver logo conhecida
   }, []);
 
   const providers = parseWatchProviders(movie.watch_providers);

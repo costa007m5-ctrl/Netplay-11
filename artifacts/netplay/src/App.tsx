@@ -1420,7 +1420,8 @@ const HomeView = React.memo(({
   episodeSearchResults,
   onEpisodePlay,
   categories,
-  franchises
+  franchises,
+  isGlobalSearching,
 }: any) => {
   const navigate = useNavigate();
   
@@ -1474,7 +1475,13 @@ const HomeView = React.memo(({
       >
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-3xl md:text-5xl font-black text-white italic uppercase tracking-tighter">Resultados para: <span className="text-red-600">"{searchQuery}"</span></h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {isGlobalSearching && (
+              <div className="flex items-center gap-2 text-gray-500 text-[10px] font-black uppercase tracking-widest italic">
+                <div className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                Buscando no catálogo completo...
+              </div>
+            )}
              <span className="bg-white/5 border border-white/10 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-gray-500 italic">
                {searchResults.length} Títulos Encontrados
              </span>
@@ -3513,28 +3520,43 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
         const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,rating,vote_average,runtime,genres,video_url,video_url_2,logo_path,watch_providers,is_hidden,created_at,updated_at';
         const orClause = searchTerms.map(t => `watch_providers.ilike.%${t}%`).join(',');
         const PAGE_SIZE = 1000;
-        let offset = 0;
-        let allData: any[] = [];
 
-        // Pagina até buscar todos os resultados
-        while (true) {
-          const { data, error } = await supabase
+        // Tenta primeiro filtrar por watch_providers
+        const fetchPage = async (from: number, withFilter: boolean) => {
+          let q = supabase
             .from('movies')
             .select(COLS)
-            .or(orClause)
             .eq('is_hidden', false)
-            .order('updated_at', { ascending: false })
-            .range(offset, offset + PAGE_SIZE - 1);
+            .order('vote_average', { ascending: false })
+            .range(from, from + PAGE_SIZE - 1);
+          if (withFilter) q = q.or(orClause);
+          return q;
+        };
 
+        let allData: any[] = [];
+        let offset = 0;
+
+        // Primeira passagem: com filtro por provider
+        while (true) {
+          const { data, error } = await fetchPage(offset, true);
           if (error || !data || data.length === 0) break;
-
           allData = [...allData, ...data];
-
-          // Atualiza estado progressivamente para mostrar resultados enquanto carrega
           setDbProviderMovies(allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
-
           if (data.length < PAGE_SIZE) break;
           offset += PAGE_SIZE;
+        }
+
+        // Fallback: se watch_providers vazio para a maioria dos conteúdos, mostra TUDO
+        if (allData.length === 0) {
+          offset = 0;
+          while (true) {
+            const { data, error } = await fetchPage(offset, false);
+            if (error || !data || data.length === 0) break;
+            allData = [...allData, ...data];
+            setDbProviderMovies(allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
+            if (data.length < PAGE_SIZE) break;
+            offset += PAGE_SIZE;
+          }
         }
       } catch (e) {
         console.warn('[ProviderViewWrapper] Erro ao buscar no DB:', e);
@@ -3882,6 +3904,8 @@ export default function App() {
 
   const [activeFranchise, setActiveFranchise] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [globalDbSearchResults, setGlobalDbSearchResults] = useState<Movie[]>([]);
+  const [isGlobalSearching, setIsGlobalSearching] = useState(false);
   const [smartPlayState, setSmartPlayState] = useState<{ movie: any; episodeUrl: string; episodeIndex: number } | null>(null);
   const [categories, setCategories] = useState(() => {
     const saved = localStorage.getItem('netplay_categories');
@@ -6282,24 +6306,53 @@ export default function App() {
     return groupByGenre(newMovies);
   }, [newMovies, loadingMoreCount]);
 
-  // Filtrar filmes para a pesquisa
+  // Busca no Supabase quando a query tem 2+ caracteres (pega conteúdo fora dos 1600 em memória)
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setGlobalDbSearchResults([]);
+      setIsGlobalSearching(false);
+      return;
+    }
+    setIsGlobalSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,rating,vote_average,runtime,genres,video_url,video_url_2,logo_path,watch_providers,is_hidden,created_at,updated_at';
+        // Busca por título OU nome (séries)
+        const { data } = await supabase
+          .from('movies')
+          .select(COLS)
+          .or(`title.ilike.%${q}%,name.ilike.%${q}%`)
+          .eq('is_hidden', false)
+          .order('vote_average', { ascending: false })
+          .limit(150);
+        setGlobalDbSearchResults((data || []).map(fmtMovieRow));
+      } catch {
+        setGlobalDbSearchResults([]);
+      } finally {
+        setIsGlobalSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Filtrar filmes para a pesquisa — combina in-memory + DB completo
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const query = searchQuery.toLowerCase();
-    return visibleMovies.filter(movie => {
+    const inMemory = visibleMovies.filter(movie => {
       const title = (movie.title || "").toLowerCase();
       const name = (movie.name || "").toLowerCase();
       const originalName = (movie.original_name || "").toLowerCase();
       const genres = (movie.genres || "").toLowerCase();
       const overview = (movie.overview || "").toLowerCase();
-      
-      return title.includes(query) || 
-             name.includes(query) || 
-             originalName.includes(query) || 
-             genres.includes(query) ||
-             overview.includes(query);
+      return title.includes(query) || name.includes(query) || originalName.includes(query) || genres.includes(query) || overview.includes(query);
     });
-  }, [visibleMovies, searchQuery]);
+    // Mescla com resultados do DB, sem duplicatas (prioriza in-memory que tem mais dados)
+    const inMemoryIds = new Set(inMemory.map(m => m.id));
+    const dbOnly = globalDbSearchResults.filter(m => !inMemoryIds.has(m.id));
+    return [...inMemory, ...dbOnly];
+  }, [visibleMovies, searchQuery, globalDbSearchResults]);
 
   const episodeSearchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -7012,6 +7065,7 @@ export default function App() {
               onEpisodePlay={handleSmartPlayEpisode}
               categories={categories}
               franchises={dynamicFranchises}
+              isGlobalSearching={isGlobalSearching}
             />
           } />
           
