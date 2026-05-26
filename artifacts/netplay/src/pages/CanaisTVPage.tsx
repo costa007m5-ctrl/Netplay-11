@@ -445,11 +445,11 @@ function SidebarChannelItem({ ch, active, onSelect }: { ch: Channel; active: boo
   );
 }
 
-// Fontes alternativas para fallback de embed
+// Fontes alternativas — embedtv.lat (sem prefixo) é o mais estável; ww2/ww1 como fallbacks
 const EMBED_FALLBACKS = [
-  (id: string) => `https://ww2.embedtv.lat/${id}?autoplay=1`,
   (id: string) => `https://embedtv.lat/${id}?autoplay=1`,
   (id: string) => `https://ww1.embedtv.lat/${id}?autoplay=1`,
+  (id: string) => `https://ww2.embedtv.lat/${id}?autoplay=1`,
 ];
 
 // ─── Channel player (iframe + controls in same container = controls visible in landscape) ─
@@ -646,21 +646,23 @@ function ChannelPlayerView({
 
 
       {/*
-        ── Zonas de toque nas bordas ─────────────────────────────────────────────
-        Topo (70px) e Base (90px): capturam taps para ativar/alternar info.
-        Laterais (48px): capturam taps para canal anterior/próximo.
-        O CENTRO da tela passa diretamente para o iframe (play/pause nativo).
+        ── Overlay de reativação (apenas quando ociosos) ─────────────────────────
+        Quando idle: cobre a tela toda — qualquer toque reativa os controles.
+        Quando ativo: some — taps vão direto ao iframe para play/pause nativo.
+        pointer-events-none quando ativo para não bloquear o embed.
       */}
-      {/* Topo */}
-      <div className="absolute top-0 left-0 right-0 z-[5]" style={{ height: 70 }} onClick={handleBorderTap} />
-      {/* Base */}
-      <div className="absolute bottom-0 left-0 right-0 z-[5]" style={{ height: 90 }} onClick={handleBorderTap} />
-      {/* Lateral esquerda (canal anterior) */}
-      <div className="absolute left-0 top-[70px] bottom-[90px] z-[5]" style={{ width: 48 }}
-        onClick={e => { e.stopPropagation(); goPrev(); activate(); }} />
-      {/* Lateral direita (próximo canal) */}
-      <div className="absolute right-0 top-[70px] bottom-[90px] z-[5]" style={{ width: 48 }}
-        onClick={e => { e.stopPropagation(); goNext(); activate(); }} />
+      <div
+        className="absolute inset-0 z-[5]"
+        style={{ pointerEvents: isActive ? 'none' : 'auto', cursor: 'pointer' }}
+        onClick={activate}
+      />
+
+      {/*
+        ── Zonas de borda SEMPRE ativas (independente de isActive) ──────────────
+        Topo e base navegam/mostram info mesmo quando os controles estão ativos.
+      */}
+      <div className="absolute top-0 left-0 right-0 z-[6]" style={{ height: 70 }} onClick={handleBorderTap} />
+      <div className="absolute bottom-0 left-0 right-0 z-[6]" style={{ height: 90 }} onClick={handleBorderTap} />
 
       {/*
         ── Controles — SEMPRE visíveis ───────────────────────────────────────────
@@ -670,7 +672,7 @@ function ChannelPlayerView({
       */}
       <div
         className="absolute inset-0 pointer-events-none transition-opacity duration-500"
-        style={{ zIndex: 10, opacity: isActive ? 1 : 0.35 }}
+        style={{ zIndex: 10, opacity: isActive ? 1 : 0.75 }}
       >
         {/* ── Barra superior ── */}
         <div
