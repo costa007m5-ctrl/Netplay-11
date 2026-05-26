@@ -4054,8 +4054,26 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isPlansScreenOpen, setIsPlansScreenOpen] = useState(false);
-  const [myMovies, setMyMovies] = useState<Movie[]>([]);
-  const [isLoadingMovies, setIsLoadingMovies] = useState(true);
+  const [myMovies, setMyMovies] = useState<Movie[]>(() => {
+    try {
+      const raw = localStorage.getItem('cached_my_movies_v5') || localStorage.getItem('cached_my_movies_v4');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [isLoadingMovies, setIsLoadingMovies] = useState(() => {
+    try {
+      const raw = localStorage.getItem('cached_my_movies_v5') || localStorage.getItem('cached_my_movies_v4');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return false;
+      }
+    } catch {}
+    return true;
+  });
   const [loadingMoreCount, setLoadingMoreCount] = useState(0);
   const [totalMoviesCount, setTotalMoviesCount] = useState<number | null>(null);
   const [totalSeriesCount, setTotalSeriesCount] = useState<number | null>(null);
@@ -5997,7 +6015,11 @@ export default function App() {
       rows.map(({ episodes, actors, ...rest }) => rest);
 
     try {
-      setIsLoadingMovies(true);
+      // Só mostra skeleton se ainda não tiver nenhum conteúdo (primeira visita sem cache)
+      setMyMovies(existing => {
+        if (existing.length === 0) setIsLoadingMovies(true);
+        return existing;
+      });
 
       // Fase 1: busca a 1ª página de filmes + séries em paralelo para aparecer rápido
       const [firstM, firstS] = await Promise.all([
