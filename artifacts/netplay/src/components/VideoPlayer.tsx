@@ -1011,10 +1011,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   }, []);
 
   // Sempre usar o Netflix Player como único player
-  // Exceção: betterflix usa iframe externo — não sobreescrever
+  // Exceção: betterflix / embedtv usam iframe externo — não sobreescrever
   useEffect(() => {
-    const isBetterFlix = (movie.videoUrl || '').includes('betterflix.click');
-    if (!isBetterFlix) {
+    const isExternalEmbed =
+      (movie.videoUrl || '').includes('betterflix.click') ||
+      (movie.videoUrl || '').includes('embedtv.lat');
+    if (!isExternalEmbed) {
       setPlayerStyle('netflix');
     }
     requestLandscape();
@@ -1182,7 +1184,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   }
 
   // BetterFlix — sempre renderiza dentro do NetflixPlayer
-  const isBetterFlixUrl = url.includes('betterflix.click');
+  const isBetterFlixUrl = url.includes('betterflix.click') || url.includes('embedtv.lat');
   if (isBetterFlixUrl || playerStyle === 'betterflix') {
     const bfTitle = movie.title || movie.name || 'Assistindo';
     const bfIsTV = movie.type === 'series';

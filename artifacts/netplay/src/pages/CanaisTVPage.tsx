@@ -96,58 +96,67 @@ function fmtTime(ms: number): string {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ─── Painel EPG no sidebar ─────────────────────────────────────────────────────
+// ─── Painel EPG no sidebar — estilo Prime Video ────────────────────────────────
 function EpgPanel({ channelId }: { channelId: string }) {
   const { data, loading } = useEpg(channelId);
 
   if (loading) {
     return (
-      <div className="px-3 py-3 border-b border-white/5">
-        <div className="flex items-center gap-2 text-gray-600 text-[10px]">
-          <Loader2 size={11} className="animate-spin" />
-          <span>Carregando programação...</span>
-        </div>
+      <div className="mx-3 my-3 bg-white/3 rounded-2xl p-3 border border-white/5 animate-pulse">
+        <div className="h-2.5 w-24 bg-white/10 rounded mb-2" />
+        <div className="h-4 w-40 bg-white/10 rounded mb-3" />
+        <div className="h-1 w-full bg-white/10 rounded-full" />
       </div>
     );
   }
 
-  if (!data || (!data.current && !data.next)) return null;
+  if (!data?.current) return null;
 
   const { current, next } = data;
+  const pct = Math.min(100, Math.max(0, current.progress));
 
   return (
-    <div className="px-3 py-3 border-b border-white/5 space-y-2">
-      <p className="text-[9px] font-black uppercase tracking-widest text-purple-400/70 flex items-center gap-1.5">
-        <CalendarDays size={9} /> Programação
-      </p>
+    <div className="mx-3 my-3 bg-gradient-to-br from-[#1a1a2e]/80 to-[#12122a]/80 border border-indigo-500/20 rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-b border-white/5">
+        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shrink-0" />
+        <span className="text-[9px] font-black uppercase tracking-widest text-red-400">Ao Vivo Agora</span>
+        <span className="ml-auto text-[8px] text-gray-500 font-mono tabular-nums">
+          {fmtTime(current.startMs)} – {fmtTime(current.stopMs)}
+        </span>
+      </div>
 
-      {current && (
-        <div className="bg-purple-900/20 border border-purple-500/20 rounded-xl p-2.5 space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shrink-0" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-red-400">Agora</span>
-            <span className="ml-auto text-[8px] text-gray-500 font-mono">
-              {fmtTime(current.startMs)} – {fmtTime(current.stopMs)}
-            </span>
-          </div>
-          <p className="text-white text-[11px] font-bold leading-tight line-clamp-2">{current.title}</p>
-          {/* Barra de progresso */}
-          <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+      {/* Programa atual */}
+      <div className="px-3 pt-2.5 pb-3 space-y-2.5">
+        <p className="text-white text-[13px] font-bold leading-snug line-clamp-2">{current.title}</p>
+        {current.description && (
+          <p className="text-gray-500 text-[10px] leading-relaxed line-clamp-2">{current.description}</p>
+        )}
+
+        {/* Barra de progresso Prime Video */}
+        <div className="space-y-1">
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-red-500 rounded-full transition-all"
-              style={{ width: `${Math.min(100, current.progress)}%` }}
+              className="h-full bg-gradient-to-r from-indigo-500 to-blue-400 rounded-full transition-all"
+              style={{ width: `${pct}%` }}
             />
           </div>
-        </div>
-      )}
-
-      {next && (
-        <div className="flex items-center gap-2 px-2 py-1.5 bg-white/5 rounded-xl border border-white/5">
-          <Clock size={10} className="text-gray-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-gray-400 text-[10px] font-semibold truncate">{next.title}</p>
+          <div className="flex items-center justify-between">
+            <span className="text-[8px] text-gray-600 font-mono">{pct}% assistido</span>
+            <span className="text-[8px] text-gray-600">
+              {Math.max(0, Math.round((current.stopMs - Date.now()) / 60000))} min restantes
+            </span>
           </div>
-          <span className="text-[8px] text-gray-600 font-mono shrink-0">{fmtTime(next.startMs)}</span>
+        </div>
+      </div>
+
+      {/* Próximo programa */}
+      {next && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-white/3 border-t border-white/5">
+          <Clock size={10} className="text-indigo-400/60 shrink-0" />
+          <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest shrink-0">A seguir</span>
+          <p className="flex-1 min-w-0 text-[10px] text-gray-400 font-semibold truncate">{next.title}</p>
+          <span className="text-[8px] text-gray-600 font-mono shrink-0 tabular-nums">{fmtTime(next.startMs)}</span>
         </div>
       )}
     </div>
@@ -293,72 +302,91 @@ function MiniChannelCard({
   );
 }
 
-// ─── Card principal (grid/carrossel) ─────────────────────────────────────────
+// ─── Card principal (grid/carrossel) — estilo Prime Video ────────────────────
 function ChannelCard({
   ch,
+  epg,
   onPlay,
   onInfo,
 }: {
   ch: Channel;
+  epg?: EpgProgram | null;
   onPlay: () => void;
   onInfo: () => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const img = getImage(ch);
   const meta = getCatMeta(getCat(ch));
+  const pct = epg ? Math.min(100, Math.max(0, epg.progress)) : 0;
 
   return (
     <div
-      className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden hover:border-white/15 transition-all shadow-lg shrink-0"
-      style={{ width: 152 }}
+      className="group relative bg-[#0e0e14] border border-white/5 rounded-2xl overflow-hidden hover:border-white/20 hover:shadow-[0_0_20px_rgba(99,102,241,0.12)] transition-all duration-300 shadow-lg shrink-0 cursor-pointer"
+      style={{ width: 160 }}
+      onClick={onPlay}
     >
-      {/* Thumbnail — click = info */}
-      <button
-        onClick={onInfo}
-        className="block w-full"
-      >
-        <div className="w-full aspect-[16/9] bg-black/50 flex items-center justify-center relative overflow-hidden">
-          {img && !imgErr ? (
-            <img
-              src={img}
-              alt={getName(ch)}
-              className="w-full h-full object-contain p-2.5 group-hover:scale-105 transition-transform duration-300"
-              onError={() => setImgErr(true)}
-            />
-          ) : (
-            <Radio size={26} className="text-gray-700" />
-          )}
-          {/* LIVE badge */}
-          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600/90 backdrop-blur-sm px-1.5 py-0.5 rounded-md pointer-events-none">
-            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse inline-block" />
-            <span className="text-[7px] font-black text-white uppercase tracking-widest">Live</span>
-          </div>
-          {/* Info hint */}
-          <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="w-5 h-5 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center">
-              <Info size={10} className="text-white/70" />
-            </div>
-          </div>
+      {/* Thumbnail */}
+      <div className="w-full aspect-[16/9] bg-gradient-to-br from-[#1a1a2e] to-black flex items-center justify-center relative overflow-hidden">
+        {img && !imgErr ? (
+          <img
+            src={img}
+            alt={getName(ch)}
+            className="w-4/5 h-4/5 object-contain group-hover:scale-105 transition-transform duration-300"
+            onError={() => setImgErr(true)}
+          />
+        ) : (
+          <Radio size={28} className="text-gray-700" />
+        )}
+
+        {/* LIVE badge */}
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600 px-1.5 py-0.5 rounded-md">
+          <span className="w-1 h-1 bg-white rounded-full animate-pulse inline-block" />
+          <span className="text-[7px] font-black text-white uppercase tracking-widest">Live</span>
         </div>
-      </button>
+
+        {/* Info btn */}
+        <button
+          onClick={e => { e.stopPropagation(); onInfo(); }}
+          className="absolute top-2 right-2 w-5 h-5 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Info size={10} className="text-white/80" />
+        </button>
+
+        {/* Progress bar (Prime Video style) — cola no bottom do thumbnail */}
+        {epg && (
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-blue-400 transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Footer */}
-      <div className="px-2.5 pt-2 pb-2.5 flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-[11px] font-bold truncate leading-tight">{getName(ch)}</p>
-          {getCat(ch) && (
-            <p className={`text-[8px] font-black uppercase tracking-widest mt-0.5 ${meta.accent} opacity-70 truncate`}>
-              {getCat(ch)}
-            </p>
-          )}
-        </div>
-        {/* Play button */}
-        <button
-          onClick={e => { e.stopPropagation(); onPlay(); }}
-          className="shrink-0 w-8 h-8 rounded-full bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-600 flex items-center justify-center transition-all group/play"
-        >
-          <Play size={11} fill="currentColor" className="text-white ml-0.5" />
-        </button>
+      <div className="px-2.5 pt-2 pb-2.5">
+        <p className="text-white text-[11px] font-bold truncate leading-tight">{getName(ch)}</p>
+
+        {/* EPG: nome do programa atual */}
+        {epg?.title ? (
+          <p className="text-gray-500 text-[9px] truncate mt-0.5 leading-tight">{epg.title}</p>
+        ) : getCat(ch) ? (
+          <p className={`text-[8px] font-black uppercase tracking-widest mt-0.5 ${meta.accent} opacity-60 truncate`}>
+            {getCat(ch)}
+          </p>
+        ) : null}
+
+        {/* Progress text */}
+        {epg && (
+          <div className="flex items-center gap-1 mt-1.5">
+            <div className="flex-1 h-0.5 bg-white/8 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500/60" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-[7px] text-gray-700 font-mono tabular-nums shrink-0">
+              {fmtTime(epg.startMs)}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -478,11 +506,13 @@ function ChannelDetailModal({
 function CategoryRow({
   category,
   channels,
+  epgMap,
   onPlay,
   onInfo,
 }: {
   category: string;
   channels: Channel[];
+  epgMap: Record<string, EpgProgram>;
   onPlay: (ch: Channel) => void;
   onInfo: (ch: Channel) => void;
 }) {
@@ -491,7 +521,7 @@ function CategoryRow({
   const [expanded, setExpanded] = useState(false);
 
   const scroll = (dir: 'left' | 'right') => {
-    scrollRef.current?.scrollBy({ left: dir === 'left' ? -340 : 340, behavior: 'smooth' });
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -360 : 360, behavior: 'smooth' });
   };
 
   return (
@@ -503,35 +533,21 @@ function CategoryRow({
         <div className="flex-1 h-px bg-white/5 ml-1" />
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-700 mr-1">{channels.length} canais</span>
 
-        {/* Ver mais */}
         <button
           onClick={() => setExpanded(v => !v)}
           className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
-            expanded
-              ? `bg-white/10 border-white/20 text-white`
-              : `bg-white/5 border-white/10 text-gray-500 hover:text-white hover:border-white/20`
+            expanded ? `bg-white/10 border-white/20 text-white` : `bg-white/5 border-white/10 text-gray-500 hover:text-white hover:border-white/20`
           }`}
         >
-          {expanded ? (
-            <><ChevronUp size={10} /> Menos</>
-          ) : (
-            <><Grid3X3 size={10} /> Ver mais</>
-          )}
+          {expanded ? <><ChevronUp size={10} /> Menos</> : <><Grid3X3 size={10} /> Ver mais</>}
         </button>
 
-        {/* Setas (só no carrossel) */}
         {!expanded && (
           <>
-            <button
-              onClick={() => scroll('left')}
-              className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
-            >
+            <button onClick={() => scroll('left')} className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all">
               <ChevronLeft size={12} />
             </button>
-            <button
-              onClick={() => scroll('right')}
-              className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all"
-            >
+            <button onClick={() => scroll('right')} className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all">
               <ChevronRight size={12} />
             </button>
           </>
@@ -540,40 +556,85 @@ function CategoryRow({
 
       <AnimatePresence mode="wait">
         {expanded ? (
-          // Grade expandida
-          <motion.div
-            key="grid"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
+          <motion.div key="grid" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 px-4 md:px-10 pb-2">
               {channels.map(ch => (
-                <ChannelCard key={ch.id} ch={ch} onPlay={() => onPlay(ch)} onInfo={() => onInfo(ch)} />
+                <ChannelCard key={ch.id} ch={ch} epg={epgMap[ch.id] || null} onPlay={() => onPlay(ch)} onInfo={() => onInfo(ch)} />
               ))}
             </div>
           </motion.div>
         ) : (
-          // Carrossel
-          <motion.div
-            key="carousel"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div
-              ref={scrollRef}
-              className="flex gap-3 overflow-x-auto scrollbar-none px-4 md:px-10 pb-1"
-              style={{ scrollbarWidth: 'none' }}
-            >
+          <motion.div key="carousel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div ref={scrollRef} className="flex gap-3 overflow-x-auto scrollbar-none px-4 md:px-10 pb-2" style={{ scrollbarWidth: 'none' }}>
               {channels.map(ch => (
-                <ChannelCard key={ch.id} ch={ch} onPlay={() => onPlay(ch)} onInfo={() => onInfo(ch)} />
+                <ChannelCard key={ch.id} ch={ch} epg={epgMap[ch.id] || null} onPlay={() => onPlay(ch)} onInfo={() => onInfo(ch)} />
               ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Barra "Agora no Ar" — estilo Prime Video ─────────────────────────────────
+function NowPlayingBar({
+  channelId,
+  channelName,
+  channelImg,
+}: {
+  channelId: string;
+  channelName: string;
+  channelImg: string;
+}) {
+  const { data } = useEpg(channelId);
+  const current = data?.current;
+  if (!current?.title) return null;
+
+  const pct = Math.min(100, Math.max(0, current.progress));
+  const minsLeft = Math.max(0, Math.round((current.stopMs - Date.now()) / 60000));
+
+  return (
+    <div className="pointer-events-none absolute bottom-20 left-4 right-4 sm:right-auto sm:w-[340px] z-[3150]">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-black/75 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+      >
+        {/* Header: canal */}
+        <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-1.5 border-b border-white/5">
+          {channelImg ? (
+            <img src={channelImg} alt="" className="w-6 h-6 object-contain rounded-md bg-black/40 p-0.5 shrink-0" />
+          ) : (
+            <Radio size={12} className="text-gray-500 shrink-0" />
+          )}
+          <span className="text-white text-[10px] font-black truncate flex-1">{channelName}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-[8px] font-black text-red-400 uppercase">Ao Vivo</span>
+          </div>
+        </div>
+
+        {/* Programa atual */}
+        <div className="px-3 pt-2 pb-2.5 space-y-2">
+          <p className="text-white text-xs font-bold leading-snug line-clamp-1">{current.title}</p>
+
+          {/* Progress bar */}
+          <div className="space-y-1">
+            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-blue-400 rounded-full"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[8px] text-gray-600 font-mono tabular-nums">{fmtTime(current.startMs)}</span>
+              <span className="text-[8px] text-gray-500">{minsLeft > 0 ? `${minsLeft} min restantes` : 'Encerrando'}</span>
+              <span className="text-[8px] text-gray-600 font-mono tabular-nums">{fmtTime(current.stopMs)}</span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -761,6 +822,9 @@ function ChannelPlayerView({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ── Barra "Agora no Ar" — estilo Prime Video ── */}
+        <NowPlayingBar channelId={String(channel.id)} channelName={getName(channel)} channelImg={getImage(channel)} />
 
         {/* ── Strip inferior de canais ── */}
         <BottomChannelStrip
@@ -964,6 +1028,7 @@ const CanaisTVPage: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [playingChannel, setPlayingChannel] = useState<Channel | null>(null);
   const [detailChannel, setDetailChannel] = useState<Channel | null>(null);
+  const [epgMap, setEpgMap] = useState<Record<string, EpgProgram>>({});
 
   const fetchChannels = useCallback(async () => {
     setLoading(true);
@@ -1001,6 +1066,22 @@ const CanaisTVPage: React.FC = () => {
   }, []);
 
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
+
+  // Busca programação atual de todos os canais de uma vez (estilo Prime Video)
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/epg/all')
+      .then(r => r.ok ? r.json() : {})
+      .then(d => { if (!cancelled) setEpgMap(d || {}); })
+      .catch(() => {});
+    const interval = setInterval(() => {
+      fetch('/api/epg/all')
+        .then(r => r.ok ? r.json() : {})
+        .then(d => { if (!cancelled) setEpgMap(d || {}); })
+        .catch(() => {});
+    }, 5 * 60 * 1000); // Atualiza a cada 5 min
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   const categories = useMemo(() => {
     return Array.from(
@@ -1205,6 +1286,7 @@ const CanaisTVPage: React.FC = () => {
                   <ChannelCard
                     key={ch.id}
                     ch={ch}
+                    epg={epgMap[ch.id] || null}
                     onPlay={() => setPlayingChannel(ch)}
                     onInfo={() => setDetailChannel(ch)}
                   />
@@ -1222,6 +1304,7 @@ const CanaisTVPage: React.FC = () => {
                 <CategoryRow
                   category={activeCategory}
                   channels={channelsByCategory(activeCategory)}
+                  epgMap={epgMap}
                   onPlay={setPlayingChannel}
                   onInfo={setDetailChannel}
                 />
@@ -1236,6 +1319,7 @@ const CanaisTVPage: React.FC = () => {
                       key={cat}
                       category={cat}
                       channels={chs}
+                      epgMap={epgMap}
                       onPlay={setPlayingChannel}
                       onInfo={setDetailChannel}
                     />
@@ -1250,6 +1334,7 @@ const CanaisTVPage: React.FC = () => {
                       key="outros"
                       category="Outros"
                       channels={uncat}
+                      epgMap={epgMap}
                       onPlay={setPlayingChannel}
                       onInfo={setDetailChannel}
                     />

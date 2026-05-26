@@ -332,6 +332,26 @@ router.get("/epg/channel", async (req, res) => {
   }
 });
 
+// ── EPG de todos os canais de uma vez (mapa id → programa atual) ──────────────
+router.get("/epg/all", async (_req, res) => {
+  try {
+    const epgList = await getEpgFull();
+    const result: Record<string, any> = {};
+    const now = Date.now();
+    for (const entry of epgList) {
+      if (!entry?.epg) continue;
+      const epg = entry.epg;
+      const startMs = epg.start_date ? new Date(epg.start_date).getTime() : now - 1_800_000;
+      const stopMs  = startMs + 3_600_000;
+      const progress = Math.min(100, Math.max(0, Math.round(((now - startMs) / (stopMs - startMs)) * 100)));
+      result[entry.id] = { title: epg.title || '', description: epg.desc || null, startMs, stopMs, progress };
+    }
+    res.json(result);
+  } catch {
+    res.json({});
+  }
+});
+
 // ── Proxy /betterflix/recents/* → betterflix.click/api/recents/* ──────────────
 async function proxyBetterFlixRecents(subpath: string, query: Record<string, any>, res: any) {
   const qs = new URLSearchParams(query).toString();
