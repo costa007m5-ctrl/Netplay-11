@@ -342,13 +342,60 @@ router.get("/epg/all", async (_req, res) => {
       if (!entry?.epg) continue;
       const epg = entry.epg;
       const startMs = epg.start_date ? new Date(epg.start_date).getTime() : now - 1_800_000;
-      const stopMs  = startMs + 3_600_000;
+      const stopMs  = epg.end_date ? new Date(epg.end_date).getTime() : startMs + 3_600_000;
       const progress = Math.min(100, Math.max(0, Math.round(((now - startMs) / (stopMs - startMs)) * 100)));
-      result[entry.id] = { title: epg.title || '', description: epg.desc || null, startMs, stopMs, progress };
+      const payload = { title: epg.title || '', description: epg.desc || null, startMs, stopMs, progress };
+      result[entry.id] = payload;
+      // Also index by normalized name so the frontend fuzzy-match works
+      if (entry.name) result[normalize(entry.name)] = payload;
     }
     res.json(result);
   } catch {
     res.json({});
+  }
+});
+
+// ── Programação completa (todos os horários) para um canal ────────────────────
+function buildProgram(p: any, now: number) {
+  const startMs = p.start_date ? new Date(p.start_date).getTime() : now - 1_800_000;
+  const stopMs  = p.end_date   ? new Date(p.end_date).getTime()   : startMs + 3_600_000;
+  const progress = now >= startMs && now <= stopMs
+    ? Math.min(100, Math.max(0, Math.round(((now - startMs) / (stopMs - startMs)) * 100)))
+    : (now > stopMs ? 100 : 0);
+  return { title: p.title || '', description: p.desc || p.description || null, startMs, stopMs, progress };
+}
+
+router.get("/epg/schedule", async (req, res) => {
+  const id = String(req.query.id || "").trim();
+  if (!id) { res.json({ programs: [] }); return; }
+
+  try {
+    const epgList = await getEpgFull();
+    const normId = normalize(id);
+    const entry =
+      epgList.find((e: any) => e.id === id) ||
+      epgList.find((e: any) => normalize(e.id) === normId) ||
+      epgList.find((e: any) => normalize(e.id).includes(normId.slice(0, 5))) ||
+      epgList.find((e: any) => normId.includes(normalize(e.id).slice(0, 5)));
+
+    if (!entry) { res.json({ programs: [] }); return; }
+
+    const now = Date.now();
+    // Try every common field name for the programs array
+    const rawList: any[] =
+      entry.programs || entry.epg_list || entry.epgs ||
+      entry.schedule || entry.guide || [];
+
+    if (rawList.length > 0) {
+      res.json({ programs: rawList.map((p: any) => buildProgram(p, now)) });
+    } else if (entry.epg) {
+      // Fallback to single current program
+      res.json({ programs: [buildProgram(entry.epg, now)] });
+    } else {
+      res.json({ programs: [] });
+    }
+  } catch {
+    res.json({ programs: [] });
   }
 });
 
