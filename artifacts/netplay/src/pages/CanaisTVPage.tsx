@@ -897,6 +897,7 @@ function ChannelPlayerView({
 }
 
 // ─── PiP mini player — continues playing, never pauses ────────────────────────
+// Gestos: 1 toque = fechar PiP | 2 toques rápidos = restaurar tela cheia
 function PiPPlayer({
   channel, onRestore, onClose,
 }: {
@@ -905,6 +906,27 @@ function PiPPlayer({
   const src = buildChannelUrl(channel);
   const [imgErr, setImgErr] = useState(false);
   const img = getImage(channel);
+
+  // Duplo toque: 1 tap = fechar; 2 taps em < 350ms = restaurar
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tapCount = useRef(0);
+
+  const handleTap = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    tapCount.current += 1;
+    if (tapCount.current === 1) {
+      // Aguarda para ver se vem um segundo toque
+      tapTimer.current = setTimeout(() => {
+        tapCount.current = 0;
+        onClose(); // apenas 1 toque → fechar
+      }, 350);
+    } else {
+      // Segundo toque dentro do prazo → tela cheia
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      tapCount.current = 0;
+      onRestore();
+    }
+  }, [onClose, onRestore]);
 
   return (
     <motion.div
@@ -915,7 +937,7 @@ function PiPPlayer({
       className="fixed bottom-20 right-3 z-[7000] w-52 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-black cursor-grab active:cursor-grabbing"
     >
       <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
-        {/* Actual iframe — keeps playing, never paused */}
+        {/* Iframe — continua tocando, nunca pausa */}
         <iframe
           src={src}
           className="absolute inset-0 w-full h-full border-0"
@@ -923,12 +945,22 @@ function PiPPlayer({
           sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
           allowFullScreen
         />
-        {/* Click overlay to restore without interacting with iframe */}
-        <div className="absolute inset-0 cursor-pointer" onClick={onRestore} style={{ zIndex: 2 }} />
+        {/* Overlay captura toque: 1x = fechar, 2x = tela cheia */}
+        <div
+          className="absolute inset-0 cursor-pointer select-none"
+          style={{ zIndex: 2 }}
+          onClick={handleTap}
+        />
+        {/* Dica visual: ícone X e expand sempre visíveis */}
+        <div className="absolute inset-0 flex items-center justify-center gap-4 pointer-events-none" style={{ zIndex: 3 }}>
+          <span className="text-white/40 text-[8px] font-bold leading-tight text-center select-none">
+            1× fechar{'\n'}2× expandir
+          </span>
+        </div>
         <button
           onClick={e => { e.stopPropagation(); onClose(); }}
           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 border border-white/30 flex items-center justify-center text-white hover:bg-white/20 transition-all"
-          style={{ zIndex: 3 }}
+          style={{ zIndex: 4 }}
         >
           <X size={9} />
         </button>
@@ -939,7 +971,7 @@ function PiPPlayer({
           <img src={img} alt="" className="w-4 h-4 object-contain" onError={() => setImgErr(true)} />
         ) : null}
         <span className="text-white text-[9px] font-black truncate flex-1">{getName(channel)}</span>
-        <button onClick={onRestore} className="shrink-0">
+        <button onClick={e => { e.stopPropagation(); onRestore(); }} className="shrink-0">
           <Maximize2 size={10} className="text-gray-400" />
         </button>
       </div>
