@@ -907,26 +907,21 @@ function PiPPlayer({
   const [imgErr, setImgErr] = useState(false);
   const img = getImage(channel);
 
-  // Duplo toque: 1 tap = fechar; 2 taps em < 350ms = restaurar
+  // Duplo toque na barra inferior → restaurar tela cheia
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapCount = useRef(0);
 
-  const handleTap = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  const handleBarTap = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     tapCount.current += 1;
     if (tapCount.current === 1) {
-      // Aguarda para ver se vem um segundo toque
-      tapTimer.current = setTimeout(() => {
-        tapCount.current = 0;
-        onClose(); // apenas 1 toque → fechar
-      }, 350);
+      tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 350);
     } else {
-      // Segundo toque dentro do prazo → tela cheia
       if (tapTimer.current) clearTimeout(tapTimer.current);
       tapCount.current = 0;
       onRestore();
     }
-  }, [onClose, onRestore]);
+  }, [onRestore]);
 
   return (
     <motion.div
@@ -937,7 +932,7 @@ function PiPPlayer({
       className="fixed bottom-20 right-3 z-[7000] w-52 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-black cursor-grab active:cursor-grabbing"
     >
       <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
-        {/* Iframe — continua tocando, nunca pausa */}
+        {/* Iframe — toque no vídeo = play/pause nativo */}
         <iframe
           src={src}
           className="absolute inset-0 w-full h-full border-0"
@@ -945,27 +940,20 @@ function PiPPlayer({
           sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
           allowFullScreen
         />
-        {/* Overlay captura toque: 1x = fechar, 2x = tela cheia */}
-        <div
-          className="absolute inset-0 cursor-pointer select-none"
-          style={{ zIndex: 2 }}
-          onClick={handleTap}
-        />
-        {/* Dica visual: ícone X e expand sempre visíveis */}
-        <div className="absolute inset-0 flex items-center justify-center gap-4 pointer-events-none" style={{ zIndex: 3 }}>
-          <span className="text-white/40 text-[8px] font-bold leading-tight text-center select-none">
-            1× fechar{'\n'}2× expandir
-          </span>
-        </div>
+        {/* X no canto superior — único jeito de fechar o PiP */}
         <button
           onClick={e => { e.stopPropagation(); onClose(); }}
-          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 border border-white/30 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/80 border border-white/30 flex items-center justify-center text-white"
           style={{ zIndex: 4 }}
         >
-          <X size={9} />
+          <X size={10} />
         </button>
       </div>
-      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-[#141414]">
+      {/* Barra inferior: 1 toque = nada, 2 toques = tela cheia */}
+      <div
+        className="flex items-center gap-1.5 px-2 py-1.5 bg-[#141414] cursor-pointer select-none"
+        onClick={handleBarTap}
+      >
         <NetPlayLogo size={14} />
         {img && !imgErr ? (
           <img src={img} alt="" className="w-4 h-4 object-contain" onError={() => setImgErr(true)} />
