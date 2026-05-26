@@ -4056,7 +4056,7 @@ export default function App() {
   const [isPlansScreenOpen, setIsPlansScreenOpen] = useState(false);
   const [myMovies, setMyMovies] = useState<Movie[]>(() => {
     try {
-      const raw = localStorage.getItem('cached_my_movies_v5') || localStorage.getItem('cached_my_movies_v4');
+      const raw = localStorage.getItem('cached_my_movies_v6');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -4066,7 +4066,7 @@ export default function App() {
   });
   const [isLoadingMovies, setIsLoadingMovies] = useState(() => {
     try {
-      const raw = localStorage.getItem('cached_my_movies_v5') || localStorage.getItem('cached_my_movies_v4');
+      const raw = localStorage.getItem('cached_my_movies_v6');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return false;
@@ -4075,8 +4075,14 @@ export default function App() {
     return true;
   });
   const [loadingMoreCount, setLoadingMoreCount] = useState(0);
-  const [totalMoviesCount, setTotalMoviesCount] = useState<number | null>(null);
-  const [totalSeriesCount, setTotalSeriesCount] = useState<number | null>(null);
+  const [totalMoviesCount, setTotalMoviesCount] = useState<number | null>(() => {
+    try { const c = localStorage.getItem('cached_counts_v1'); if (c) return JSON.parse(c).movies ?? null; } catch {}
+    return null;
+  });
+  const [totalSeriesCount, setTotalSeriesCount] = useState<number | null>(() => {
+    try { const c = localStorage.getItem('cached_counts_v1'); if (c) return JSON.parse(c).series ?? null; } catch {}
+    return null;
+  });
   const [newOnPlatformMovies, setNewOnPlatformMovies] = useState<Movie[]>([]);
   const [newOnPlatformSeries, setNewOnPlatformSeries] = useState<Movie[]>([]);
   // useDeferredValue: computações pesadas (franquias, gêneros, etc.) só recomputam
@@ -5907,9 +5913,8 @@ export default function App() {
   }, [profile, activeRoomId, myMovies]);
 
   const fetchMyMovies = async () => {
-    // Mostra cache imediatamente enquanto busca dados frescos
-    // Lê cache da versão atual (v5) ou migra da v4 se existir
-    const cached = localStorage.getItem('cached_my_movies_v5') || localStorage.getItem('cached_my_movies_v4');
+    // Mostra cache imediatamente enquanto busca dados frescos (v6)
+    const cached = localStorage.getItem('cached_my_movies_v6');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -5918,8 +5923,7 @@ export default function App() {
           setIsLoadingMovies(false);
         }
       } catch {
-        localStorage.removeItem('cached_my_movies_v5');
-        localStorage.removeItem('cached_my_movies_v4');
+        localStorage.removeItem('cached_my_movies_v6');
       }
     }
 
@@ -5936,22 +5940,28 @@ export default function App() {
     const saveCache = (movies: Movie[]) => {
       try {
         if (movies.length === 0) return;
-        // Versão slim: só campos de display (muito menor que o full)
+        // Limpa versões antigas para liberar espaço
+        ['cached_my_movies_v5','cached_my_movies_v4','cached_my_movies_v3','cached_my_movies_v2'].forEach(k => { try { localStorage.removeItem(k); } catch {} });
+        // Versão slim: só campos de display
         const slim = movies.map(toSlim);
         const str = JSON.stringify(slim);
         if (str.length < 4 * 1024 * 1024) {
-          localStorage.setItem('cached_my_movies_v5', str);
+          localStorage.setItem('cached_my_movies_v6', str);
           return;
         }
-        // Fallback: salva só os primeiros 1000 (mais recentes)
-        const partial = JSON.stringify(slim.slice(0, 1000));
-        localStorage.setItem('cached_my_movies_v5', partial);
+        // Fallback: salva mistura balanceada — 1500 filmes + 1500 séries
+        const slimMovies = slim.filter((m: any) => m.type === 'movie').slice(0, 1500);
+        const slimSeries = slim.filter((m: any) => m.type === 'series').slice(0, 1500);
+        const partial = JSON.stringify([...slimMovies, ...slimSeries]);
+        localStorage.setItem('cached_my_movies_v6', partial);
       } catch {
-        // Quota excedida — tenta limpar chaves antigas e tentar novamente
+        // Quota excedida — salva versão mínima balanceada
         try {
-          ['cached_my_movies_v4','cached_my_movies_v3','cached_my_movies_v2'].forEach(k => localStorage.removeItem(k));
-          const slim = movies.slice(0, 500).map(toSlim);
-          localStorage.setItem('cached_my_movies_v5', JSON.stringify(slim));
+          ['cached_my_movies_v6','cached_my_movies_v5','cached_my_movies_v4'].forEach(k => { try { localStorage.removeItem(k); } catch {} });
+          const slim = movies.map(toSlim);
+          const slimMovies = slim.filter((m: any) => m.type === 'movie').slice(0, 300);
+          const slimSeries = slim.filter((m: any) => m.type === 'series').slice(0, 300);
+          localStorage.setItem('cached_my_movies_v6', JSON.stringify([...slimMovies, ...slimSeries]));
         } catch {}
       }
     };
@@ -6109,6 +6119,10 @@ export default function App() {
       ]).then(([cntM, cntS]) => {
         if (cntM.count !== null) setTotalMoviesCount(cntM.count);
         if (cntS.count !== null) setTotalSeriesCount(cntS.count);
+        // Persiste contagens para carregar instantaneamente no próximo acesso
+        try {
+          localStorage.setItem('cached_counts_v1', JSON.stringify({ movies: cntM.count, series: cntS.count }));
+        } catch {}
       }).catch(() => {});
     } catch (error: any) {
       console.error('[fetchMyMovies] Todas as tentativas falharam:', error?.message || error);
@@ -7363,7 +7377,7 @@ export default function App() {
               // Atualiza o cache para persistir entre refreshes
               try {
                 const str = JSON.stringify(next);
-                if (str.length < 4 * 1024 * 1024) localStorage.setItem('cached_my_movies_v5', str);
+                if (str.length < 4 * 1024 * 1024) localStorage.setItem('cached_my_movies_v6', str);
               } catch {}
               return next;
             });
