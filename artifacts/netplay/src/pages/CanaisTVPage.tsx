@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Radio, Search, X, RefreshCcw, Tv2, ArrowLeft,
   Play, List, SkipBack, SkipForward, Lock,
-  Maximize2, Minimize2, CalendarDays,
+  Maximize2, Minimize2, CalendarDays, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -465,6 +465,18 @@ function ChannelPlayerView({
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isFS, setIsFS] = useState(false);
 
+  // Anti-Ads: bloqueia pop-ups do iframe. Preferência salva no localStorage.
+  const [antiAds, setAntiAds] = useState<boolean>(() => {
+    try { return localStorage.getItem('netplay_anti_ads') !== 'off'; } catch { return true; }
+  });
+  const toggleAntiAds = useCallback(() => {
+    setAntiAds(prev => {
+      const next = !prev;
+      try { localStorage.setItem('netplay_anti_ads', next ? 'on' : 'off'); } catch {}
+      return next;
+    });
+  }, []);
+
   const current = useEpg(channel.id);
   const pct = current ? Math.min(100, Math.max(0, current.progress)) : 0;
 
@@ -600,12 +612,16 @@ function ChannelPlayerView({
   return (
     <div ref={containerRef} className="fixed inset-0 z-[3000] bg-black">
 
-      {/* Iframe — fills container. SEM sandbox para não bloquear autoplay */}
+      {/* Iframe — fills container. SEM sandbox para não bloquear autoplay.
+          Anti-Ads ON: sem allow-popups → bloqueia pop-ups/anúncios.
+          Anti-Ads OFF: com allow-popups → libera pop-ups. */}
       <iframe
-        key={src}
+        key={`${src}-${antiAds}`}
         src={src}
         className="absolute inset-0 w-full h-full border-0"
-        allow="autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking"
+        allow={antiAds
+          ? "autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking"
+          : "autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking; allow-popups"}
         allowFullScreen
       />
 
@@ -657,6 +673,20 @@ function ChannelPlayerView({
 
               {/* Right controls */}
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Anti-Ads toggle */}
+                <button
+                  onClick={e => { e.stopPropagation(); toggleAntiAds(); }}
+                  className={`flex items-center gap-1 px-2 h-9 rounded-xl backdrop-blur-xl border transition-all text-[10px] font-black uppercase tracking-wide ${
+                    antiAds
+                      ? 'bg-green-700/70 border-green-500/60 text-green-300 hover:bg-green-600/80'
+                      : 'bg-red-800/70 border-red-500/60 text-red-300 hover:bg-red-700/80'
+                  }`}
+                  title={antiAds ? 'Anti-Ads ON — Pop-ups bloqueados' : 'Anti-Ads OFF — Pop-ups liberados'}
+                >
+                  {antiAds ? <ShieldCheck size={13} /> : <ShieldOff size={13} />}
+                  <span className="hidden sm:inline">{antiAds ? 'Anti-Ads' : 'Anti-Ads'}</span>
+                </button>
+
                 <button onClick={isFS ? exitFullscreen : requestFullscreen}
                   className="w-9 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/10 transition-all">
                   {isFS ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
