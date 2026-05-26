@@ -325,26 +325,27 @@ function ChannelRow({
   const pct = epg ? Math.min(100, Math.max(0, epg.progress)) : 0;
 
   return (
-    <div className="flex items-center gap-0 pr-2 hover:bg-white/3 transition-colors group">
+    /* Linha inteira é clicável para dar play — sem botão invisível no mobile */
+    <button
+      onClick={onPlay}
+      className="w-full flex items-center gap-0 pr-2 hover:bg-white/5 active:bg-white/8 transition-colors text-left"
+    >
       <div className="w-5 flex-none flex items-center justify-center">
         <Lock size={7} className="text-amber-500/40" />
       </div>
 
-      {/* Logo — tapping plays */}
-      <button
-        onClick={onPlay}
-        className="shrink-0 w-[72px] h-[52px] flex items-center justify-center rounded-lg bg-[#1c1c28] border border-white/6 overflow-hidden mx-1.5 my-1"
-      >
+      {/* Logo do canal */}
+      <div className="shrink-0 w-[72px] h-[52px] flex items-center justify-center rounded-lg bg-[#1c1c28] border border-white/6 overflow-hidden mx-1.5 my-1">
         {img && !imgErr ? (
           <img src={img} alt={getName(ch)} className="w-12 h-12 object-contain" onError={() => setImgErr(true)} />
         ) : (
           <Radio size={16} className="text-gray-700" />
         )}
-      </button>
+      </div>
 
-      {/* Program info — tapping opens info modal */}
-      <div className="flex-1 min-w-0 overflow-x-auto scrollbar-none flex items-center gap-2 py-2">
-        <button onClick={onInfo} className="shrink-0 flex-1 min-w-[140px] max-w-[220px] text-left">
+      {/* Informações do programa — toque longo abre info, toque curto vai ao player via linha */}
+      <div className="flex-1 min-w-0 flex items-center gap-2 py-2">
+        <div className="shrink-0 flex-1 min-w-[140px] max-w-[220px] text-left">
           {epg ? (
             <>
               <p className="text-[10px] font-black text-white mb-0.5">{fmtTimeLeft(epg.stopMs)}</p>
@@ -354,28 +355,25 @@ function ChannelRow({
               </div>
             </>
           ) : (
-            <p className="text-[11px] text-gray-600 truncate">{getName(ch)}</p>
+            <p className="text-[11px] text-gray-400 truncate">{getName(ch)}</p>
           )}
-        </button>
+        </div>
 
         {epg && <div className="shrink-0 w-px h-8 bg-white/8" />}
 
-        {/* Next time slot placeholder */}
         {epg && (
-          <button onClick={onInfo} className="shrink-0 text-left min-w-[70px]">
+          <div className="shrink-0 text-left min-w-[70px]">
             <p className="text-[11px] font-bold text-gray-400">{fmtTime(epg.stopMs)}</p>
             <p className="text-[9px] text-gray-600 truncate max-w-[80px]">{getName(ch)}</p>
-          </button>
+          </div>
         )}
       </div>
 
-      <button
-        onClick={onPlay}
-        className="shrink-0 w-8 h-8 rounded-full bg-white/8 border border-white/12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ml-1"
-      >
-        <Play size={11} className="text-white" fill="currentColor" />
-      </button>
-    </div>
+      {/* Ícone de play sempre visível — indica que a linha é clicável */}
+      <div className="shrink-0 w-8 h-8 rounded-full bg-[#e8172c]/15 border border-[#e8172c]/30 flex items-center justify-center ml-1">
+        <Play size={11} className="text-[#e8172c]" fill="currentColor" />
+      </div>
+    </button>
   );
 }
 
@@ -472,11 +470,7 @@ function ChannelPlayerView({
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isFS, setIsFS] = useState(false);
 
-  // Loading overlay: some por 4s ao trocar canal, depois some automaticamente.
-  // NUNCA bloqueia o iframe — só dá feedback visual durante a inicialização.
-  const [isLoading, setIsLoading] = useState(true);
   const [fallbackIdx, setFallbackIdx] = useState(0);
-  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Anti-Ads: sandbox bloqueia pop-ups mas mantém autoplay via allow policy.
   const [antiAds, setAntiAds] = useState<boolean>(() => {
@@ -493,13 +487,8 @@ function ChannelPlayerView({
   const current = useEpg(channel.id);
   const pct = current ? Math.min(100, Math.max(0, current.progress)) : 0;
 
-  // Ao trocar canal: mostra loading por 4s e some — independente do iframe.
-  useEffect(() => {
-    setIsLoading(true);
-    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = setTimeout(() => setIsLoading(false), 4000);
-    return () => { if (loadTimerRef.current) clearTimeout(loadTimerRef.current); };
-  }, [channel.id, fallbackIdx]);
+  // Reseta o fallback ao trocar de canal
+  useEffect(() => { setFallbackIdx(0); }, [channel.id]);
 
   // Constrói a URL do embed considerando fallbacks
   const buildSrc = useCallback((ch: Channel, idx: number): string => {
@@ -663,32 +652,6 @@ function ChannelPlayerView({
         allowFullScreen
       />
 
-      {/* Overlay de carregamento — some automaticamente em 4s, nunca bloqueia o iframe */}
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center bg-black z-[15] pointer-events-none"
-          >
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#e8172c]/20 border border-[#e8172c]/30 flex items-center justify-center">
-                <NetPlayLogo size={28} />
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-[#e8172c] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2 h-2 bg-[#e8172c] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 bg-[#e8172c] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-              <div className="text-center">
-                <p className="text-white text-sm font-black">{getName(channel)}</p>
-                <p className="text-gray-500 text-[10px] mt-1">Conectando ao canal...</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/*
         Zona de toque SOMENTE no topo (60px) — captura taps para mostrar controles.
