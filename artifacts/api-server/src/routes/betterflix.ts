@@ -251,45 +251,43 @@ router.get("/betterflix/latest", async (req, res) => {
 
 router.get("/betterflix/canais", async (_req, res) => {
   try {
-    const { data } = await axios.get("https://betterflix.click/api/canais.json", {
+    const { data } = await axios.get("http://embedtv.lat/api/channels", {
       timeout: 15000,
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
     });
     res.json(data);
-  } catch (err: any) {
-    // Retorna array vazio em vez de 502 para não travar o painel admin
-    res.json([]);
+  } catch {
+    res.json({ categories: [], channels: [] });
   }
 });
 
 router.get("/betterflix/jogos", async (_req, res) => {
   try {
-    const { data } = await axios.get("https://betterflix.click/api/jogos.json", {
+    const { data } = await axios.get("http://embedtv.lat/api/jogos", {
       timeout: 15000,
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
     });
-    res.json(data);
-  } catch (err: any) {
-    // Retorna array vazio em vez de 502 para não travar o painel admin
+    res.json(Array.isArray(data) ? data : []);
+  } catch {
     res.json([]);
   }
 });
 
-let epgChannelsCache: any[] | null = null;
-let epgChannelsCachedAt = 0;
-const EPG_CACHE_TTL = 6 * 60 * 60 * 1000;
+let epgFullCache: any[] | null = null;
+let epgFullCachedAt = 0;
+const EPG_FULL_CACHE_TTL = 5 * 60 * 1000;
 
-async function getEpgChannels(): Promise<any[]> {
-  if (epgChannelsCache && Date.now() - epgChannelsCachedAt < EPG_CACHE_TTL) {
-    return epgChannelsCache;
+async function getEpgFull(): Promise<any[]> {
+  if (epgFullCache && Date.now() - epgFullCachedAt < EPG_FULL_CACHE_TTL) {
+    return epgFullCache;
   }
   try {
-    const { data } = await axios.get("https://epg.pw/api/channels.json", { timeout: 10000 });
-    epgChannelsCache = Array.isArray(data) ? data : [];
-    epgChannelsCachedAt = Date.now();
-    return epgChannelsCache;
+    const { data } = await axios.get("http://embedtv.lat/api/epgs_full", { timeout: 10000 });
+    epgFullCache = Array.isArray(data) ? data : [];
+    epgFullCachedAt = Date.now();
+    return epgFullCache;
   } catch {
-    return epgChannelsCache || [];
+    return epgFullCache || [];
   }
 }
 
@@ -298,57 +296,37 @@ function normalize(s: string): string {
 }
 
 router.get("/epg/channel", async (req, res) => {
-  const name = String(req.query.name || "").trim();
-  if (!name) { res.json({ current: null, next: null }); return; }
+  const id = String(req.query.id || req.query.name || "").trim();
+  if (!id) { res.json({ current: null, next: null }); return; }
 
   try {
-    const channels = await getEpgChannels();
-    const norm = normalize(name);
+    const epgList = await getEpgFull();
+    const normId = normalize(id);
 
-    const match =
-      channels.find((c: any) => normalize(c.name || "") === norm) ||
-      channels.find((c: any) => normalize(c.name || "").includes(norm)) ||
-      channels.find((c: any) => norm.includes(normalize(c.name || "").slice(0, 4) || "__"));
+    const entry =
+      epgList.find((e: any) => e.id === id) ||
+      epgList.find((e: any) => normalize(e.id) === normId) ||
+      epgList.find((e: any) => normalize(e.id).includes(normId.slice(0, 5))) ||
+      epgList.find((e: any) => normId.includes(normalize(e.id).slice(0, 5)));
 
-    if (!match) { res.json({ current: null, next: null }); return; }
+    if (!entry?.epg) { res.json({ current: null, next: null }); return; }
 
-    const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
-    const { data: epgData } = await axios.get(
-      `https://epg.pw/api/epg.json?channel_id=${encodeURIComponent(match.channel_id)}&date=${today}`,
-      { timeout: 8000 }
-    );
-
-    const programs: any[] = epgData?.epg_data || [];
+    const epg = entry.epg;
+    const startMs = epg.start_date ? new Date(epg.start_date).getTime() : Date.now() - 1800000;
+    const stopMs  = startMs + 3_600_000;
     const now = Date.now();
+    const progress = Math.min(100, Math.max(0, Math.round(((now - startMs) / (stopMs - startMs)) * 100)));
 
-    let current: any = null;
-    let next: any = null;
-
-    for (let i = 0; i < programs.length; i++) {
-      const startMs = new Date(programs[i].start.replace(" ", "T")).getTime();
-      const stopMs  = programs[i].stop
-        ? new Date(programs[i].stop.replace(" ", "T")).getTime()
-        : startMs + 3_600_000;
-
-      if (startMs <= now && now < stopMs) {
-        const prog = programs[i];
-        current = {
-          title: prog.title,
-          description: prog.description || null,
-          startMs,
-          stopMs,
-          progress: Math.round(((now - startMs) / (stopMs - startMs)) * 100),
-        };
-        const n = programs[i + 1];
-        if (n) {
-          const nStart = new Date(n.start.replace(" ", "T")).getTime();
-          next = { title: n.title, startMs: nStart };
-        }
-        break;
-      }
-    }
-
-    res.json({ current, next });
+    res.json({
+      current: {
+        title: epg.title || '',
+        description: epg.desc || null,
+        startMs,
+        stopMs,
+        progress,
+      },
+      next: null,
+    });
   } catch {
     res.json({ current: null, next: null });
   }

@@ -10,28 +10,31 @@ import VideoPlayer from '../components/VideoPlayer';
 import { getBetterFlixKey } from '../components/admin/AdminFlixAPITab';
 
 interface Channel {
-  id: string | number;
-  nome?: string;
+  id: string;
   name?: string;
-  imagem?: string;
+  nome?: string;
   image?: string;
+  imagem?: string;
+  preview?: string;
+  url?: string;
+  categories?: number[];
   categoria?: string;
   category?: string;
-  url?: string;
 }
 
 const CATEGORY_META: Record<string, { gradient: string; accent: string; border: string; icon: string }> = {
-  Esportes:       { gradient: 'from-green-900/30',  accent: 'text-green-400',  border: 'border-green-500/30', icon: '⚽' },
-  Notícias:       { gradient: 'from-blue-900/30',   accent: 'text-blue-400',   border: 'border-blue-500/30',  icon: '📰' },
-  Entretenimento: { gradient: 'from-purple-900/30', accent: 'text-purple-400', border: 'border-purple-500/30',icon: '🎬' },
-  Filmes:         { gradient: 'from-red-900/30',    accent: 'text-red-400',    border: 'border-red-500/30',   icon: '🎥' },
-  Séries:         { gradient: 'from-orange-900/30', accent: 'text-orange-400', border: 'border-orange-500/30',icon: '📺' },
-  Infantil:       { gradient: 'from-yellow-900/30', accent: 'text-yellow-400', border: 'border-yellow-500/30',icon: '🧒' },
-  Música:         { gradient: 'from-pink-900/30',   accent: 'text-pink-400',   border: 'border-pink-500/30',  icon: '🎵' },
-  Documentários:  { gradient: 'from-teal-900/30',   accent: 'text-teal-400',   border: 'border-teal-500/30',  icon: '🔭' },
-  Variedades:     { gradient: 'from-indigo-900/30', accent: 'text-indigo-400', border: 'border-indigo-500/30',icon: '🎭' },
-  Desenhos:       { gradient: 'from-lime-900/30',   accent: 'text-lime-400',   border: 'border-lime-500/30',  icon: '🖌️' },
-  Realitys:       { gradient: 'from-rose-900/30',   accent: 'text-rose-400',   border: 'border-rose-500/30',  icon: '⭐' },
+  Esportes:           { gradient: 'from-green-900/30',  accent: 'text-green-400',  border: 'border-green-500/30', icon: '⚽' },
+  Noticias:           { gradient: 'from-blue-900/30',   accent: 'text-blue-400',   border: 'border-blue-500/30',  icon: '📰' },
+  Notícias:           { gradient: 'from-blue-900/30',   accent: 'text-blue-400',   border: 'border-blue-500/30',  icon: '📰' },
+  'Filmes e Séries':  { gradient: 'from-red-900/30',    accent: 'text-red-400',    border: 'border-red-500/30',   icon: '🎬' },
+  Infantil:           { gradient: 'from-yellow-900/30', accent: 'text-yellow-400', border: 'border-yellow-500/30',icon: '🧒' },
+  Documentarios:      { gradient: 'from-teal-900/30',   accent: 'text-teal-400',   border: 'border-teal-500/30',  icon: '🔭' },
+  Variedades:         { gradient: 'from-indigo-900/30', accent: 'text-indigo-400', border: 'border-indigo-500/30',icon: '🎭' },
+  Abertos:            { gradient: 'from-orange-900/30', accent: 'text-orange-400', border: 'border-orange-500/30',icon: '📡' },
+  Portugal:           { gradient: 'from-rose-900/30',   accent: 'text-rose-400',   border: 'border-rose-500/30',  icon: '🇵🇹' },
+  'A Casa do Patrão': { gradient: 'from-purple-900/30', accent: 'text-purple-400', border: 'border-purple-500/30',icon: '🏠' },
+  Música:             { gradient: 'from-pink-900/30',   accent: 'text-pink-400',   border: 'border-pink-500/30',  icon: '🎵' },
+  Entretenimento:     { gradient: 'from-violet-900/30', accent: 'text-violet-400', border: 'border-violet-500/30',icon: '🎬' },
 };
 
 function getCatMeta(cat?: string) {
@@ -48,15 +51,11 @@ const getCat   = (ch: Channel) => ch.categoria || ch.category || '';
 
 function buildChannelUrl(ch: Channel): string {
   if (ch.url) {
-    const key = getBetterFlixKey();
-    let u = key && !ch.url.includes('key=') ? `${ch.url}&key=${encodeURIComponent(key)}` : ch.url;
-    if (!u.includes('autoplay=')) u += '&autoplay=1';
+    let u = ch.url;
+    if (!u.includes('autoplay=')) u += (u.includes('?') ? '&' : '?') + 'autoplay=1';
     return u;
   }
-  const key = getBetterFlixKey();
-  let url = `https://betterflix.click/api/player?id=${ch.id}&type=channel&autoplay=1`;
-  if (key) url += `&key=${encodeURIComponent(key)}`;
-  return url;
+  return `https://ww2.embedtv.lat/${ch.id}`;
 }
 
 // ─── Hook EPG ─────────────────────────────────────────────────────────────────
@@ -72,22 +71,22 @@ interface EpgData {
   next: { title: string; startMs: number } | null;
 }
 
-function useEpg(channelName: string): { data: EpgData | null; loading: boolean } {
+function useEpg(channelId: string): { data: EpgData | null; loading: boolean } {
   const [data, setData] = useState<EpgData | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!channelName) return;
+    if (!channelId) return;
     setLoading(true);
     setData(null);
     const ctrl = new AbortController();
-    fetch(`/api/epg/channel?name=${encodeURIComponent(channelName)}`, { signal: ctrl.signal })
+    fetch(`/api/epg/channel?id=${encodeURIComponent(channelId)}`, { signal: ctrl.signal })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setData(d); })
       .catch(() => {})
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [channelName]);
+  }, [channelId]);
 
   return { data, loading };
 }
@@ -98,8 +97,8 @@ function fmtTime(ms: number): string {
 }
 
 // ─── Painel EPG no sidebar ─────────────────────────────────────────────────────
-function EpgPanel({ channelName }: { channelName: string }) {
-  const { data, loading } = useEpg(channelName);
+function EpgPanel({ channelId }: { channelId: string }) {
+  const { data, loading } = useEpg(channelId);
 
   if (loading) {
     return (
@@ -891,7 +890,7 @@ function ChannelPlayerView({
             {/* EPG do canal atual */}
             {sidebarTab === 'programacao' ? (
               <div className="flex-1 overflow-y-auto">
-                <EpgPanel channelName={getName(channel)} />
+                <EpgPanel channelId={String(channel.id)} />
                 <div className="px-4 py-4 text-center">
                   <p className="text-gray-700 text-[10px]">
                     Programação em tempo real via EPG. Pode variar conforme o canal.
@@ -901,7 +900,7 @@ function ChannelPlayerView({
             ) : (
               <>
                 {/* EPG compacto no topo da lista de canais */}
-                <EpgPanel channelName={getName(channel)} />
+                <EpgPanel channelId={String(channel.id)} />
 
                 {/* Lista de canais */}
                 <div className="flex-1 overflow-y-auto py-2 px-1">
@@ -951,10 +950,9 @@ function ChannelPlayerView({
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 const CATEGORY_ORDER = [
-  'Esportes', '⚽ Jogos Ao Vivo', 'Notícias', 'Canais Abertos', 'Entretenimento',
-  'Filmes', 'Séries', 'Realitys', 'Documentários', 'Infantil', 'Desenhos',
-  'Música', 'Variedades', 'Geral', 'Inglês', 'MiamiTV', '24 Horas',
-  'Casa Do Patrão', 'Adulto',
+  'Esportes', 'Abertos', 'Noticias', 'Notícias', 'Filmes e Séries', 'Variedades',
+  'Documentarios', 'Infantil', 'Portugal', 'A Casa do Patrão',
+  'Música', 'Entretenimento',
 ];
 
 const CanaisTVPage: React.FC = () => {
@@ -974,7 +972,27 @@ const CanaisTVPage: React.FC = () => {
       const res = await fetch('/api/betterflix/canais');
       if (!res.ok) throw new Error(`Erro ${res.status}`);
       const data = await res.json();
-      setChannels(Array.isArray(data) ? data : []);
+
+      // Nova API EmbedTV: { categories: [{id, name}], channels: [{id, name, image, categories, url}] }
+      const rawChannels: any[] = data.channels || (Array.isArray(data) ? data : []);
+      const rawCategories: { id: number; name: string }[] = data.categories || [];
+
+      const catMap: Record<number, string> = {};
+      for (const c of rawCategories) catMap[c.id] = c.name;
+
+      const normalized: Channel[] = rawChannels.map((ch: any) => ({
+        ...ch,
+        id: String(ch.id),
+        nome: ch.nome || ch.name || '',
+        imagem: ch.imagem || ch.image || '',
+        // Resolve primeiro categoria não-"Todos" (id=0) para string
+        categoria: (ch.categories || [])
+          .filter((cid: number) => cid !== 0)
+          .map((cid: number) => catMap[cid])
+          .filter(Boolean)[0] || ch.categoria || ch.category || '',
+      }));
+
+      setChannels(normalized);
     } catch (e: any) {
       setError(e.message || 'Não foi possível carregar os canais.');
     } finally {

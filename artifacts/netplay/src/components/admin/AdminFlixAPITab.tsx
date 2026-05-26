@@ -104,7 +104,8 @@ export function AdminFlixAPITab() {
       const res = await fetch('/api/betterflix/canais');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setChannels(Array.isArray(data) ? data : []);
+      // Nova API EmbedTV retorna { categories, channels } em vez de array
+      setChannels(data.channels || (Array.isArray(data) ? data : []));
     } catch (e: any) {
       setChannelError(e.message || 'Erro ao carregar canais');
     } finally {
@@ -242,11 +243,10 @@ export function AdminFlixAPITab() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-1">
               {channels.map((ch: any, i: number) => (
                 <div key={i} className="bg-black/30 rounded-xl p-3 border border-white/5 flex flex-col items-center gap-2 text-center">
-                  {ch.imagem && (
-                    <img src={ch.imagem} alt={ch.nome} className="w-10 h-10 object-contain rounded-lg" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  {(ch.image || ch.imagem) && (
+                    <img src={ch.image || ch.imagem} alt={ch.name || ch.nome} className="w-10 h-10 object-contain rounded-lg" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   )}
-                  <span className="text-white text-xs font-bold truncate w-full">{ch.nome || ch.name}</span>
-                  {ch.categoria && <span className="text-gray-600 text-[10px] uppercase tracking-widest">{ch.categoria}</span>}
+                  <span className="text-white text-xs font-bold truncate w-full">{ch.name || ch.nome}</span>
                   <span className="text-gray-700 text-[10px] font-mono">ID: {ch.id}</span>
                 </div>
               ))}
@@ -285,14 +285,21 @@ export function AdminFlixAPITab() {
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {games.map((g: any, i: number) => (
                 <div key={i} className="bg-black/30 rounded-xl p-3 border border-white/5 flex items-center gap-3">
-                  {g.imagem && (
-                    <img src={g.imagem} alt="" className="w-10 h-10 object-cover rounded-lg shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  {(g.image || g.imagem) && (
+                    <img src={g.image || g.imagem} alt="" className="w-10 h-10 object-cover rounded-lg shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-bold truncate">{g.nome || g.title || g.name}</p>
-                    {g.categoria && <p className="text-gray-500 text-xs">{g.categoria}</p>}
+                    <p className="text-white text-sm font-bold truncate">{g.title || g.nome || g.name}</p>
+                    {g.data?.league && <p className="text-gray-500 text-xs">{g.data.league}</p>}
+                    {g.data?.teams && (
+                      <p className="text-gray-600 text-[10px] truncate">
+                        {g.data.teams.home?.name} × {g.data.teams.away?.name}
+                      </p>
+                    )}
                   </div>
-                  <span className="text-gray-700 text-[10px] font-mono shrink-0">ID: {g.id}</span>
+                  {g.players?.length > 0 && (
+                    <span className="text-green-600 text-[10px] font-mono shrink-0">{g.players.length} player{g.players.length > 1 ? 's' : ''}</span>
+                  )}
                 </div>
               ))}
             </div>
