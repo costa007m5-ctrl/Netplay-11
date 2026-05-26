@@ -48,12 +48,16 @@ export default defineConfig(async () => {
       chunkSizeWarningLimit: 1500,
       rollupOptions: {
         output: {
-          // Apenas hls.js é separado (é gigante e só carrega quando reproduz vídeo).
-          // O resto deixamos o Vite decidir — splitting manual causou erro de
-          // dependência circular ("Cannot access 'X' before initialization") em produção.
           manualChunks(id: string) {
-            if (id.includes("node_modules") && id.includes("hls.js")) {
-              return "vendor-hls";
+            if (id.includes("node_modules")) {
+              if (id.includes("hls.js")) return "vendor-hls";
+              if (id.includes("react-dom")) return "vendor-react-dom";
+              if (id.includes("react-router")) return "vendor-router";
+              if (id.includes("framer-motion") || id.includes("motion/react") || id.includes("motion")) return "vendor-motion";
+              if (id.includes("lucide-react")) return "vendor-lucide";
+              if (id.includes("@radix-ui")) return "vendor-radix";
+              if (id.includes("@supabase")) return "vendor-supabase";
+              if (id.includes("@tanstack")) return "vendor-query";
             }
             return undefined;
           },
@@ -61,7 +65,7 @@ export default defineConfig(async () => {
       },
     },
     optimizeDeps: {
-      include: ["react", "react-dom", "react-router-dom"],
+      include: ["react", "react-dom", "react-router-dom", "react/jsx-runtime"],
       exclude: ["framer-motion", "motion", "motion/react"],
     },
     server: {

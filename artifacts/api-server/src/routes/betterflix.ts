@@ -249,27 +249,51 @@ router.get("/betterflix/latest", async (req, res) => {
   }
 });
 
+let canaisCache: any = null;
+let canaisCachedAt = 0;
+const CANAIS_CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+
+let jogosCache: any[] | null = null;
+let jogosCachedAt = 0;
+const JOGOS_CACHE_TTL = 2 * 60 * 1000; // 2 minutos
+
 router.get("/betterflix/canais", async (_req, res) => {
+  if (canaisCache && Date.now() - canaisCachedAt < CANAIS_CACHE_TTL) {
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.json(canaisCache);
+    return;
+  }
   try {
     const { data } = await axios.get("http://embedtv.lat/api/channels", {
       timeout: 15000,
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
     });
+    canaisCache = data;
+    canaisCachedAt = Date.now();
+    res.setHeader('Cache-Control', 'public, max-age=600');
     res.json(data);
   } catch {
-    res.json({ categories: [], channels: [] });
+    res.json(canaisCache || { categories: [], channels: [] });
   }
 });
 
 router.get("/betterflix/jogos", async (_req, res) => {
+  if (jogosCache && Date.now() - jogosCachedAt < JOGOS_CACHE_TTL) {
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(jogosCache);
+    return;
+  }
   try {
     const { data } = await axios.get("http://embedtv.lat/api/jogos", {
       timeout: 15000,
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
     });
-    res.json(Array.isArray(data) ? data : []);
+    jogosCache = Array.isArray(data) ? data : [];
+    jogosCachedAt = Date.now();
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(jogosCache);
   } catch {
-    res.json([]);
+    res.json(jogosCache || []);
   }
 });
 

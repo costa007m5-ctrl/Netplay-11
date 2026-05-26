@@ -447,6 +447,13 @@ function SidebarChannelItem({ ch, active, onSelect }: { ch: Channel; active: boo
   );
 }
 
+// Fontes alternativas para fallback de embed
+const EMBED_FALLBACKS = [
+  (id: string) => `https://ww2.embedtv.lat/${id}?autoplay=1`,
+  (id: string) => `https://embedtv.lat/${id}?autoplay=1`,
+  (id: string) => `https://ww1.embedtv.lat/${id}?autoplay=1`,
+];
+
 // ─── Channel player (iframe + controls in same container = controls visible in landscape) ─
 function ChannelPlayerView({
   channel, allChannels, onPiP, onSwitch,
@@ -458,14 +465,20 @@ function ChannelPlayerView({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showControls, setShowControls] = useState(true);
-  const [showInfo, setShowInfo] = useState(false);       // bottom info panel
+  const [showInfo, setShowInfo] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarCategory, setSidebarCategory] = useState<string | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isFS, setIsFS] = useState(false);
 
-  // Anti-Ads: bloqueia pop-ups do iframe. Preferência salva no localStorage.
+  // Estado de carregamento + fallback
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [fallbackIdx, setFallbackIdx] = useState(0);
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Anti-Ads: sandbox bloqueia pop-ups mas mantém autoplay via allow policy.
   const [antiAds, setAntiAds] = useState<boolean>(() => {
     try { return localStorage.getItem('netplay_anti_ads') !== 'off'; } catch { return true; }
   });
@@ -480,8 +493,37 @@ function ChannelPlayerView({
   const current = useEpg(channel.id);
   const pct = current ? Math.min(100, Math.max(0, current.progress)) : 0;
 
-  // Sem sandbox no iframe principal — sandbox bloqueia autoplay mesmo com autoplay=1.
-  // O adblock agora é feito apenas bloqueando popups na camada de allow (sem allow-popups).
+  // Ao trocar canal/fallback: reset loading state
+  const resetLoading = useCallback(() => {
+    setIsLoading(true);
+    setLoadFailed(false);
+    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+    // Timeout de 12s: se o iframe não carregar, mostra opção de troca de fonte
+    loadTimerRef.current = setTimeout(() => {
+      setIsLoading(false);
+      setLoadFailed(true);
+    }, 12000);
+  }, []);
+
+  useEffect(() => {
+    resetLoading();
+    return () => { if (loadTimerRef.current) clearTimeout(loadTimerRef.current); };
+  }, [channel.id, fallbackIdx, resetLoading]);
+
+  // Constrói a URL do embed considerando fallbacks
+  const buildSrc = useCallback((ch: Channel, idx: number): string => {
+    if (ch.url) {
+      let u = ch.url;
+      if (!u.includes('autoplay=')) u += (u.includes('?') ? '&' : '?') + 'autoplay=1';
+      return u;
+    }
+    const fns = EMBED_FALLBACKS;
+    return fns[Math.min(idx, fns.length - 1)](ch.id);
+  }, []);
+
+  const tryNextSource = useCallback(() => {
+    setFallbackIdx(prev => prev + 1);
+  }, []);
 
   const currentIdx = useMemo(
     () => allChannels.findIndex(ch => ch.id === channel.id),
@@ -490,11 +532,13 @@ function ChannelPlayerView({
 
   const goNext = useCallback(() => {
     const idx = (currentIdx + 1) % allChannels.length;
+    setFallbackIdx(0);
     onSwitch(allChannels[idx]);
   }, [currentIdx, allChannels, onSwitch]);
 
   const goPrev = useCallback(() => {
     const idx = (currentIdx - 1 + allChannels.length) % allChannels.length;
+    setFallbackIdx(0);
     onSwitch(allChannels[idx]);
   }, [currentIdx, allChannels, onSwitch]);
 
@@ -607,23 +651,105 @@ function ChannelPlayerView({
     Array.from(new Set(allChannels.map(getCat).filter(Boolean))).sort()
   , [allChannels]);
 
-  const src = buildChannelUrl(channel);
+  const src = buildSrc(channel, fallbackIdx);
+  const hasMoreFallbacks = !channel.url && fallbackIdx < EMBED_FALLBACKS.length - 1;
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-[3000] bg-black">
 
-      {/* Iframe — fills container. SEM sandbox para não bloquear autoplay.
-          Anti-Ads ON: sem allow-popups → bloqueia pop-ups/anúncios.
-          Anti-Ads OFF: com allow-popups → libera pop-ups. */}
+      {/* Iframe principal — sem sandbox para não bloquear autoplay.
+          Anti-Ads ON: sandbox só permite scripts/forms/presentation (bloqueia popups).
+          Anti-Ads OFF: sem sandbox (popups liberados pelo embed). */}
       <iframe
         key={`${src}-${antiAds}`}
         src={src}
         className="absolute inset-0 w-full h-full border-0"
-        allow={antiAds
-          ? "autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking"
-          : "autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking; allow-popups"}
+        allow="autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking"
+        sandbox={antiAds
+          ? "allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
+          : undefined}
         allowFullScreen
+        onLoad={() => {
+          if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+          setIsLoading(false);
+          setLoadFailed(false);
+        }}
       />
+
+      {/* Overlay de carregamento */}
+      <AnimatePresence>
+        {isLoading && !loadFailed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-[15] pointer-events-none"
+          >
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#e8172c]/20 border border-[#e8172c]/30 flex items-center justify-center">
+                <NetPlayLogo size={28} />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-[#e8172c] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2 h-2 bg-[#e8172c] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 bg-[#e8172c] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <div className="text-center">
+                <p className="text-white text-sm font-black">{getName(channel)}</p>
+                <p className="text-gray-500 text-[10px] mt-1">Conectando ao canal...</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Overlay de falha / trocar fonte */}
+      <AnimatePresence>
+        {loadFailed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 z-[15] pointer-events-auto"
+          >
+            <div className="flex flex-col items-center gap-5 px-6 text-center max-w-xs">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                <Radio size={28} className="text-gray-600" />
+              </div>
+              <div>
+                <p className="text-white text-base font-black mb-1">Stream não disponível</p>
+                <p className="text-gray-500 text-xs">O canal pode estar temporariamente fora do ar ou a fonte está indisponível.</p>
+              </div>
+              <div className="flex flex-col gap-2.5 w-full">
+                {hasMoreFallbacks && (
+                  <button
+                    onClick={tryNextSource}
+                    className="w-full py-3 rounded-xl bg-[#e8172c] hover:bg-[#c01020] text-white text-xs font-black uppercase tracking-widest transition-all"
+                  >
+                    Tentar outra fonte
+                  </button>
+                )}
+                <button
+                  onClick={resetLoading}
+                  className="w-full py-3 rounded-xl bg-white/8 hover:bg-white/15 border border-white/10 text-white text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                >
+                  <RefreshCcw size={12} />
+                  Recarregar
+                </button>
+                <button
+                  onClick={() => onPiP(channel)}
+                  className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/8 text-gray-400 text-xs font-black uppercase tracking-widest transition-all"
+                >
+                  Voltar à lista
+                </button>
+              </div>
+              {fallbackIdx > 0 && (
+                <p className="text-gray-700 text-[9px] font-mono">fonte {fallbackIdx + 1} de {EMBED_FALLBACKS.length}</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/*
         Zona de toque SOMENTE no topo (60px) — captura taps para mostrar controles.
@@ -849,6 +975,7 @@ function PiPPlayer({
           src={src}
           className="absolute inset-0 w-full h-full border-0"
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
           allowFullScreen
         />
         {/* Click overlay to restore without interacting with iframe */}
