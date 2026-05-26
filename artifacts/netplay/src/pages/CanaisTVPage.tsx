@@ -462,12 +462,13 @@ function ChannelPlayerView({
   onSwitch: (ch: Channel) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [showControls, setShowControls] = useState(true);
+  // "active" = controles em opacidade total; "idle" = semi-transparentes mas SEMPRE visíveis
+  const [isActive, setIsActive] = useState(true);
   const [showInfo, setShowInfo] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarCategory, setSidebarCategory] = useState<string | null>(null);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isFS, setIsFS] = useState(false);
 
   const [fallbackIdx, setFallbackIdx] = useState(0);
@@ -522,31 +523,22 @@ function ChannelPlayerView({
     onSwitch(allChannels[idx]);
   }, [currentIdx, allChannels, onSwitch]);
 
-  const flashControls = useCallback(() => {
-    setShowControls(true);
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => { setShowControls(false); setShowInfo(false); }, 5000);
+  // Ativa os controles em opacidade total e agenda volta ao modo idle após 6s
+  const activate = useCallback(() => {
+    setIsActive(true);
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setIsActive(false), 6000);
   }, []);
 
-  // Handle tap on the transparent overlay above the iframe
-  const handleTap = useCallback(() => {
-    if (!showControls) {
-      // First tap: show controls + info
-      setShowControls(true);
-      setShowInfo(true);
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-      hideTimer.current = setTimeout(() => { setShowControls(false); setShowInfo(false); }, 5000);
-    } else {
-      // Second tap: hide everything
-      setShowControls(false);
-      setShowInfo(false);
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-    }
-  }, [showControls]);
+  // Toque nas bordas (topo/baixo) alterna info e reativa controles
+  const handleBorderTap = useCallback(() => {
+    setShowInfo(v => !v);
+    activate();
+  }, [activate]);
 
   useEffect(() => {
-    flashControls();
-    return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+    activate();
+    return () => { if (idleTimer.current) clearTimeout(idleTimer.current); };
   }, [channel.id]);
 
   // Auto-landscape ao abrir o canal
@@ -654,151 +646,188 @@ function ChannelPlayerView({
 
 
       {/*
-        Zona de toque SOMENTE no topo (60px) — captura taps para mostrar controles.
-        O CENTRO e FUNDO da tela são transparentes ao iframe para que o player
-        embarcado receba interações normalmente (play/pause nativos funcionam).
+        ── Zonas de toque nas bordas ─────────────────────────────────────────────
+        Topo (70px) e Base (90px): capturam taps para ativar/alternar info.
+        Laterais (48px): capturam taps para canal anterior/próximo.
+        O CENTRO da tela passa diretamente para o iframe (play/pause nativo).
+      */}
+      {/* Topo */}
+      <div className="absolute top-0 left-0 right-0 z-[5]" style={{ height: 70 }} onClick={handleBorderTap} />
+      {/* Base */}
+      <div className="absolute bottom-0 left-0 right-0 z-[5]" style={{ height: 90 }} onClick={handleBorderTap} />
+      {/* Lateral esquerda (canal anterior) */}
+      <div className="absolute left-0 top-[70px] bottom-[90px] z-[5]" style={{ width: 48 }}
+        onClick={e => { e.stopPropagation(); goPrev(); activate(); }} />
+      {/* Lateral direita (próximo canal) */}
+      <div className="absolute right-0 top-[70px] bottom-[90px] z-[5]" style={{ width: 48 }}
+        onClick={e => { e.stopPropagation(); goNext(); activate(); }} />
+
+      {/*
+        ── Controles — SEMPRE visíveis ───────────────────────────────────────────
+        isActive=true  → opacidade total (após tap nas bordas ou interação)
+        isActive=false → 35% de opacidade (idle após 6s)
+        pointer-events-auto em todos os botões para que funcionem em qualquer estado
       */}
       <div
-        className="absolute top-0 left-0 right-0"
-        style={{ height: 60, zIndex: 5, cursor: 'pointer' }}
-        onClick={handleTap}
-      />
-
-      {/* Controls — z-10 above the tap overlay */}
-      <AnimatePresence>
-        {showControls && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 pointer-events-none"
-            style={{ zIndex: 10 }}
+        className="absolute inset-0 pointer-events-none transition-opacity duration-500"
+        style={{ zIndex: 10, opacity: isActive ? 1 : 0.35 }}
+      >
+        {/* ── Barra superior ── */}
+        <div
+          className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent pt-2 pb-10 px-3 flex items-center gap-2 pointer-events-auto"
+          onClick={activate}
+        >
+          {/* Voltar → PiP */}
+          <button
+            onClick={e => { e.stopPropagation(); onPiP(channel); }}
+            className="w-9 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all shrink-0"
           >
-            {/* Top bar */}
-            <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/75 to-transparent pt-2 pb-10 px-3 flex items-center gap-2 pointer-events-auto">
-              {/* Back → PiP */}
-              <button onClick={() => onPiP(channel)}
-                className="w-9 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/10 transition-all">
-                <ArrowLeft size={16} />
-              </button>
+            <ArrowLeft size={16} />
+          </button>
 
-              {/* NetPlay logo + channel logo + name */}
-              <div className="flex-1 flex items-center gap-2 min-w-0 ml-1">
-                <NetPlayLogo size={22} />
-                {getImage(channel) && (
-                  <img src={getImage(channel)} alt="" className="w-6 h-6 rounded-md object-contain bg-black/40 p-0.5 shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <p className="text-white text-sm font-black truncate leading-none">{getName(channel)}</p>
-                  {current && <p className="text-gray-400 text-[10px] truncate">{current.title}</p>}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="w-1.5 h-1.5 bg-[#e8172c] rounded-full animate-pulse" />
-                  <span className="text-[8px] font-black text-[#e8172c] uppercase">Ao Vivo</span>
-                </div>
-              </div>
-
-              {/* Right controls */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* Trocar fonte — só aparece quando há fallbacks disponíveis */}
-                {hasMoreFallbacks && (
-                  <button
-                    onClick={e => { e.stopPropagation(); tryNextSource(); }}
-                    className="flex items-center gap-1 px-2 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 text-white hover:bg-white/10 transition-all text-[10px] font-black uppercase tracking-wide"
-                    title="Tentar outra fonte de stream"
-                  >
-                    <RefreshCcw size={12} />
-                    <span className="hidden sm:inline">{sourceLabel}</span>
-                  </button>
-                )}
-
-                {/* Anti-Ads toggle */}
-                <button
-                  onClick={e => { e.stopPropagation(); toggleAntiAds(); }}
-                  className={`flex items-center gap-1 px-2 h-9 rounded-xl backdrop-blur-xl border transition-all text-[10px] font-black uppercase tracking-wide ${
-                    antiAds
-                      ? 'bg-green-700/70 border-green-500/60 text-green-300 hover:bg-green-600/80'
-                      : 'bg-red-800/70 border-red-500/60 text-red-300 hover:bg-red-700/80'
-                  }`}
-                  title={antiAds ? 'Anti-Ads ON — Pop-ups bloqueados' : 'Anti-Ads OFF — Pop-ups liberados'}
-                >
-                  {antiAds ? <ShieldCheck size={13} /> : <ShieldOff size={13} />}
-                  <span className="hidden sm:inline">{antiAds ? 'Anti-Ads' : 'Anti-Ads'}</span>
-                </button>
-
-                <button onClick={isFS ? exitFullscreen : requestFullscreen}
-                  className="w-9 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/10 transition-all">
-                  {isFS ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                </button>
-
-                <button
-                  onClick={() => setShowSidebar(v => !v)}
-                  className={`w-9 h-9 rounded-xl backdrop-blur-xl border flex items-center justify-center transition-all ${showSidebar ? 'bg-[#e8172c]/40 border-[#e8172c]/60 text-white' : 'bg-black/60 border-white/20 text-white hover:bg-white/10'}`}>
-                  <List size={15} />
-                </button>
-              </div>
+          {/* Logo NetPlay + logo do canal + nome + EPG */}
+          <div className="flex-1 flex items-center gap-2 min-w-0 ml-1">
+            <NetPlayLogo size={22} />
+            {getImage(channel) && (
+              <img
+                src={getImage(channel)} alt=""
+                className="w-7 h-7 rounded-lg object-contain bg-black/40 border border-white/10 p-0.5 shrink-0"
+              />
+            )}
+            <div className="min-w-0">
+              <p className="text-white text-sm font-black truncate leading-tight">{getName(channel)}</p>
+              {current && (
+                <p className="text-gray-400 text-[10px] truncate leading-tight">{current.title}</p>
+              )}
             </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 bg-[#e8172c] rounded-full animate-pulse" />
+              <span className="text-[8px] font-black text-[#e8172c] uppercase tracking-wide">Ao Vivo</span>
+            </div>
+          </div>
 
-            {/* Prev/Next channel buttons */}
-            <button onClick={e => { e.stopPropagation(); goPrev(); }}
-              className="pointer-events-auto absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all">
-              <SkipBack size={16} />
-            </button>
-            <button onClick={e => { e.stopPropagation(); goNext(); }}
-              className="pointer-events-auto absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all">
-              <SkipForward size={16} />
+          {/* Botões direita */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Trocar fonte */}
+            {hasMoreFallbacks && (
+              <button
+                onClick={e => { e.stopPropagation(); tryNextSource(); activate(); }}
+                className="flex items-center gap-1 px-2 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 text-white hover:bg-white/10 active:scale-95 transition-all text-[10px] font-black uppercase tracking-wide"
+                title="Tentar outra fonte"
+              >
+                <RefreshCcw size={12} />
+                <span className="hidden sm:inline">{sourceLabel}</span>
+              </button>
+            )}
+
+            {/* Anti-Ads */}
+            <button
+              onClick={e => { e.stopPropagation(); toggleAntiAds(); activate(); }}
+              className={`flex items-center gap-1 px-2 h-9 rounded-xl backdrop-blur-xl border transition-all text-[10px] font-black uppercase active:scale-95 ${
+                antiAds
+                  ? 'bg-green-800/80 border-green-500/60 text-green-300'
+                  : 'bg-red-900/80 border-red-500/60 text-red-300'
+              }`}
+              title={antiAds ? 'Anti-Ads ON' : 'Anti-Ads OFF'}
+            >
+              {antiAds ? <ShieldCheck size={13} /> : <ShieldOff size={13} />}
+              <span className="hidden sm:inline">Anti-Ads</span>
             </button>
 
-            {/* Bottom EPG info panel (shows on tap) */}
-            <AnimatePresence>
-              {showInfo && current && (
-                <motion.div
-                  initial={{ y: 60, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: 30, opacity: 0 }}
-                  className="pointer-events-auto absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-12 pb-3 px-4"
-                  onClick={e => e.stopPropagation()}
-                >
-                  <div className="bg-[#111]/80 backdrop-blur-xl rounded-2xl border border-white/10 p-3 shadow-2xl">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="w-1.5 h-1.5 bg-[#e8172c] rounded-full animate-pulse shrink-0" />
-                      <span className="text-[9px] font-black text-[#e8172c] uppercase tracking-widest">Agora</span>
-                      <span className="text-[9px] text-gray-600 font-mono ml-auto">{fmtTime(current.startMs)} – {fmtTime(current.stopMs)}</span>
-                    </div>
-                    <p className="text-white text-sm font-bold mb-1">{current.title}</p>
-                    {current.description && (
-                      <p className="text-gray-400 text-[11px] leading-relaxed line-clamp-2 mb-2">{current.description}</p>
-                    )}
-                    <div className="w-full h-[3px] bg-white/15 rounded-full overflow-hidden">
+            {/* Tela cheia */}
+            <button
+              onClick={e => { e.stopPropagation(); isFS ? exitFullscreen() : requestFullscreen(); activate(); }}
+              className="w-9 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all"
+            >
+              {isFS ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+
+            {/* Lista de canais */}
+            <button
+              onClick={e => { e.stopPropagation(); setShowSidebar(v => !v); activate(); }}
+              className={`w-9 h-9 rounded-xl backdrop-blur-xl border flex items-center justify-center transition-all active:scale-95 ${
+                showSidebar
+                  ? 'bg-[#e8172c]/50 border-[#e8172c]/60 text-white'
+                  : 'bg-black/60 border-white/20 text-white hover:bg-white/10'
+              }`}
+            >
+              <List size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Botões canal anterior / próximo ── */}
+        <button
+          onClick={e => { e.stopPropagation(); goPrev(); activate(); }}
+          className="pointer-events-auto absolute left-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/20 active:scale-90 transition-all"
+        >
+          <SkipBack size={18} />
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); goNext(); activate(); }}
+          className="pointer-events-auto absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/20 active:scale-90 transition-all"
+        >
+          <SkipForward size={18} />
+        </button>
+
+        {/* ── Painel EPG expandido (aparece ao tocar a borda) ── */}
+        <AnimatePresence>
+          {showInfo && current && (
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="pointer-events-auto absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-12 pb-4 px-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-[#111]/90 backdrop-blur-xl rounded-2xl border border-white/10 p-3 shadow-2xl">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-1.5 h-1.5 bg-[#e8172c] rounded-full animate-pulse shrink-0" />
+                  <span className="text-[9px] font-black text-[#e8172c] uppercase tracking-widest">Agora</span>
+                  <span className="text-[9px] text-gray-500 font-mono ml-auto">
+                    {fmtTime(current.startMs)} – {fmtTime(current.stopMs)}
+                  </span>
+                </div>
+                <p className="text-white text-sm font-bold mb-1">{current.title}</p>
+                {current.description && (
+                  <p className="text-gray-400 text-[11px] leading-relaxed line-clamp-2 mb-2">{current.description}</p>
+                )}
+                <div className="w-full h-[3px] bg-white/15 rounded-full overflow-hidden">
+                  <div className="h-full bg-[#e8172c] rounded-full" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-[9px] text-gray-500 mt-1">{fmtTimeLeft(current.stopMs)}</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Barra EPG compacta na base (sempre visível quando sem painel expandido) ── */}
+        {!showInfo && (
+          <div className="pointer-events-auto absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 to-transparent pt-8 pb-3 px-4">
+            {current ? (
+              <div className="flex items-end gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-xs font-bold truncate">{current.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-[3px] bg-white/15 rounded-full overflow-hidden">
                       <div className="h-full bg-[#e8172c] rounded-full" style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="text-[9px] text-gray-600 mt-1">{fmtTimeLeft(current.stopMs)}</p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Compact EPG bar (always at bottom even when no showInfo) */}
-            {!showInfo && current && (
-              <div className="pointer-events-auto absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent pt-8 pb-2 px-4">
-                <div className="flex items-end gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-bold truncate">{current.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 h-[3px] bg-white/15 rounded-full overflow-hidden">
-                        <div className="h-full bg-[#e8172c] rounded-full" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-[9px] text-gray-400 shrink-0 font-mono">{fmtTime(current.startMs)} – {fmtTime(current.stopMs)}</span>
-                    </div>
+                    <span className="text-[9px] text-gray-400 shrink-0 font-mono">
+                      {fmtTime(current.startMs)} – {fmtTime(current.stopMs)}
+                    </span>
                   </div>
                 </div>
-                <p className="text-[8px] text-white/15 font-mono mt-1 select-none">toque para info • ← → canal • L lista</p>
               </div>
+            ) : (
+              <p className="text-white/30 text-[10px] font-bold">{getName(channel)}</p>
             )}
-          </motion.div>
+            <p className="text-[8px] text-white/20 font-mono mt-1 select-none">
+              toque borda para info • ◀ ▶ canal • Lista ☰
+            </p>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
 
       {/* Sidebar channel list */}
       <AnimatePresence>
