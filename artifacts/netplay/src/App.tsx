@@ -1154,21 +1154,61 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
 
       {/* Banner de carregamento */}
       {isLoading && (
-        <div className="fixed top-16 left-0 right-0 z-40 flex items-center justify-center gap-3 bg-gradient-to-r from-red-900/90 via-red-700/90 to-red-900/90 backdrop-blur-sm py-3 px-6 shadow-lg border-b border-red-500/30">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin flex-none" />
-            <span className="text-white font-black uppercase tracking-widest text-xs">
-              Carregando {label.toLowerCase()}...
-            </span>
+        <div className="fixed top-16 left-0 right-0 z-40 overflow-hidden shadow-xl border-b border-red-500/20">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" />
+          <div className="absolute inset-0 bg-gradient-to-r from-red-950/60 via-red-900/40 to-red-950/60" />
+          <div className="relative flex items-center gap-4 px-4 py-2.5">
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <div className="w-5 h-5 bg-gradient-to-br from-red-500 to-red-800 rounded-md flex items-center justify-center shadow-lg shadow-red-900/60 flex-shrink-0">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-black uppercase tracking-widest text-[10px] leading-none">
+                  Carregando {label.toLowerCase()}
+                </span>
+                <span className="text-red-400/70 text-[8px] font-bold uppercase tracking-widest leading-none mt-0.5">
+                  Aguarde, buscando conteúdo...
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden relative h-8 flex items-center">
+              <div className="flex gap-1.5 animate-[slideLeft_8s_linear_infinite]">
+                {[
+                  'https://image.tmdb.org/t/p/w92/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg',
+                  'https://image.tmdb.org/t/p/w92/q719jsmZvqb6tUFiBbqB8p6mw1m.jpg',
+                  'https://image.tmdb.org/t/p/w92/6oom5QYdwZ71TCWbkvMvS0n0Dby.jpg',
+                  'https://image.tmdb.org/t/p/w92/r2J0VzYnUEsIbiSSTSksvUo7mo1.jpg',
+                  'https://image.tmdb.org/t/p/w92/uY7URv89yS6Om9j32oOM4STU68B.jpg',
+                  'https://image.tmdb.org/t/p/w92/h8mzmDcYmCcy1ar9Mdh9ofjH7s8.jpg',
+                  'https://image.tmdb.org/t/p/w92/A7uByuyGKE69uYv7SFF9vI9Ym96.jpg',
+                  'https://image.tmdb.org/t/p/w92/9l1eZiJHmhr5jIlthMdJN5WYoff.jpg',
+                  'https://image.tmdb.org/t/p/w92/1g0dhYtq4irTY1GPXvft6k4YLjm.jpg',
+                  'https://image.tmdb.org/t/p/w92/jtnfNzqZwN4E32FGGxx1YZaBWWf.jpg',
+                  'https://image.tmdb.org/t/p/w92/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg',
+                  'https://image.tmdb.org/t/p/w92/q719jsmZvqb6tUFiBbqB8p6mw1m.jpg',
+                  'https://image.tmdb.org/t/p/w92/6oom5QYdwZ71TCWbkvMvS0n0Dby.jpg',
+                  'https://image.tmdb.org/t/p/w92/r2J0VzYnUEsIbiSSTSksvUo7mo1.jpg',
+                ].map((src, i) => (
+                  <img
+                    key={i}
+                    src={src}
+                    alt=""
+                    className="w-[22px] h-[30px] rounded object-cover flex-shrink-0 opacity-50 border border-white/10"
+                    referrerPolicy="no-referrer"
+                  />
+                ))}
+              </div>
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black to-transparent pointer-events-none" />
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black to-transparent pointer-events-none" />
+            </div>
+            <div className="flex gap-1 flex-shrink-0">
+              {[0,1,2,3].map(i => (
+                <div key={i} className="w-1 h-1 bg-red-500/80 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.12}s` }} />
+              ))}
+            </div>
           </div>
-          <div className="flex gap-1 ml-2">
-            {[0,1,2].map(i => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce"
-                style={{ animationDelay: `${i * 0.15}s` }}
-              />
-            ))}
+          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/[0.04]">
+            <div className="h-full bg-gradient-to-r from-red-600 via-red-400 to-red-600 animate-[loadbar_2s_ease-in-out_infinite]" />
           </div>
         </div>
       )}
@@ -1237,11 +1277,29 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
         {isLoading ? (
           <div className="space-y-10">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i}>
-                <div className="h-4 w-36 bg-white/5 rounded animate-pulse mb-4" />
-                <div className="flex gap-3">
+              <div key={i} style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="h-4 w-36 bg-white/[0.06] rounded-lg animate-pulse mb-4" />
+                <div className="flex gap-3 overflow-hidden">
                   {Array.from({ length: 10 }).map((_, j) => (
-                    <div key={j} className="flex-none w-28 sm:w-36 aspect-[2/3] rounded-xl bg-white/5 animate-pulse border border-white/5" />
+                    <div
+                      key={j}
+                      className="flex-none w-28 sm:w-36 aspect-[2/3] rounded-xl bg-gradient-to-br from-[#1c1c1c] to-[#141414] border border-white/[0.04] relative overflow-hidden flex items-center justify-center"
+                      style={{ animationDelay: `${(i * 10 + j) * 0.04}s` }}
+                    >
+                      <div className="flex flex-col items-center gap-1 opacity-20 select-none">
+                        <div className="w-5 h-5 bg-gradient-to-br from-red-500 to-red-800 rounded-md flex items-center justify-center shadow-lg shadow-red-900/40">
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                        </div>
+                        <span className="text-[6px] font-black uppercase tracking-tighter italic text-white leading-none">
+                          NET<span className="text-red-500">PLAY</span>
+                        </span>
+                      </div>
+                      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" style={{ animationDelay: `${j * 0.1}s` }} />
+                      <div className="absolute bottom-0 left-0 right-0 p-2 space-y-1">
+                        <div className="h-2 rounded-full bg-white/[0.06] w-3/4 animate-pulse" />
+                        <div className="h-1.5 rounded-full bg-white/[0.04] w-1/2 animate-pulse" />
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

@@ -461,7 +461,19 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             {loading ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
                 {Array.from({ length: 18 }).map((_, i) => (
-                  <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.05}s` }} />
+                  <div key={i} className="aspect-[2/3] rounded-2xl bg-gradient-to-br from-[#1c1c1c] to-[#141414] border border-white/[0.04] relative overflow-hidden flex items-center justify-center" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="flex flex-col items-center gap-1.5 opacity-20 select-none">
+                      <div className="w-7 h-7 bg-gradient-to-br from-red-500 to-red-800 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/40">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                      </div>
+                      <span className="text-[8px] font-black uppercase tracking-tighter italic text-white leading-none">NET<span className="text-red-500">PLAY</span></span>
+                    </div>
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" style={{ animationDelay: `${i * 0.08}s` }} />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
+                      <div className="h-2.5 rounded-full bg-white/[0.07] w-3/4 animate-pulse" />
+                      <div className="h-2 rounded-full bg-white/[0.05] w-1/2 animate-pulse" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : items.length === 0 ? (
@@ -522,7 +534,19 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             {loadingChegou ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.05}s` }} />
+                  <div key={i} className="aspect-[2/3] rounded-2xl bg-gradient-to-br from-[#1c1c1c] to-[#141414] border border-white/[0.04] relative overflow-hidden flex items-center justify-center" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="flex flex-col items-center gap-1.5 opacity-20 select-none">
+                      <div className="w-7 h-7 bg-gradient-to-br from-red-500 to-red-800 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/40">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                      </div>
+                      <span className="text-[8px] font-black uppercase tracking-tighter italic text-white leading-none">NET<span className="text-red-500">PLAY</span></span>
+                    </div>
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" style={{ animationDelay: `${i * 0.08}s` }} />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
+                      <div className="h-2.5 rounded-full bg-white/[0.07] w-3/4 animate-pulse" />
+                      <div className="h-2 rounded-full bg-white/[0.05] w-1/2 animate-pulse" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : chegouAgora.length === 0 ? (
@@ -680,7 +704,19 @@ const FlixNovitiesPage: React.FC<FlixNovitiesPageProps> = ({ onSelectMovie, defa
             {loadingBfRecents ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" style={{ animationDelay: `${i * 0.05}s` }} />
+                  <div key={i} className="aspect-[2/3] rounded-2xl bg-gradient-to-br from-[#1c1c1c] to-[#141414] border border-white/[0.04] relative overflow-hidden flex items-center justify-center" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <div className="flex flex-col items-center gap-1.5 opacity-20 select-none">
+                      <div className="w-7 h-7 bg-gradient-to-br from-red-500 to-red-800 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/40">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                      </div>
+                      <span className="text-[8px] font-black uppercase tracking-tighter italic text-white leading-none">NET<span className="text-red-500">PLAY</span></span>
+                    </div>
+                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" style={{ animationDelay: `${i * 0.08}s` }} />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
+                      <div className="h-2.5 rounded-full bg-white/[0.07] w-3/4 animate-pulse" />
+                      <div className="h-2 rounded-full bg-white/[0.05] w-1/2 animate-pulse" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : bfRecents.length === 0 ? (

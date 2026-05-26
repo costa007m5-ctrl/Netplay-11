@@ -189,21 +189,41 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
   );
 });
 
-function SkeletonCard({ type, isLargeRow, isContinueWatching }: { type: string; isLargeRow?: boolean; isContinueWatching?: boolean }) {
+function NetPlayLogoMini({ size = 'sm' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const iconSize = size === 'lg' ? 20 : size === 'md' ? 14 : 10;
+  const boxClass = size === 'lg' ? 'w-9 h-9 rounded-xl' : size === 'md' ? 'w-6 h-6 rounded-lg' : 'w-4 h-4 rounded-md';
+  const textClass = size === 'lg' ? 'text-base' : size === 'md' ? 'text-[10px]' : 'text-[7px]';
+  return (
+    <div className="flex flex-col items-center gap-1 opacity-20 select-none pointer-events-none">
+      <div className={`${boxClass} bg-gradient-to-br from-red-500 to-red-800 flex items-center justify-center shadow-lg shadow-red-900/40`}>
+        <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+      </div>
+      <span className={`${textClass} font-black uppercase tracking-tighter italic text-white leading-none`}>
+        NET<span className="text-red-500">PLAY</span>
+      </span>
+    </div>
+  );
+}
+
+function SkeletonCard({ type, isLargeRow, isContinueWatching, index = 0 }: { type: string; isLargeRow?: boolean; isContinueWatching?: boolean; index?: number }) {
   return (
     <div
-      className={`flex-none overflow-hidden rounded-[0.8rem] md:rounded-[1.5rem] bg-[#1a1a1a] relative ${
+      className={`flex-none overflow-hidden rounded-[0.8rem] md:rounded-[1.5rem] bg-gradient-to-br from-[#1c1c1c] to-[#141414] relative border border-white/[0.04] ${
         isContinueWatching || type === 'landscape' ? 'w-[160px] md:w-[340px] aspect-video' :
         type === 'circle' ? 'w-[90px] md:w-[180px] aspect-square rounded-full' :
         type === 'wide' ? 'w-[220px] md:w-[440px] aspect-[21/9]' :
         isLargeRow ? 'w-[110px] md:w-[260px] aspect-[2/3]' : 'w-[110px] md:w-[220px] aspect-[2/3]'
       }`}
+      style={{ animationDelay: `${index * 0.06}s` }}
     >
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <NetPlayLogoMini size={isLargeRow || type === 'landscape' ? 'md' : 'sm'} />
+      </div>
+      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
       {type !== 'circle' && (
-        <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
-          <div className="h-3 rounded-full bg-white/[0.08] w-3/4" />
-          <div className="h-2 rounded-full bg-white/[0.05] w-1/2" />
+        <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
+          <div className="h-2.5 rounded-full bg-white/[0.06] w-3/4 animate-pulse" style={{ animationDelay: `${index * 0.08}s` }} />
+          <div className="h-2 rounded-full bg-white/[0.04] w-1/2 animate-pulse" style={{ animationDelay: `${index * 0.1}s` }} />
         </div>
       )}
     </div>
@@ -294,7 +314,7 @@ const Row = React.memo(({
         >
           {isLoading ? (
             Array.from({ length: skeletonCount }).map((_, i) => (
-              <SkeletonCard key={i} type={type} isLargeRow={isLargeRow} isContinueWatching={isContinueWatching} />
+              <SkeletonCard key={i} index={i} type={type} isLargeRow={isLargeRow} isContinueWatching={isContinueWatching} />
             ))
           ) : isVisible ? movies.map((movie, idx) => (
             <MovieCard

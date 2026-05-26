@@ -1170,12 +1170,19 @@ const CanaisTVPage: React.FC = () => {
       {loading && (
         <div className="px-4 pt-5 space-y-1">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-2 px-2 py-2">
-              <div className="w-[72px] h-[52px] bg-white/5 rounded-lg animate-pulse shrink-0" />
+            <div key={i} className="flex items-center gap-2 px-2 py-2" style={{ animationDelay: `${i * 0.06}s` }}>
+              <div className="w-[72px] h-[52px] bg-gradient-to-br from-[#1c1c1c] to-[#141414] rounded-lg shrink-0 relative overflow-hidden border border-white/[0.04] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-0.5 opacity-25 select-none">
+                  <div className="w-4 h-4 bg-gradient-to-br from-red-500 to-red-800 rounded-md flex items-center justify-center shadow-lg shadow-red-900/40">
+                    <svg width="7" height="7" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                  </div>
+                </div>
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" style={{ animationDelay: `${i * 0.1}s` }} />
+              </div>
               <div className="flex-1 space-y-1.5">
-                <div className="h-2.5 w-20 bg-white/5 rounded animate-pulse" />
-                <div className="h-3 w-40 bg-white/5 rounded animate-pulse" />
-                <div className="h-[3px] w-full bg-white/5 rounded-full animate-pulse" />
+                <div className="h-2.5 w-20 bg-white/[0.06] rounded animate-pulse" style={{ animationDelay: `${i * 0.07}s` }} />
+                <div className="h-3 w-40 bg-white/[0.06] rounded animate-pulse" style={{ animationDelay: `${i * 0.09}s` }} />
+                <div className="h-[3px] w-full bg-white/[0.04] rounded-full animate-pulse" style={{ animationDelay: `${i * 0.11}s` }} />
               </div>
             </div>
           ))}
