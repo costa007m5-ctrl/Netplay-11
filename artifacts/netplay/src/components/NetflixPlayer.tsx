@@ -834,6 +834,34 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
     };
   }, []);
 
+  // Botão voltar (hardware) → PiP nativo para filmes/séries
+  useEffect(() => {
+    if (isIframeMode) return; // iframe mode usa onClose direto
+    window.history.pushState({ moviePlayer: true }, '');
+    const onPop = async () => {
+      const video = videoRef.current as any;
+      if (video) {
+        try {
+          if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+            await video.requestPictureInPicture();
+            // Reempurra estado para que próximo back ainda fique no PiP
+            window.history.pushState({ moviePlayer: true }, '');
+            // Quando o usuário fechar o PiP, fecha o player
+            video.addEventListener('leavepictureinpicture', () => onClose(), { once: true });
+            return;
+          } else if (video.webkitSupportsPresentationMode && typeof video.webkitSetPresentationMode === 'function') {
+            video.webkitSetPresentationMode('picture-in-picture');
+            window.history.pushState({ moviePlayer: true }, '');
+            return;
+          }
+        } catch {}
+      }
+      onClose();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [isIframeMode, onClose]);
+
   const sendEmote = (emote: string) => {
     if (channelRef.current && roomId) {
       channelRef.current.send({

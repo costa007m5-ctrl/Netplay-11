@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Radio, Search, X, RefreshCcw, Tv2, ArrowLeft,
   Play, List, SkipBack, SkipForward, Lock,
-  Maximize2, Minimize2, ShieldCheck, ShieldOff, CalendarDays,
+  Maximize2, Minimize2, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -146,10 +146,15 @@ function useEpgSchedule(channelId: string, enabled: boolean) {
 // ─── NetPlay logo SVG ───────────────────────────────────────────────────────────
 function NetPlayLogo({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ borderRadius: size * 0.2 }}>
-      <rect width="180" height="180" rx="36" fill="#FF3C00"/>
-      <text x="90" y="130" textAnchor="middle" fill="white" fontSize="100" fontWeight="900" fontFamily="Arial,sans-serif">N</text>
-    </svg>
+    <div style={{
+      width: size, height: size,
+      background: '#FF3C00',
+      borderRadius: Math.round(size * 0.22),
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontWeight: 900, color: '#fff', fontSize: Math.round(size * 0.58),
+      fontFamily: '"Arial Black", Arial, sans-serif',
+      flexShrink: 0, userSelect: 'none', lineHeight: 1,
+    }}>N</div>
   );
 }
 
@@ -455,7 +460,6 @@ function ChannelPlayerView({
   const [showControls, setShowControls] = useState(true);
   const [showInfo, setShowInfo] = useState(false);       // bottom info panel
   const [showSidebar, setShowSidebar] = useState(false);
-  const [showAdBlockOff, setShowAdBlockOff] = useState(false); // ad-block toggle
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarCategory, setSidebarCategory] = useState<string | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -464,11 +468,8 @@ function ChannelPlayerView({
   const current = useEpg(channel.id);
   const pct = current ? Math.min(100, Math.max(0, current.progress)) : 0;
 
-  // Ad blocker: sandbox without allow-popups blocks ads/redirects.
-  // User can toggle this off for channels that need popups to load.
-  const iframeSandbox = showAdBlockOff
-    ? undefined
-    : 'allow-scripts allow-same-origin allow-presentation allow-forms';
+  // Sem sandbox no iframe principal — sandbox bloqueia autoplay mesmo com autoplay=1.
+  // O adblock agora é feito apenas bloqueando popups na camada de allow (sem allow-popups).
 
   const currentIdx = useMemo(
     () => allChannels.findIndex(ch => ch.id === channel.id),
@@ -510,6 +511,26 @@ function ChannelPlayerView({
   useEffect(() => {
     flashControls();
     return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+  }, [channel.id]);
+
+  // Auto-landscape ao abrir o canal
+  useEffect(() => {
+    const enter = async () => {
+      try {
+        const el = containerRef.current;
+        if (el?.requestFullscreen) await el.requestFullscreen();
+        else if ((el as any)?.webkitRequestFullscreen) await (el as any).webkitRequestFullscreen();
+      } catch {}
+      try {
+        if ((screen.orientation as any)?.lock) await (screen.orientation as any).lock('landscape');
+      } catch {}
+    };
+    const t = setTimeout(enter, 400);
+    return () => {
+      clearTimeout(t);
+      try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
+      try { (screen.orientation as any)?.unlock?.(); } catch {}
+    };
   }, [channel.id]);
 
   // Fullscreen on the container so controls survive landscape
@@ -579,30 +600,24 @@ function ChannelPlayerView({
   return (
     <div ref={containerRef} className="fixed inset-0 z-[3000] bg-black">
 
-      {/* Iframe — fills container */}
+      {/* Iframe — fills container. SEM sandbox para não bloquear autoplay */}
       <iframe
         key={src}
         src={src}
         className="absolute inset-0 w-full h-full border-0"
-        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+        allow="autoplay; fullscreen; encrypted-media; picture-in-picture; xr-spatial-tracking"
         allowFullScreen
-        {...(iframeSandbox ? { sandbox: iframeSandbox } : {})}
       />
 
       {/*
-        ★ TAP CAPTURE OVERLAY — sits above the iframe at z-5.
-        This intercepts ALL taps so they don't pass through to the iframe
-        (which would pause the native player). When tapped, shows info panel.
-        While controls are visible this overlay is interactive;
-        when controls hide we restore pointer-events so iframe is fully interactive.
+        Zona de toque SOMENTE no topo (60px) — captura taps para mostrar controles.
+        O CENTRO e FUNDO da tela são transparentes ao iframe para que o player
+        embarcado receba interações normalmente (play/pause nativos funcionam).
       */}
       <div
-        className="absolute inset-0"
-        style={{ zIndex: 5, cursor: showControls ? 'default' : 'pointer' }}
+        className="absolute top-0 left-0 right-0"
+        style={{ height: 60, zIndex: 5, cursor: 'pointer' }}
         onClick={handleTap}
-        // Only block pointer events when controls are NOT shown — when controls
-        // are shown the buttons on top (z-10) handle their own clicks.
-        // We keep pointer-events active always so the user CAN tap to show info.
       />
 
       {/* Controls — z-10 above the tap overlay */}
@@ -642,17 +657,6 @@ function ChannelPlayerView({
 
               {/* Right controls */}
               <div className="flex items-center gap-1.5 shrink-0">
-                {/* Ad blocker toggle */}
-                <button
-                  onClick={() => setShowAdBlockOff(v => !v)}
-                  title={showAdBlockOff ? 'Bloqueio de anúncios DESATIVADO' : 'Bloqueio de anúncios ATIVO'}
-                  className={`w-9 h-9 rounded-xl backdrop-blur-xl border flex items-center justify-center transition-all ${
-                    showAdBlockOff ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-400' : 'bg-black/60 border-white/20 text-green-400 hover:bg-white/10'
-                  }`}
-                >
-                  {showAdBlockOff ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
-                </button>
-
                 <button onClick={isFS ? exitFullscreen : requestFullscreen}
                   className="w-9 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-white/10 transition-all">
                   {isFS ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -814,8 +818,8 @@ function PiPPlayer({
         <iframe
           src={src}
           className="absolute inset-0 w-full h-full border-0"
-          allow="autoplay; encrypted-media"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
         />
         {/* Click overlay to restore without interacting with iframe */}
         <div className="absolute inset-0 cursor-pointer" onClick={onRestore} style={{ zIndex: 2 }} />
