@@ -1162,91 +1162,66 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
   return (
     <div className="min-h-screen bg-[#111] text-white pb-32 pt-20 md:pt-28">
 
-      {/* Tela de carregamento fullscreen com logo */}
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            key="page-loader"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.9, ease: 'easeInOut' } }}
-            className="fixed inset-0 z-[60] bg-[#080808] flex flex-col items-center justify-center overflow-hidden"
-          >
-            {/* Fundo animado com posters */}
-            <div className="absolute inset-0 opacity-[0.04] pointer-events-none overflow-hidden">
-              {[0,1,2].map(row => (
-                <motion.div
-                  key={row}
-                  animate={{ x: row % 2 === 0 ? [0, -800] : [-800, 0] }}
-                  transition={{ duration: 50 + row * 15, repeat: Infinity, ease: 'linear' }}
-                  className="flex gap-3 mb-3"
-                >
-                  {[
-                    '/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg','/q719jsmZvqb6tUFiBbqB8p6mw1m.jpg','/6oom5QYdwZ71TCWbkvMvS0n0Dby.jpg',
-                    '/r2J0VzYnUEsIbiSSTSksvUo7mo1.jpg','/uY7URv89yS6Om9j32oOM4STU68B.jpg','/h8mzmDcYmCcy1ar9Mdh9ofjH7s8.jpg',
-                    '/A7uByuyGKE69uYv7SFF9vI9Ym96.jpg','/9l1eZiJHmhr5jIlthMdJN5WYoff.jpg','/1g0dhYtq4irTY1GPXvft6k4YLjm.jpg',
-                    '/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg','/q719jsmZvqb6tUFiBbqB8p6mw1m.jpg','/6oom5QYdwZ71TCWbkvMvS0n0Dby.jpg',
-                  ].map((p, i) => (
-                    <div key={i} className="flex-none w-24 aspect-[2/3] rounded-lg overflow-hidden">
-                      <img src={`https://image.tmdb.org/t/p/w185${p}`} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-                    </div>
-                  ))}
-                </motion.div>
+      {/* Banner de carregamento */}
+      {isLoading && (
+        <div className="fixed top-16 left-0 right-0 z-40 overflow-hidden shadow-xl border-b border-red-500/20">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" />
+          <div className="absolute inset-0 bg-gradient-to-r from-red-950/60 via-red-900/40 to-red-950/60" />
+          <div className="relative flex items-center gap-4 px-4 py-2.5">
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <div className="w-5 h-5 bg-gradient-to-br from-red-500 to-red-800 rounded-md flex items-center justify-center shadow-lg shadow-red-900/60 flex-shrink-0">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-black uppercase tracking-widest text-[10px] leading-none">
+                  Carregando {label.toLowerCase()}
+                </span>
+                <span className="text-red-400/70 text-[8px] font-bold uppercase tracking-widest leading-none mt-0.5">
+                  Aguarde, buscando conteúdo...
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden relative h-8 flex items-center">
+              <div className="flex gap-1.5 animate-[slideLeft_8s_linear_infinite]">
+                {[
+                  'https://image.tmdb.org/t/p/w92/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg',
+                  'https://image.tmdb.org/t/p/w92/q719jsmZvqb6tUFiBbqB8p6mw1m.jpg',
+                  'https://image.tmdb.org/t/p/w92/6oom5QYdwZ71TCWbkvMvS0n0Dby.jpg',
+                  'https://image.tmdb.org/t/p/w92/r2J0VzYnUEsIbiSSTSksvUo7mo1.jpg',
+                  'https://image.tmdb.org/t/p/w92/uY7URv89yS6Om9j32oOM4STU68B.jpg',
+                  'https://image.tmdb.org/t/p/w92/h8mzmDcYmCcy1ar9Mdh9ofjH7s8.jpg',
+                  'https://image.tmdb.org/t/p/w92/A7uByuyGKE69uYv7SFF9vI9Ym96.jpg',
+                  'https://image.tmdb.org/t/p/w92/9l1eZiJHmhr5jIlthMdJN5WYoff.jpg',
+                  'https://image.tmdb.org/t/p/w92/1g0dhYtq4irTY1GPXvft6k4YLjm.jpg',
+                  'https://image.tmdb.org/t/p/w92/jtnfNzqZwN4E32FGGxx1YZaBWWf.jpg',
+                  'https://image.tmdb.org/t/p/w92/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg',
+                  'https://image.tmdb.org/t/p/w92/q719jsmZvqb6tUFiBbqB8p6mw1m.jpg',
+                  'https://image.tmdb.org/t/p/w92/6oom5QYdwZ71TCWbkvMvS0n0Dby.jpg',
+                  'https://image.tmdb.org/t/p/w92/r2J0VzYnUEsIbiSSTSksvUo7mo1.jpg',
+                ].map((src, i) => (
+                  <img
+                    key={i}
+                    src={src}
+                    alt=""
+                    className="w-[22px] h-[30px] rounded object-cover flex-shrink-0 opacity-50 border border-white/10"
+                    referrerPolicy="no-referrer"
+                  />
+                ))}
+              </div>
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black to-transparent pointer-events-none" />
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black to-transparent pointer-events-none" />
+            </div>
+            <div className="flex gap-1 flex-shrink-0">
+              {[0,1,2,3].map(i => (
+                <div key={i} className="w-1 h-1 bg-red-500/80 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.12}s` }} />
               ))}
             </div>
-
-            {/* Glow radial */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(220,38,38,0.15)_0%,transparent_65%)] pointer-events-none" />
-
-            {/* Logo + texto */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="relative flex flex-col items-center gap-6"
-            >
-              <motion.div
-                animate={{ scale: [1, 1.06, 1], boxShadow: ['0 0 40px rgba(220,38,38,0.3)', '0 0 80px rgba(220,38,38,0.55)', '0 0 40px rgba(220,38,38,0.3)'] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-                className="w-24 h-24 bg-red-600 rounded-[1.75rem] flex items-center justify-center border border-white/15 relative overflow-hidden"
-              >
-                <motion.div
-                  animate={{ x: ['-110%', '210%'] }}
-                  transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent skew-x-12"
-                />
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="white" className="ml-1 drop-shadow-[0_0_16px_rgba(255,255,255,0.6)]"><polygon points="5,3 19,12 5,21"/></svg>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25, duration: 0.5 }}
-                className="text-5xl font-black uppercase italic tracking-tighter select-none"
-              >
-                <span className="text-white">NET</span><span className="text-red-600">PLAY</span>
-              </motion.div>
-
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.45, duration: 0.5 }}
-                className="text-gray-500 text-[11px] font-black uppercase tracking-[0.35em]"
-              >
-                Carregando {label.toLowerCase()}...
-              </motion.p>
-            </motion.div>
-
-            {/* Barra de progresso indeterminada */}
-            <div className="absolute bottom-12 w-52 h-[2px] bg-white/8 rounded-full overflow-hidden">
-              <motion.div
-                animate={{ x: ['-100%', '200%'] }}
-                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                className="h-full w-1/2 bg-gradient-to-r from-transparent via-red-500 to-transparent rounded-full"
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/[0.04]">
+            <div className="h-full bg-gradient-to-r from-red-600 via-red-400 to-red-600 animate-[loadbar_2s_ease-in-out_infinite]" />
+          </div>
+        </div>
+      )}
 
       <div className="px-5 md:px-12 max-w-[1920px] mx-auto">
 
@@ -1308,7 +1283,41 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
           </div>
         )}
 
-        {debouncedSearch ? (
+        {/* Loading skeleton */}
+        {isLoading && (
+          <div className="space-y-10">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="h-4 w-36 bg-white/[0.06] rounded-lg animate-pulse mb-4" />
+                <div className="flex gap-3 overflow-hidden">
+                  {Array.from({ length: 10 }).map((_, j) => (
+                    <div
+                      key={j}
+                      className="flex-none w-28 sm:w-36 aspect-[2/3] rounded-xl bg-gradient-to-br from-[#1c1c1c] to-[#141414] border border-white/[0.04] relative overflow-hidden flex items-center justify-center"
+                      style={{ animationDelay: `${(i * 10 + j) * 0.04}s` }}
+                    >
+                      <div className="flex flex-col items-center gap-1 opacity-20 select-none">
+                        <div className="w-5 h-5 bg-gradient-to-br from-red-500 to-red-800 rounded-md flex items-center justify-center shadow-lg shadow-red-900/40">
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                        </div>
+                        <span className="text-[6px] font-black uppercase tracking-tighter italic text-white leading-none">
+                          NET<span className="text-red-500">PLAY</span>
+                        </span>
+                      </div>
+                      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" style={{ animationDelay: `${j * 0.1}s` }} />
+                      <div className="absolute bottom-0 left-0 right-0 p-2 space-y-1">
+                        <div className="h-2 rounded-full bg-white/[0.06] w-3/4 animate-pulse" />
+                        <div className="h-1.5 rounded-full bg-white/[0.04] w-1/2 animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isLoading && (debouncedSearch ? (
           /* Resultados: Supabase (biblioteca) + TMDB (sugestões externas) */
           isSearching ? (
             <div className="flex items-center gap-3 py-20">
@@ -1453,7 +1462,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
               <p className="text-gray-500 font-black uppercase tracking-widest text-sm">Nenhum conteúdo encontrado</p>
             )}
           </div>
-        ) : null}
+        ) : null)}
 
       </div>
     </div>
@@ -5919,7 +5928,7 @@ export default function App() {
     const COLS_LEVEL3 = '*';
 
     // Busca paginada com streaming: emite a 1ª página imediatamente e carrega o resto em background
-    const PAGE_SIZE = 1000;
+    const PAGE_SIZE = 500;
 
     const fetchFirstPage = async (cols: string, type: string) => {
       const { data, error } = await supabase
