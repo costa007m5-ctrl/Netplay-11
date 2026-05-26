@@ -1109,10 +1109,11 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     >
       <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
         <img
-          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w342${m.backdrop_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster')}
+          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w185${m.backdrop_path}` : 'https://via.placeholder.com/185x278?text=Sem+Poster')}
           alt={m.title || m.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
+          loading={idx < 6 ? 'eager' : 'lazy'}
+          fetchPriority={idx < 6 ? 'high' : 'auto'}
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
@@ -1137,10 +1138,11 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     >
       <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/60 transition-all shadow-lg">
         <img
-          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : 'https://via.placeholder.com/342x513?text=Sem+Poster'}
+          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`) : 'https://via.placeholder.com/185x278?text=Sem+Poster'}
           alt={m.title || m.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
+          loading={idx < 5 ? 'eager' : 'lazy'}
+          fetchPriority={idx < 5 ? 'high' : 'auto'}
           referrerPolicy="no-referrer"
         />
         <div className="absolute top-2 left-2 bg-red-600 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full">Novo</div>
@@ -1361,7 +1363,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
                         >
                           <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-white/20 transition-all shadow-xl">
                             <img
-                              src={m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster'}
+                              src={m.poster_path ? `https://image.tmdb.org/t/p/w185${m.poster_path}` : 'https://via.placeholder.com/185x278?text=Sem+Poster'}
                               alt={m.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               loading="lazy"
@@ -1560,10 +1562,11 @@ const HomeView = React.memo(({
     >
       <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/5 group-hover:border-red-600/50 transition-all shadow-xl">
         <img
-          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w342${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w342${m.backdrop_path}` : 'https://via.placeholder.com/342x513?text=Sem+Poster')}
+          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w185${m.backdrop_path}` : 'https://via.placeholder.com/185x278?text=Sem+Poster')}
           alt={m.title || m.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
+          loading={idx < 5 ? 'eager' : 'lazy'}
+          fetchPriority={idx < 5 ? 'high' : 'auto'}
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
@@ -5887,7 +5890,8 @@ export default function App() {
 
   const fetchMyMovies = async () => {
     // Mostra cache imediatamente enquanto busca dados frescos
-    const cached = localStorage.getItem('cached_my_movies_v4');
+    // Lê cache da versão atual (v5) ou migra da v4 se existir
+    const cached = localStorage.getItem('cached_my_movies_v5') || localStorage.getItem('cached_my_movies_v4');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -5896,6 +5900,7 @@ export default function App() {
           setIsLoadingMovies(false);
         }
       } catch {
+        localStorage.removeItem('cached_my_movies_v5');
         localStorage.removeItem('cached_my_movies_v4');
       }
     }
@@ -5906,17 +5911,30 @@ export default function App() {
       return;
     }
 
+    // Campos mínimos para exibição nos carrosséis — reduz drasticamente o tamanho do cache
+    const SLIM_FIELDS = ['id','title','type','poster_path','backdrop_path','logo_path','genres','genre','video_url','video_url_2','rating','vote_average','release_date','first_air_date','release_year','runtime','is_hidden','created_at','updated_at'] as const;
+    const toSlim = (m: any) => Object.fromEntries(SLIM_FIELDS.filter(k => k in m).map(k => [k, (m as any)[k]]));
+
     const saveCache = (movies: Movie[]) => {
       try {
         if (movies.length === 0) return;
-        const str = JSON.stringify(movies);
+        // Versão slim: só campos de display (muito menor que o full)
+        const slim = movies.map(toSlim);
+        const str = JSON.stringify(slim);
         if (str.length < 4 * 1024 * 1024) {
-          localStorage.setItem('cached_my_movies_v4', str);
-        } else {
-          localStorage.removeItem('cached_my_movies_v4');
+          localStorage.setItem('cached_my_movies_v5', str);
+          return;
         }
+        // Fallback: salva só os primeiros 1000 (mais recentes)
+        const partial = JSON.stringify(slim.slice(0, 1000));
+        localStorage.setItem('cached_my_movies_v5', partial);
       } catch {
-        localStorage.removeItem('cached_my_movies_v4');
+        // Quota excedida — tenta limpar chaves antigas e tentar novamente
+        try {
+          ['cached_my_movies_v4','cached_my_movies_v3','cached_my_movies_v2'].forEach(k => localStorage.removeItem(k));
+          const slim = movies.slice(0, 500).map(toSlim);
+          localStorage.setItem('cached_my_movies_v5', JSON.stringify(slim));
+        } catch {}
       }
     };
 
@@ -7323,7 +7341,7 @@ export default function App() {
               // Atualiza o cache para persistir entre refreshes
               try {
                 const str = JSON.stringify(next);
-                if (str.length < 4 * 1024 * 1024) localStorage.setItem('cached_my_movies_v4', str);
+                if (str.length < 4 * 1024 * 1024) localStorage.setItem('cached_my_movies_v5', str);
               } catch {}
               return next;
             });

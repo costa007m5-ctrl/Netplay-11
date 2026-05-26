@@ -23,7 +23,7 @@ interface RowProps {
   highlightProvider?: string;
 }
 
-const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectMovie, cardStyle, type = 'standard', rank, rankColor, highlightProvider }: any) => {
+const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectMovie, cardStyle, type = 'standard', rank, rankColor, highlightProvider, idx = 99 }: any) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const matchPercentage = 80 + (movie.id % 20);
 
@@ -61,10 +61,10 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
   const providers = parseWatchProviders(movie.watch_providers);
 
   const posterSrc = movie.poster_path
-    ? (movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w342/${movie.poster_path}`)
+    ? (movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w185/${movie.poster_path}`)
     : null;
   const backdropSrc = movie.backdrop_path
-    ? (movie.backdrop_path.startsWith('http') ? movie.backdrop_path : `https://image.tmdb.org/t/p/w500/${movie.backdrop_path}`)
+    ? (movie.backdrop_path.startsWith('http') ? movie.backdrop_path : `https://image.tmdb.org/t/p/w300/${movie.backdrop_path}`)
     : null;
   const logoSrc = movie.logo_path
     ? (movie.logo_path.startsWith('http') ? movie.logo_path : `https://image.tmdb.org/t/p/w185/${movie.logo_path}`)
@@ -142,7 +142,8 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
             src={imgSrc}
             alt={movie.title || movie.name}
             onLoad={() => setIsLoaded(true)}
-            loading="lazy"
+            loading={idx < 3 ? 'eager' : 'lazy'}
+            fetchPriority={idx < 3 ? 'high' : 'auto'}
             decoding="async"
             referrerPolicy="no-referrer"
           />
