@@ -472,9 +472,9 @@ function ChannelPlayerView({
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isFS, setIsFS] = useState(false);
 
-  // Estado de carregamento + fallback
+  // Loading overlay: some por 4s ao trocar canal, depois some automaticamente.
+  // NUNCA bloqueia o iframe — só dá feedback visual durante a inicialização.
   const [isLoading, setIsLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [fallbackIdx, setFallbackIdx] = useState(0);
   const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -493,22 +493,13 @@ function ChannelPlayerView({
   const current = useEpg(channel.id);
   const pct = current ? Math.min(100, Math.max(0, current.progress)) : 0;
 
-  // Ao trocar canal/fallback: reset loading state
-  const resetLoading = useCallback(() => {
-    setIsLoading(true);
-    setLoadFailed(false);
-    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-    // Timeout de 12s: se o iframe não carregar, mostra opção de troca de fonte
-    loadTimerRef.current = setTimeout(() => {
-      setIsLoading(false);
-      setLoadFailed(true);
-    }, 12000);
-  }, []);
-
+  // Ao trocar canal: mostra loading por 4s e some — independente do iframe.
   useEffect(() => {
-    resetLoading();
+    setIsLoading(true);
+    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = setTimeout(() => setIsLoading(false), 4000);
     return () => { if (loadTimerRef.current) clearTimeout(loadTimerRef.current); };
-  }, [channel.id, fallbackIdx, resetLoading]);
+  }, [channel.id, fallbackIdx]);
 
   // Constrói a URL do embed considerando fallbacks
   const buildSrc = useCallback((ch: Channel, idx: number): string => {
@@ -653,6 +644,7 @@ function ChannelPlayerView({
 
   const src = buildSrc(channel, fallbackIdx);
   const hasMoreFallbacks = !channel.url && fallbackIdx < EMBED_FALLBACKS.length - 1;
+  const sourceLabel = channel.url ? 'URL' : `F${fallbackIdx + 1}/${EMBED_FALLBACKS.length}`;
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-[3000] bg-black">
@@ -669,21 +661,16 @@ function ChannelPlayerView({
           ? "allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
           : undefined}
         allowFullScreen
-        onLoad={() => {
-          if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-          setIsLoading(false);
-          setLoadFailed(false);
-        }}
       />
 
-      {/* Overlay de carregamento */}
+      {/* Overlay de carregamento — some automaticamente em 4s, nunca bloqueia o iframe */}
       <AnimatePresence>
-        {isLoading && !loadFailed && (
+        {isLoading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-[15] pointer-events-none"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-black z-[15] pointer-events-none"
           >
             <div className="flex flex-col items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-[#e8172c]/20 border border-[#e8172c]/30 flex items-center justify-center">
@@ -698,54 +685,6 @@ function ChannelPlayerView({
                 <p className="text-white text-sm font-black">{getName(channel)}</p>
                 <p className="text-gray-500 text-[10px] mt-1">Conectando ao canal...</p>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Overlay de falha / trocar fonte */}
-      <AnimatePresence>
-        {loadFailed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 z-[15] pointer-events-auto"
-          >
-            <div className="flex flex-col items-center gap-5 px-6 text-center max-w-xs">
-              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                <Radio size={28} className="text-gray-600" />
-              </div>
-              <div>
-                <p className="text-white text-base font-black mb-1">Stream não disponível</p>
-                <p className="text-gray-500 text-xs">O canal pode estar temporariamente fora do ar ou a fonte está indisponível.</p>
-              </div>
-              <div className="flex flex-col gap-2.5 w-full">
-                {hasMoreFallbacks && (
-                  <button
-                    onClick={tryNextSource}
-                    className="w-full py-3 rounded-xl bg-[#e8172c] hover:bg-[#c01020] text-white text-xs font-black uppercase tracking-widest transition-all"
-                  >
-                    Tentar outra fonte
-                  </button>
-                )}
-                <button
-                  onClick={resetLoading}
-                  className="w-full py-3 rounded-xl bg-white/8 hover:bg-white/15 border border-white/10 text-white text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                >
-                  <RefreshCcw size={12} />
-                  Recarregar
-                </button>
-                <button
-                  onClick={() => onPiP(channel)}
-                  className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/8 text-gray-400 text-xs font-black uppercase tracking-widest transition-all"
-                >
-                  Voltar à lista
-                </button>
-              </div>
-              {fallbackIdx > 0 && (
-                <p className="text-gray-700 text-[9px] font-mono">fonte {fallbackIdx + 1} de {EMBED_FALLBACKS.length}</p>
-              )}
             </div>
           </motion.div>
         )}
@@ -799,6 +738,18 @@ function ChannelPlayerView({
 
               {/* Right controls */}
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Trocar fonte — só aparece quando há fallbacks disponíveis */}
+                {hasMoreFallbacks && (
+                  <button
+                    onClick={e => { e.stopPropagation(); tryNextSource(); }}
+                    className="flex items-center gap-1 px-2 h-9 rounded-xl bg-black/60 backdrop-blur-xl border border-white/20 text-white hover:bg-white/10 transition-all text-[10px] font-black uppercase tracking-wide"
+                    title="Tentar outra fonte de stream"
+                  >
+                    <RefreshCcw size={12} />
+                    <span className="hidden sm:inline">{sourceLabel}</span>
+                  </button>
+                )}
+
                 {/* Anti-Ads toggle */}
                 <button
                   onClick={e => { e.stopPropagation(); toggleAntiAds(); }}
