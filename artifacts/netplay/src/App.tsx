@@ -942,6 +942,31 @@ const LazyGenreRow = React.memo(({ genre, items, onExpand, MovieCard }: {
   );
 });
 
+// Partículas de ambientação — posições pré-computadas uma vez (evita Math.random no render que causa jank)
+const ParticlesAmbience = React.memo(() => {
+  const configs = useMemo(() =>
+    Array.from({ length: 15 }, () => ({
+      x1: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1920),
+      x2: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1920),
+      duration: 10 + Math.random() * 20,
+      delay: Math.random() * 10,
+    })),
+  []);
+  return (
+    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden h-screen opacity-20">
+      {configs.map((c, i) => (
+        <motion.div
+          key={i}
+          initial={{ y: '100vh', x: c.x1, opacity: 0 }}
+          animate={{ y: '-10vh', x: c.x2, opacity: [0, 1, 0] }}
+          transition={{ duration: c.duration, repeat: Infinity, ease: 'linear', delay: c.delay }}
+          className="absolute w-1 h-1 bg-red-500 rounded-full shadow-[0_0_10px_rgba(220,38,38,1)]"
+        />
+      ))}
+    </div>
+  );
+});
+
 // Colunas leves para carregamento inicial (sem episodes/actors/overview — campos grandes que atrasam o load)
 const MOVIE_COLS_BROWSE = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,release_year,rating,vote_average,runtime,genres,genre,video_url,video_url_2,preferred_quality,logo_path,watch_providers,is_hidden,last_rescanned_at,collection_id,collection_name,collection_poster_path,collection_backdrop_path,collection_logo_path,created_at,updated_at';
 // Colunas completas para pesquisa (inclui episodes, actors, overview)
@@ -1099,7 +1124,8 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
     setExpandedCount(30);
   };
 
-  const MovieCard = React.useCallback(({ m, idx }: { m: any; idx: number }) => (
+  // useMemo(React.memo) garante tipo de componente estável — React não desmonta/remonta os cards ao navegar
+  const MovieCard = useMemo(() => React.memo(({ m, idx }: { m: any; idx: number }) => (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1126,9 +1152,9 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
       </div>
       <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
     </motion.div>
-  ), [onSelectMovie, type]);
+  )), [onSelectMovie, type]);
 
-  const NewCard = React.useCallback(({ m, idx }: { m: any; idx: number }) => (
+  const NewCard = useMemo(() => React.memo(({ m, idx }: { m: any; idx: number }) => (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
@@ -1149,7 +1175,7 @@ const ContentFilteredPage = React.memo(({ myMovies, type, onSelectMovie, isLoadi
       </div>
       <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
     </motion.div>
-  ), [onSelectMovie]);
+  )), [onSelectMovie]);
 
   const [emptyGuard, setEmptyGuard] = React.useState(false);
   React.useEffect(() => {
@@ -1505,7 +1531,8 @@ const HomeView = React.memo(({
     if (myMovies.length === 0) return [];
     // Combine some new releases, top movies and random ones for the rotating banner
     const pool = [...newMovies, ...top10Movies, ...myMovies.slice(0, 20)];
-    return [...new Set(pool)].sort(() => 0.5 - Math.random()).slice(0, 10);
+    // Ordem estável — não usa Math.random() para evitar re-render do banner a cada mudança de estado
+    return [...new Set(pool)].slice(0, 10);
   }, [myMovies, newMovies, top10Movies]);
 
   const franchiseToMovie = (f: any) => ({
@@ -1552,7 +1579,7 @@ const HomeView = React.memo(({
       new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     ), [myMovies]);
 
-  const RecentlyAddedCard = React.useCallback(({ m, idx }: { m: any; idx: number }) => (
+  const RecentlyAddedCard = useMemo(() => React.memo(({ m, idx }: { m: any; idx: number }) => (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1577,7 +1604,7 @@ const HomeView = React.memo(({
       </div>
       <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
     </motion.div>
-  ), [handleSelectMovie]);
+  )), [handleSelectMovie]);
 
   if (searchQuery) {
     return (
@@ -1688,27 +1715,8 @@ const HomeView = React.memo(({
       key="home"
       className="animate-fade-in relative"
     >
-      {/* 🚀 PARTICLES AMBIENCE RED */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden h-screen opacity-20">
-         {[...Array(15)].map((_, i) => (
-            <motion.div
-               key={i}
-               initial={{ y: '100vh', x: Math.random() * window.innerWidth, opacity: 0 }}
-               animate={{ 
-                  y: '-10vh', 
-                  x: Math.random() * window.innerWidth, 
-                  opacity: [0, 1, 0] 
-               }}
-               transition={{ 
-                  duration: 10 + Math.random() * 20, 
-                  repeat: Infinity, 
-                  ease: 'linear',
-                  delay: Math.random() * 10
-               }}
-               className="absolute w-1 h-1 bg-red-500 rounded-full shadow-[0_0_10px_rgba(220,38,38,1)]"
-            />
-         ))}
-      </div>
+      {/* 🚀 PARTICLES AMBIENCE RED — posições pré-computadas (Math.random no render causa jank a cada re-render) */}
+      <ParticlesAmbience />
 
       <div className="relative z-10">
       {bannerMovies.length > 0 ? (

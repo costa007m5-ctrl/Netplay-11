@@ -132,7 +132,7 @@ async function callV3Api(
 
   const response = await axios.post(`${BASE_URL}${API_PATH}`, body, {
     headers: reqHeaders,
-    timeout: 60000,
+    timeout: 15000,
   });
 
   const data = normalizeResponse(response.data);

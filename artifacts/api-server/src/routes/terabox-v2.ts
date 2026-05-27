@@ -152,7 +152,7 @@ async function callV2Api(payload: { url: string; dir_path?: string; page?: numbe
         "Content-Type": "application/json",
         "X-API-KEY": apiKey,
       },
-      timeout: 110000,
+      timeout: 15000,
     },
   );
 
@@ -181,7 +181,7 @@ async function callV1AsV2Fallback(url: string, apiKey: string): Promise<any | nu
       { url },
       {
         headers: { "Content-Type": "application/json", "xAPIverse-Key": apiKey },
-        timeout: 25000,
+        timeout: 12000,
       },
     );
     if (response.data && typeof response.data === "object") {

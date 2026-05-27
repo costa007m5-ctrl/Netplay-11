@@ -75,7 +75,7 @@ async function callTeraboxApi(url: string, apiKey: string, opts?: { nocache?: bo
         "Content-Type": "application/json",
         "xAPIverse-Key": apiKey,
       },
-      timeout: 25000,
+      timeout: 12000,
     },
   );
 
@@ -147,7 +147,7 @@ router.get("/terabox-pro", async (req, res) => {
         { url },
         {
           headers: { "Content-Type": "application/json", "X-API-KEY": v2Key },
-          timeout: 30000,
+          timeout: 15000,
         },
       );
       // Marca a resposta para client saber que veio de fallback
