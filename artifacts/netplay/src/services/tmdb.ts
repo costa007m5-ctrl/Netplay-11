@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 
 // Client-side session cache — avoids repeated round-trips when switching tabs
 const sessionCache = new Map<string, { data: any; ts: number }>();
-const SESSION_TTL = 30 * 60 * 1000; // 30 minutos — evita rebuscar ao trocar de tela
+const SESSION_TTL = 2 * 60 * 60 * 1000; // 2 horas — dados de filmes mudam raramente
 
 // Chave direta (fallback quando o API server não está disponível)
 const VITE_TMDB_KEY = import.meta.env.VITE_TMDB_API_KEY as string | undefined;

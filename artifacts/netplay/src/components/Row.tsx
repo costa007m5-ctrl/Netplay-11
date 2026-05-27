@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Movie } from '../types';
 import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -27,14 +27,15 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
   const [isLoaded, setIsLoaded] = useState(false);
   const matchPercentage = 80 + (movie.id % 20);
 
-  const parseWatchProviders = useCallback((providersString?: string) => {
+  const providers = useMemo(() => {
+    const providersString = movie.watch_providers;
     if (!providersString) return [];
     if (providersString.includes('|')) {
-      return providersString.split(';;').map(p => {
+      return providersString.split(';;').map((p: string) => {
         const [name, logo] = p.split('|');
         return { name, logo };
-      }).reduce((acc: any[], current) => {
-        if (!acc.find(item => item.name === current.name)) acc.push(current);
+      }).reduce((acc: any[], current: any) => {
+        if (!acc.find((item: any) => item.name === current.name)) acc.push(current);
         return acc;
       }, []);
     }
@@ -52,13 +53,11 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
       'paramount plus': 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg',
       'globoplay': 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg',
     };
-    return providersString.split(',').map(p => p.trim()).filter(Boolean).map(name => ({
+    return providersString.split(',').map((p: string) => p.trim()).filter(Boolean).map((name: string) => ({
       name,
       logo: KNOWN[name.toLowerCase()] || '',
-    })).filter(p => p.logo);
-  }, []);
-
-  const providers = parseWatchProviders(movie.watch_providers);
+    })).filter((p: any) => p.logo);
+  }, [movie.watch_providers]);
 
   const posterSrc = movie.poster_path
     ? (movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w185/${movie.poster_path}`)

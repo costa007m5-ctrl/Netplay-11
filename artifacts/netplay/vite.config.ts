@@ -46,8 +46,14 @@ export default defineConfig(async () => {
       sourcemap: false,
       reportCompressedSize: false,
       chunkSizeWarningLimit: 1500,
+      // Minificação esbuild com remoção de código morto e comentários
+      minify: "esbuild",
       rollupOptions: {
         output: {
+          // Melhor compressão de nomes de variáveis internas
+          generatedCode: {
+            constBindings: true,
+          },
           manualChunks(id: string) {
             if (id.includes("node_modules")) {
               if (id.includes("hls.js")) return "vendor-hls";
@@ -58,14 +64,28 @@ export default defineConfig(async () => {
               if (id.includes("@radix-ui")) return "vendor-radix";
               if (id.includes("@supabase")) return "vendor-supabase";
               if (id.includes("@tanstack")) return "vendor-query";
+              if (id.includes("socket.io") || id.includes("engine.io")) return "vendor-socket";
+              if (id.includes("axios")) return "vendor-axios";
             }
             return undefined;
           },
         },
       },
     },
+    // esbuild options: remove console.log em prod, legalComments none para reduzir bundle
+    esbuild: {
+      legalComments: "none",
+      ...(isProduction ? { drop: ["console", "debugger"] } : {}),
+    },
     optimizeDeps: {
-      include: ["react", "react-dom", "react-router-dom", "react/jsx-runtime"],
+      include: [
+        "react",
+        "react-dom",
+        "react-router-dom",
+        "react/jsx-runtime",
+        "axios",
+        "@tanstack/react-query",
+      ],
       exclude: ["framer-motion", "motion", "motion/react"],
     },
     server: {
@@ -75,6 +95,10 @@ export default defineConfig(async () => {
       allowedHosts: true,
       fs: {
         strict: false,
+      },
+      // Aumenta limite de conexões simultâneas para dev
+      hmr: {
+        overlay: true,
       },
       proxy: {
         "/api": {

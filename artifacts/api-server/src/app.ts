@@ -1,32 +1,21 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import compression from "compression";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-// Compressão manual via zlib para respostas JSON grandes
-import { gzip } from "node:zlib";
-import { promisify } from "node:util";
-const gzipAsync = promisify(gzip);
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const originalJson = res.json.bind(res);
-  res.json = (body: any) => {
-    const acceptEncoding = req.headers['accept-encoding'] || '';
-    if (!acceptEncoding.includes('gzip')) return originalJson(body);
-    const str = JSON.stringify(body);
-    if (str.length < 1024) return originalJson(body);
-    gzipAsync(Buffer.from(str)).then(compressed => {
-      res.setHeader('Content-Encoding', 'gzip');
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Vary', 'Accept-Encoding');
-      res.end(compressed);
-    }).catch(() => originalJson(body));
-    return res;
-  };
-  next();
-});
+// Compressão gzip/deflate automática via middleware padrão (mais robusto que implementação manual)
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+}));
 
 app.use(
   pinoHttp({
