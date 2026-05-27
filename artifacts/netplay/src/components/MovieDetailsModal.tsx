@@ -127,8 +127,8 @@ const getVideoSourceType = (url?: string) => {
   return 'Play';
 };
 
-// Cache de metadados TMDB (gêneros, logo, providers) — TTL 24h
-const TMDB_META_CACHE_TTL = 24 * 60 * 60 * 1000;
+// Cache de metadados TMDB (gêneros, logo, providers) — TTL 20 dias
+const TMDB_META_CACHE_TTL = 20 * 24 * 60 * 60 * 1000; // 20 dias
 const TMDB_META_CACHE_VERSION = 'v1';
 
 interface TmdbMetaCache {

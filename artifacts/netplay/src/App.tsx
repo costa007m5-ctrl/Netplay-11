@@ -3660,7 +3660,7 @@ const MovieDetailRouteWrapper = ({
   );
 };
 const PROVIDER_CACHE_VERSION = 'v2';
-const PROVIDER_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+const PROVIDER_CACHE_TTL_MS = 20 * 24 * 60 * 60 * 1000; // 20 dias
 
 function getProviderCacheKey(providerId: string) {
   return `cached_provider_${PROVIDER_CACHE_VERSION}_${providerId.toLowerCase()}`;
