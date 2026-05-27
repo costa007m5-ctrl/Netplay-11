@@ -127,6 +127,37 @@ const getVideoSourceType = (url?: string) => {
   return 'Play';
 };
 
+// Cache de metadados TMDB (gêneros, logo, providers) — TTL 24h
+const TMDB_META_CACHE_TTL = 24 * 60 * 60 * 1000;
+const TMDB_META_CACHE_VERSION = 'v1';
+
+interface TmdbMetaCache {
+  genres: string | null;
+  logo: string | null;
+  providers: any[];
+  resolvedId: number;
+  resolvedType: 'tv' | 'movie';
+  ts: number;
+}
+
+function loadTmdbMetaCache(movieId: number): TmdbMetaCache | null {
+  try {
+    const raw = localStorage.getItem(`netplay_tmdb_${TMDB_META_CACHE_VERSION}_${movieId}`);
+    if (!raw) return null;
+    const data: TmdbMetaCache = JSON.parse(raw);
+    if (Date.now() - data.ts > TMDB_META_CACHE_TTL) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveTmdbMetaCache(movieId: number, data: Omit<TmdbMetaCache, 'ts'>) {
+  try {
+    localStorage.setItem(`netplay_tmdb_${TMDB_META_CACHE_VERSION}_${movieId}`, JSON.stringify({ ...data, ts: Date.now() }));
+  } catch {}
+}
+
 const MovieDetailsModal = React.memo(({ 
   movie, 
   similarMovies, 
@@ -156,12 +187,24 @@ const MovieDetailsModal = React.memo(({
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [showTvShare, setShowTvShare] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const [realWatchProviders, setRealWatchProviders] = useState<any[]>([]);
-  const [currentProvider, setCurrentProvider] = useState<any>(getProvider(movie, streamingProviders));
-  const [tmdbGenres, setTmdbGenres] = useState<string | null>(null);
+  const [realWatchProviders, setRealWatchProviders] = useState<any[]>(() => {
+    const cached = loadTmdbMetaCache(movie.id);
+    return cached?.providers || [];
+  });
+  const [currentProvider, setCurrentProvider] = useState<any>(() => {
+    const cached = loadTmdbMetaCache(movie.id);
+    return getProvider(movie, streamingProviders) || null;
+  });
+  const [tmdbGenres, setTmdbGenres] = useState<string | null>(() => {
+    const cached = loadTmdbMetaCache(movie.id);
+    return cached?.genres || null;
+  });
   const [showQualitySelector, setShowQualitySelector] = useState(false);
   const [selectedQuality, setSelectedQuality] = useState<'480p' | '720p' | '1080p'>('720p');
-  const [logoUrl, setLogoUrl] = useState<string | null>(movie.logo_path || null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+    const cached = loadTmdbMetaCache(movie.id);
+    return cached?.logo || movie.logo_path || null;
+  });
   const [selectedEpisodeDetails, setSelectedEpisodeDetails] = useState<any>(null);
   const [isResolvingUrl, setIsResolvingUrl] = useState(false);
   const [isBfLoading, setIsBfLoading] = useState(false);
@@ -309,9 +352,13 @@ const MovieDetailsModal = React.memo(({
         ? new Date((movie as any).first_air_date).getFullYear()
         : null;
 
+      // Aplica cache imediatamente se disponível (o estado já foi inicializado com cache no useState)
+      // Se cache válido existir, busca em segundo plano e atualiza silenciosamente
+      const existingCache = loadTmdbMetaCache(movie.id);
+
       // Resolve TMDB ID: tenta movie.id direto primeiro (mais rápido), depois busca por título
-      let resolvedId: number = movie.id;
-      let resolvedType: 'tv' | 'movie' = mediaType;
+      let resolvedId: number = existingCache?.resolvedId ?? movie.id;
+      let resolvedType: 'tv' | 'movie' = existingCache?.resolvedType ?? mediaType;
 
       // Helper: extrai gêneros pt-BR de um detailsRes
       const extractGenres = (data: any): string => {
@@ -408,7 +455,8 @@ const MovieDetailsModal = React.memo(({
             { name: 'Apple TV+', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg', bg: 'bg-black' },
             { name: 'Paramount+', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Paramount_Plus.svg', bg: 'bg-blue-900' },
             { name: 'Globoplay', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Globoplay_logo.svg', bg: 'bg-white' },
-            { name: 'Hulu', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Hulu_Logo.svg', bg: 'bg-[#1ce783]' }
+            { name: 'Hulu', logo: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Hulu_Logo.svg', bg: 'bg-[#1ce783]' },
+            { name: 'Crunchyroll', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Crunchyroll_Logo.png', bg: 'bg-[#0d0d0d]' }
           ];
           const found = brProviders.find((p: any) =>
             knownProviders.some(kp => p.provider_name.toLowerCase().includes(kp.name.toLowerCase()) || kp.name.toLowerCase().includes(p.provider_name.toLowerCase()))
@@ -418,6 +466,15 @@ const MovieDetailsModal = React.memo(({
             if (kpData) setCurrentProvider(kpData);
           }
         }
+
+        // Salva metadados no cache local para aberturas futuras instantâneas
+        saveTmdbMetaCache(movie.id, {
+          genres: tmdbGenres,
+          logo: logoUrl,
+          providers: brProviders,
+          resolvedId,
+          resolvedType,
+        });
       }
     }
 

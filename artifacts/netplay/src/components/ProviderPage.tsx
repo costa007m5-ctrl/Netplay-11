@@ -130,6 +130,20 @@ const providerConfigs: Record<string, any> = {
     heroLayout: 'bottom-0 left-0 w-full p-6 md:p-24 pb-12 md:pb-24',
     titleStyle: 'text-3xl md:text-7xl font-bold text-white tracking-tight drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]',
     theme: 'hulu'
+  },
+  'Crunchyroll': {
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Crunchyroll_Logo.png',
+    accent: '#F47521',
+    bg: 'bg-[#0d0d0d]',
+    gradient: 'from-[#0d0d0d] via-[#0d0d0d]/95 to-transparent',
+    overlay: 'bg-[radial-gradient(circle_at_20%_80%,rgba(244,117,33,0.15),transparent_60%)]',
+    buttonPrimary: 'bg-[#F47521] text-white hover:bg-[#ff8c3a] rounded-full font-black uppercase text-xs tracking-widest px-10 py-4 shadow-xl shadow-orange-600/30 transition-all',
+    buttonSecondary: 'bg-white/5 text-white border border-[#F47521]/40 hover:bg-[#F47521]/10 rounded-full font-black uppercase text-xs tracking-widest px-10 py-4 transition-all',
+    font: 'font-sans',
+    cardStyle: 'rounded-lg border-2 border-transparent hover:border-[#F47521]/60 hover:shadow-[0_0_24px_rgba(244,117,33,0.3)] hover:scale-105 transition-all duration-300',
+    heroLayout: 'bottom-0 left-0 p-8 md:p-24 pb-48 md:pb-72',
+    titleStyle: 'text-4xl md:text-9xl font-black text-white italic tracking-tighter uppercase leading-[0.85] drop-shadow-[0_0_40px_rgba(244,117,33,0.4)]',
+    theme: 'crunchyroll'
   }
 };
 

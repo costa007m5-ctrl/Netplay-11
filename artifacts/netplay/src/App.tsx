@@ -3714,6 +3714,7 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
     'max': ['hbo max', 'hbo'],
     'netflix': ['nflx'],
     'prime video': ['amazon prime', 'amazon'],
+    'crunchyroll': ['crunchyroll'],
   };
 
   React.useEffect(() => {
