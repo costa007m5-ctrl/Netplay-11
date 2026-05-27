@@ -3696,7 +3696,7 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
           let q = supabase
             .from('movies')
             .select(COLS)
-            .eq('is_hidden', false)
+            .or('is_hidden.eq.false,is_hidden.is.null')
             .order('vote_average', { ascending: false })
             .range(from, from + PAGE_SIZE - 1);
           if (withFilter) q = q.or(orClause);
@@ -6612,7 +6612,7 @@ export default function App() {
           .from('movies')
           .select(COLS)
           .or(`title.ilike.%${q}%,name.ilike.%${q}%`)
-          .eq('is_hidden', false)
+          .or('is_hidden.eq.false,is_hidden.is.null')
           .order('vote_average', { ascending: false })
           .limit(150);
         setGlobalDbSearchResults((data || []).map(fmtMovieRow));
