@@ -3659,7 +3659,7 @@ const MovieDetailRouteWrapper = ({
     />
   );
 };
-const PROVIDER_CACHE_VERSION = 'v2';
+const PROVIDER_CACHE_VERSION = 'v3';
 const PROVIDER_CACHE_TTL_MS = 20 * 24 * 60 * 60 * 1000; // 20 dias
 
 function getProviderCacheKey(providerId: string) {
@@ -3721,8 +3721,6 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
       const containsAlias = aliases.some((alias: string) => wp.includes(alias));
       return containsDirect || containsAlias;
     });
-    // Se nenhum filme tem watch_providers definido, mostra tudo (fallback)
-    if (filtered.length === 0 && myMovies.every((m: any) => !m.watch_providers)) return myMovies;
     return filtered;
   }, [myMovies, providerId, providerAliases]);
 
@@ -3789,23 +3787,9 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
           offset += PAGE_SIZE;
         }
 
-        // Fallback: se watch_providers vazio, mostra tudo
-        if (allData.length === 0) {
-          offset = 0;
-          while (true) {
-            const { data, error } = await fetchPage(offset, false);
-            if (error || !data || data.length === 0) break;
-            allData = [...allData, ...data];
-            const formatted = allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow);
-            setDbProviderMovies(formatted);
-            if (data.length < PAGE_SIZE) break;
-            offset += PAGE_SIZE;
-          }
-        }
-
         if (allData.length > 0) {
           const finalMovies = allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow);
-          saveProviderCache(providerId, finalMovies);
+          saveProviderCache(providerId!, finalMovies);
         }
       } catch (e) {
         console.warn('[ProviderViewWrapper] Erro ao buscar no DB:', e);
