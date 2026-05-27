@@ -3659,11 +3659,52 @@ const MovieDetailRouteWrapper = ({
     />
   );
 };
+const PROVIDER_CACHE_VERSION = 'v2';
+const PROVIDER_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+function getProviderCacheKey(providerId: string) {
+  return `cached_provider_${PROVIDER_CACHE_VERSION}_${providerId.toLowerCase()}`;
+}
+
+function loadProviderCache(providerId: string): Movie[] | null {
+  try {
+    const raw = localStorage.getItem(getProviderCacheKey(providerId));
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+    if (Date.now() - ts > PROVIDER_CACHE_TTL_MS) return null; // expirado
+    return data as Movie[];
+  } catch {
+    return null;
+  }
+}
+
+function saveProviderCache(providerId: string, movies: Movie[]) {
+  try {
+    const slim = movies.map(m => ({
+      id: m.id, title: m.title, type: m.type, poster_path: m.poster_path,
+      backdrop_path: m.backdrop_path, release_date: m.release_date,
+      first_air_date: m.first_air_date, rating: m.rating, vote_average: m.vote_average,
+      runtime: m.runtime, genres: m.genres, video_url: m.videoUrl, video_url_2: m.videoUrl2,
+      logo_path: m.logo_path, watch_providers: m.watch_providers, is_hidden: m.is_hidden,
+    }));
+    localStorage.setItem(getProviderCacheKey(providerId), JSON.stringify({ data: slim, ts: Date.now() }));
+  } catch {
+    // localStorage cheio — ignora silenciosamente
+  }
+}
+
 const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggleFavorite, myListIds, favoriteIds }: any) => {
   const { providerId } = useParams();
   const navigate = useNavigate();
-  const [dbProviderMovies, setDbProviderMovies] = React.useState<Movie[]>([]);
-  const [isLoadingProvider, setIsLoadingProvider] = React.useState(false);
+  const [dbProviderMovies, setDbProviderMovies] = React.useState<Movie[]>(() => {
+    if (!providerId) return [];
+    return loadProviderCache(providerId) || [];
+  });
+  const [isLoadingProvider, setIsLoadingProvider] = React.useState(() => {
+    if (!providerId) return false;
+    return (loadProviderCache(providerId) || []).length === 0;
+  });
 
   // Mapeamento de apelidos comuns
   const providerAliases: Record<string, string[]> = {
@@ -3677,8 +3718,16 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
 
   React.useEffect(() => {
     if (!providerId) return;
-    setIsLoadingProvider(true);
-    setDbProviderMovies([]);
+
+    // Carrega cache imediatamente se disponível
+    const cached = loadProviderCache(providerId);
+    if (cached && cached.length > 0) {
+      setDbProviderMovies(cached);
+      setIsLoadingProvider(false);
+    } else {
+      setIsLoadingProvider(true);
+      setDbProviderMovies([]);
+    }
 
     const pIdDirect = providerId.toLowerCase();
     const aliases = providerAliases[pIdDirect] || [];
@@ -3711,7 +3760,8 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
           const { data, error } = await fetchPage(offset, true);
           if (error || !data || data.length === 0) break;
           allData = [...allData, ...data];
-          setDbProviderMovies(allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
+          const formatted = allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow);
+          setDbProviderMovies(formatted);
           if (data.length < PAGE_SIZE) break;
           offset += PAGE_SIZE;
         }
@@ -3723,10 +3773,17 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
             const { data, error } = await fetchPage(offset, false);
             if (error || !data || data.length === 0) break;
             allData = [...allData, ...data];
-            setDbProviderMovies(allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow));
+            const formatted = allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow);
+            setDbProviderMovies(formatted);
             if (data.length < PAGE_SIZE) break;
             offset += PAGE_SIZE;
           }
+        }
+
+        // Salva no cache local depois de buscar dados frescos
+        if (allData.length > 0) {
+          const finalMovies = allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow);
+          saveProviderCache(providerId, finalMovies);
         }
       } catch (e) {
         console.warn('[ProviderViewWrapper] Erro ao buscar no DB:', e);
