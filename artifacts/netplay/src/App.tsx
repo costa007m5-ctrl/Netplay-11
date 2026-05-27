@@ -3697,17 +3697,8 @@ function saveProviderCache(providerId: string, movies: Movie[]) {
 const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggleFavorite, myListIds, favoriteIds }: any) => {
   const { providerId } = useParams();
   const navigate = useNavigate();
-  const [dbProviderMovies, setDbProviderMovies] = React.useState<Movie[]>(() => {
-    if (!providerId) return [];
-    return loadProviderCache(providerId) || [];
-  });
-  const [isLoadingProvider, setIsLoadingProvider] = React.useState(() => {
-    if (!providerId) return false;
-    return (loadProviderCache(providerId) || []).length === 0;
-  });
-
   // Mapeamento de apelidos comuns
-  const providerAliases: Record<string, string[]> = {
+  const providerAliases: Record<string, string[]> = React.useMemo(() => ({
     'apple tv+': ['apple tv', 'apple tv plus', 'atvp'],
     'paramount+': ['paramount plus', 'pmnt'],
     'disney+': ['disney plus', 'star+', 'star plus'],
@@ -3715,33 +3706,64 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
     'netflix': ['nflx'],
     'prime video': ['amazon prime', 'amazon'],
     'crunchyroll': ['crunchyroll'],
-  };
+  }), []);
+
+  // Filtra myMovies localmente (instantâneo — sem query)
+  const filteredFromMemory = React.useMemo(() => {
+    if (!providerId || myMovies.length === 0) return [];
+    const pIdDirect = providerId.toLowerCase();
+    const pIdNormalized = pIdDirect.replace(/\s+/g, '').replace(/[+]/g, 'plus');
+    const aliases = providerAliases[pIdDirect] || [];
+    const filtered = myMovies.filter((m: any) => {
+      if (!m.watch_providers) return false;
+      const wp = m.watch_providers.toLowerCase();
+      const containsDirect = wp.includes(pIdDirect) || wp.replace(/\s+/g, '').replace(/[+]/g, 'plus').includes(pIdNormalized);
+      const containsAlias = aliases.some((alias: string) => wp.includes(alias));
+      return containsDirect || containsAlias;
+    });
+    // Se nenhum filme tem watch_providers definido, mostra tudo (fallback)
+    if (filtered.length === 0 && myMovies.every((m: any) => !m.watch_providers)) return myMovies;
+    return filtered;
+  }, [myMovies, providerId, providerAliases]);
+
+  const [dbProviderMovies, setDbProviderMovies] = React.useState<Movie[]>(() => {
+    if (!providerId) return [];
+    return loadProviderCache(providerId) || [];
+  });
+
+  // Carregando apenas se não há cache E myMovies ainda está vazio
+  const [isLoadingProvider, setIsLoadingProvider] = React.useState(() => {
+    if (!providerId) return false;
+    const hasCached = (loadProviderCache(providerId) || []).length > 0;
+    return !hasCached;
+  });
 
   React.useEffect(() => {
     if (!providerId) return;
 
-    // Carrega cache imediatamente se disponível
+    // 1. Cache local → mostra imediatamente
     const cached = loadProviderCache(providerId);
     if (cached && cached.length > 0) {
       setDbProviderMovies(cached);
       setIsLoadingProvider(false);
+    } else if (filteredFromMemory.length > 0) {
+      // 2. myMovies já carregado → mostra na hora, sem loading
+      setIsLoadingProvider(false);
     } else {
       setIsLoadingProvider(true);
-      setDbProviderMovies([]);
     }
 
     const pIdDirect = providerId.toLowerCase();
     const aliases = providerAliases[pIdDirect] || [];
-    // Todos os termos de busca para ILIKE no Supabase
     const searchTerms = [pIdDirect, ...aliases];
 
+    // Busca em segundo plano para atualizar cache
     const fetchFromDb = async () => {
       try {
         const COLS = 'id,title,type,poster_path,backdrop_path,release_date,first_air_date,rating,vote_average,runtime,genres,video_url,video_url_2,logo_path,watch_providers,is_hidden,created_at,updated_at';
         const orClause = searchTerms.map(t => `watch_providers.ilike.%${t}%`).join(',');
         const PAGE_SIZE = 1000;
 
-        // Tenta primeiro filtrar por watch_providers
         const fetchPage = async (from: number, withFilter: boolean) => {
           let q = supabase
             .from('movies')
@@ -3767,7 +3789,7 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
           offset += PAGE_SIZE;
         }
 
-        // Fallback: se watch_providers vazio para a maioria dos conteúdos, mostra TUDO
+        // Fallback: se watch_providers vazio, mostra tudo
         if (allData.length === 0) {
           offset = 0;
           while (true) {
@@ -3781,7 +3803,6 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
           }
         }
 
-        // Salva no cache local depois de buscar dados frescos
         if (allData.length > 0) {
           const finalMovies = allData.filter((m: any) => !m.is_hidden).map(fmtMovieRow);
           saveProviderCache(providerId, finalMovies);
@@ -3796,21 +3817,11 @@ const ProviderViewWrapper = ({ myMovies, handleSelectMovie, toggleMyList, toggle
     fetchFromDb();
   }, [providerId]);
 
-  // Combina DB + memória (sem duplicatas), priorizando resultados do DB
+  // Prioridade: DB/cache → myMovies filtrado em memória
   const providerMovies = React.useMemo(() => {
     if (dbProviderMovies.length > 0) return dbProviderMovies;
-    if (!providerId) return [];
-    const pIdDirect = providerId.toLowerCase();
-    const pIdNormalized = pIdDirect.replace(/\s+/g, '').replace(/[+]/g, 'plus');
-    const aliases = providerAliases[pIdDirect] || [];
-    return myMovies.filter((m: any) => {
-      if (!m.watch_providers) return false;
-      const wp = m.watch_providers.toLowerCase();
-      const containsDirect = wp.includes(pIdDirect) || wp.replace(/\s+/g, '').replace(/[+]/g, 'plus').includes(pIdNormalized);
-      const containsAlias = aliases.some((alias: string) => wp.includes(alias));
-      return containsDirect || containsAlias;
-    });
-  }, [dbProviderMovies, myMovies, providerId]);
+    return filteredFromMemory;
+  }, [dbProviderMovies, filteredFromMemory]);
 
   return (
     <ProviderPage 

@@ -77,23 +77,26 @@ const defaultProviders = [
 ];
 
 const StreamingHub = React.memo(({ onSelectProvider, streamingProviders }: StreamingHubProps) => {
-  const displayProviders = (streamingProviders && streamingProviders.length > 0)
-    ? streamingProviders.reduce((acc: any[], current: any) => {
-        const x = acc.find(item => item.name === current.name);
-        if (!x) {
-          return acc.concat([{
-            name: current.name,
-            logo: current.logo_url,
+  // Sempre usa defaultProviders como base; adiciona provedores extras do banco que não estão na lista padrão
+  const displayProviders = React.useMemo(() => {
+    const base = [...defaultProviders];
+    if (streamingProviders && streamingProviders.length > 0) {
+      streamingProviders.forEach((sp: any) => {
+        const alreadyIn = base.some(p => p.name.toLowerCase() === (sp.name || '').toLowerCase());
+        if (!alreadyIn) {
+          base.push({
+            name: sp.name,
+            logo: sp.logo_url,
             color: 'from-gray-800 to-black',
             bg: 'bg-black',
             accent: '#ffffff',
             glow: 'rgba(255,255,255,0.1)'
-          }]);
-        } else {
-          return acc;
+          });
         }
-      }, [])
-    : defaultProviders;
+      });
+    }
+    return base;
+  }, [streamingProviders]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
