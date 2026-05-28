@@ -42,12 +42,12 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
           <h1 style={{ color: '#e50914', fontSize: 22, marginBottom: 12 }}>NetPlay — erro ao iniciar</h1>
           {missing.length > 0 && (
             <div style={{ background: '#330', border: '1px solid #aa0', padding: 12, borderRadius: 6, marginBottom: 16 }}>
-              <p style={{ marginBottom: 8, fontWeight: 600 }}>Variáveis de ambiente faltando no Vercel:</p>
+              <p style={{ marginBottom: 8, fontWeight: 600 }}>Variáveis de ambiente faltando no Replit:</p>
               <ul style={{ paddingLeft: 20 }}>
                 {missing.map((m) => <li key={m}>{m}</li>)}
               </ul>
               <p style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
-                Vai em Vercel → Project → Settings → Environment Variables, adiciona as variáveis acima e faz Redeploy.
+                Vai em Replit → Secrets, adiciona as variáveis acima e reinicia o projeto.
               </p>
             </div>
           )}
