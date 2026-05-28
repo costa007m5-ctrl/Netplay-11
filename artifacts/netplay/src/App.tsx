@@ -436,7 +436,7 @@ export default function App() {
       !m.collection_id && 
       m.type !== 'series' && 
       (m.title || '').trim().length > 0
-    ).slice(0, 60); // Processa até 60 filmes por vez
+    ).slice(0, 20); // Processa até 20 filmes por vez
 
     if (toEnrich.length === 0) return;
 
@@ -484,7 +484,8 @@ export default function App() {
   useEffect(() => {
     if (myMovies.length > 0 && !enrichedRef.current) {
       enrichedRef.current = true;
-      enrichCollectionsInBackground(myMovies);
+      const timer = setTimeout(() => enrichCollectionsInBackground(myMovies), 20000);
+      return () => clearTimeout(timer);
     }
   }, [myMovies, enrichCollectionsInBackground]);
 

@@ -104,7 +104,7 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
 
       {/* Card body */}
       <div
-        className={`w-full h-full relative overflow-hidden ${radiusClass} transition-all duration-350 ease-out group-hover/card:scale-[1.06] group-hover/card:z-50 shadow-[0_8px_30px_rgba(0,0,0,0.5)] group-hover/card:shadow-[0_20px_60px_rgba(0,0,0,0.7),0_0_0_1.5px_rgba(255,26,26,0.35)]`}
+        className={`w-full h-full relative overflow-hidden ${radiusClass} transition-all duration-150 ease-out group-hover/card:scale-[1.06] group-hover/card:z-50 shadow-[0_8px_30px_rgba(0,0,0,0.5)] group-hover/card:shadow-[0_20px_60px_rgba(0,0,0,0.7),0_0_0_1.5px_rgba(255,26,26,0.35)]`}
         style={{ borderRadius: type === 'circle' ? '50%' : undefined }}
       >
         {/* Provider logos */}

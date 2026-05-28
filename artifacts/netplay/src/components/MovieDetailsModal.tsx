@@ -1096,7 +1096,7 @@ const MovieDetailsModal = React.memo(({
           </div>
 
           {/* Tabs Section — Premium */}
-          <div className="flex gap-1 mb-6 md:mb-10 overflow-x-auto no-scrollbar sticky top-0 bg-[#050505]/95 backdrop-blur-[40px] z-50 px-6 md:px-12 pt-4 pb-2 border-b border-white/[0.05]">
+          <div className="flex gap-1 mb-6 md:mb-10 overflow-x-auto no-scrollbar sticky top-0 bg-[#050505]/99 z-50 px-6 md:px-12 pt-4 pb-2 border-b border-white/[0.05]">
             {isSeries && (
               <button 
                 onClick={() => setActiveInfoTab('episodes')}
@@ -1104,7 +1104,7 @@ const MovieDetailsModal = React.memo(({
               >
                 Episódios
                 {activeInfoTab === 'episodes' && (
-                  <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+                  <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.1, duration: 0.12 }} />
                 )}
               </button>
             )}
@@ -1114,7 +1114,7 @@ const MovieDetailsModal = React.memo(({
             >
               Sobre
               {activeInfoTab === 'details' && (
-                <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+                <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.1, duration: 0.12 }} />
               )}
             </button>
             <button 
@@ -1123,7 +1123,7 @@ const MovieDetailsModal = React.memo(({
             >
               Relacionados
               {activeInfoTab === 'similar' && (
-                <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+                <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.1, duration: 0.12 }} />
               )}
             </button>
             {(movie.collection_id || movie.collection_name) && (
@@ -1133,7 +1133,7 @@ const MovieDetailsModal = React.memo(({
               >
                 Coleção
                 {activeInfoTab === 'collection' && (
-                  <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+                  <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.1, duration: 0.12 }} />
                 )}
               </button>
             )}
@@ -1232,7 +1232,7 @@ const MovieDetailsModal = React.memo(({
                             <img 
                               src={movie.collection_poster_path ? (movie.collection_poster_path.startsWith('http') ? movie.collection_poster_path : `https://image.tmdb.org/t/p/w500/${movie.collection_poster_path}`) : movie.poster_path} 
                               alt={movie.collection_name}
-                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                             />
                             <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
                           </div>
@@ -1333,16 +1333,11 @@ const MovieDetailsModal = React.memo(({
                     </div>
                   </div>
                 </div>
-              </motion.div>
-            )}
-            {activeInfoTab === 'episodes' && isSeries && (
-              <motion.div 
-                key="episodes"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="space-y-8"
-              >
+          </div>
+          <div
+            style={{ display: activeInfoTab === 'episodes' && isSeries ? 'block' : 'none' }}
+            className="space-y-8"
+          >
                 {/* Loading enquanto busca episódios do TMDB */}
                 {isFetchingTmdbEpisodes && (
                   <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -1400,11 +1395,10 @@ const MovieDetailsModal = React.memo(({
                     const isWatched = progressPct >= 90;
                     const isInProgress = progressPct > 2 && !isWatched;
                     return (
-                    <motion.div 
+                    <div 
                       key={ep.id || idx}
-                      whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.05)' }}
                       onClick={() => setSelectedEpisodeDetails(ep)}
-                      className="flex flex-row items-center gap-4 p-3 md:p-6 rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 hover:border-red-600/30 transition-all cursor-pointer group relative overflow-hidden"
+                      className="flex flex-row items-center gap-4 p-3 md:p-6 rounded-2xl md:rounded-[2rem] bg-white/5 border border-white/5 hover:border-red-600/30 hover:bg-white/[0.06] transition-colors duration-150 cursor-pointer group relative overflow-hidden"
                     >
                       <div className="text-xl md:text-4xl font-black text-gray-500 group-hover:text-red-600 min-w-[30px] md:min-w-[48px] text-center italic transition-colors z-10">
                         {ep.episode}
@@ -1499,21 +1493,16 @@ const MovieDetailsModal = React.memo(({
                           </div>
                         )}
                       </div>
-                    </motion.div>
+                    </div>
                     );
                   })}
                 </div>
                 </>
                 )}
-              </motion.div>
-            )}
-            {activeInfoTab === 'similar' && (
-              <motion.div
-                key="similar"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -16 }}
-              >
+          </div>
+          <div
+            style={{ display: activeInfoTab === 'similar' ? 'block' : 'none' }}
+          >
                 {similarMovies.length > 0 ? (
                   <>
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-5 flex items-center gap-2">
@@ -1522,13 +1511,9 @@ const MovieDetailsModal = React.memo(({
                     </p>
                     <div className="grid grid-cols-3 gap-3 md:gap-4">
                       {similarMovies.slice(0, 6).map((similar, idx) => (
-                        <motion.div
+                        <div
                           key={similar.id}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: idx * 0.05 }}
-                          whileHover={{ scale: 1.05, y: -4 }}
-                          className="relative aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden cursor-pointer group border border-white/[0.06] hover:border-red-500/50 shadow-xl transition-all"
+                          className="relative aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden cursor-pointer group border border-white/[0.06] hover:border-red-500/50 hover:scale-[1.03] shadow-xl transition-all duration-150"
                           onClick={() => {
                             const modalContent = document.querySelector('.custom-scrollbar');
                             if (modalContent) modalContent.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1538,7 +1523,7 @@ const MovieDetailsModal = React.memo(({
                           <img
                             src={similar.poster_path ? (similar.poster_path.startsWith('http') ? similar.poster_path : `https://image.tmdb.org/t/p/w342/${similar.poster_path}`) : (similar.backdrop_path ? (similar.backdrop_path.startsWith('http') ? similar.backdrop_path : `https://image.tmdb.org/t/p/w500/${similar.backdrop_path}`) : `https://picsum.photos/seed/${similar.id}/300/450`)}
                             alt={similar.title || similar.name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="w-full h-full object-cover transition-transform duration-150 group-hover:scale-105"
                             referrerPolicy="no-referrer"
                             loading="lazy"
                           />
@@ -1561,7 +1546,7 @@ const MovieDetailsModal = React.memo(({
                               <span className="text-yellow-400 text-[7px] font-black">★ {((similar.rating || similar.vote_average) as number).toFixed(1)}</span>
                             )}
                           </div>
-                        </motion.div>
+                        </div>
                       ))}
                     </div>
                   </>
@@ -1571,9 +1556,11 @@ const MovieDetailsModal = React.memo(({
                     <p className="text-gray-500 font-black uppercase tracking-widest text-xs italic">Nenhum título semelhante encontrado.</p>
                   </div>
                 )}
-              </motion.div>
-            )}
-            {activeInfoTab === 'collection' && (() => {
+          </div>
+          <div
+            style={{ display: activeInfoTab === 'collection' ? 'block' : 'none' }}
+          >
+            {(() => {
               const collectionMovies = (allMovies || []).filter((m: Movie) => {
                 if (m.id === movie.id) return false;
                 if (movie.collection_id && m.collection_id && String(m.collection_id) === String(movie.collection_id)) return true;
@@ -1583,12 +1570,7 @@ const MovieDetailsModal = React.memo(({
                 return movieTitleBase.length > 4 && (movieTitleBase.includes(mTitleBase) || mTitleBase.includes(movieTitleBase));
               });
               return (
-                <motion.div
-                  key="collection"
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -16 }}
-                >
+                <div>
                   <div className="flex items-center gap-3 mb-5">
                     <Sparkles size={14} className="text-red-500 animate-pulse" />
                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">
@@ -1606,14 +1588,10 @@ const MovieDetailsModal = React.memo(({
                   ) : (
                     <div className="grid grid-cols-3 gap-3 md:gap-4">
                       {[movie, ...collectionMovies].map((item, idx) => (
-                        <motion.div
+                        <div
                           key={item.id}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: idx * 0.05 }}
-                          whileHover={{ scale: item.id === movie.id ? 1 : 1.05, y: item.id === movie.id ? 0 : -4 }}
-                          className={`relative aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden cursor-pointer group border shadow-xl transition-all
-                            ${item.id === movie.id ? 'border-red-500/60 ring-2 ring-red-500/30' : 'border-white/[0.06] hover:border-red-500/50'}`}
+                          className={`relative aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden cursor-pointer group border shadow-xl transition-all duration-150
+                            ${item.id === movie.id ? 'border-red-500/60 ring-2 ring-red-500/30' : 'border-white/[0.06] hover:border-red-500/50 hover:scale-[1.03]'}`}
                           onClick={() => {
                             if (item.id === movie.id) return;
                             const modalContent = document.querySelector('.custom-scrollbar');
@@ -1624,7 +1602,7 @@ const MovieDetailsModal = React.memo(({
                           <img
                             src={item.poster_path ? (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w342/${item.poster_path}`) : `https://picsum.photos/seed/${item.id}/300/450`}
                             alt={item.title || item.name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="w-full h-full object-cover transition-transform duration-150 group-hover:scale-105"
                             referrerPolicy="no-referrer"
                             loading="lazy"
                           />
@@ -1654,14 +1632,14 @@ const MovieDetailsModal = React.memo(({
                               <span className="text-gray-400 text-[7px] font-bold">{item.release_year || String(item.release_date || '').substring(0, 4)}</span>
                             )}
                           </div>
-                        </motion.div>
+                        </div>
                       ))}
                     </div>
                   )}
-                </motion.div>
+                </div>
               );
             })()}
-          </AnimatePresence>
+          </div>
         </div>
       </div>
       
