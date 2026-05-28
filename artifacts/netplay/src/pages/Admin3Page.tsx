@@ -1,25 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Trash2, Copy, Server, Tv2, ExternalLink, Loader2, RefreshCcw, AlertTriangle, CheckCircle2, Link, Database, Film, Clapperboard, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  ArrowLeft, Trash2, Copy, Server, Tv2, ExternalLink, Loader2,
+  RefreshCcw, AlertTriangle, CheckCircle2, Link, Database, Film,
+  Clapperboard, ChevronDown, ChevronUp, Monitor,
+} from 'lucide-react';
 
 interface DuplicateItem {
   id: number;
   title: string;
   type: string | null;
   poster_path: string | null;
-  backdrop_path: string | null;
   video_url: string | null;
   video_url_2: string | null;
   tmdb_id: number | null;
   is_hidden: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 interface DuplicateGroup {
   items: DuplicateItem[];
   expanded: boolean;
 }
+
+type FilterMode = 'all' | 'terabox' | 'apisflix';
 
 function getPlayerBadges(item: DuplicateItem) {
   const badges: { label: string; color: string; bg: string; icon: React.ElementType }[] = [];
@@ -43,6 +47,7 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
   const fetchDuplicates = useCallback(async () => {
     setLoading(true);
@@ -63,6 +68,27 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
 
   useEffect(() => { fetchDuplicates(); }, [fetchDuplicates]);
 
+  const batchDelete = useCallback(async (ids: number[], msg: string) => {
+    if (ids.length === 0) return;
+    setBatchDeleting(true);
+    try {
+      const res = await fetch('/api/admin/duplicates/batch', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error('Erro ao deletar em lote');
+      setDeletedIds(prev => new Set([...prev, ...ids]));
+      setSuccessMsg(msg);
+      setTimeout(() => setSuccessMsg(null), 3500);
+    } catch (e: any) {
+      setError(e.message);
+      setTimeout(() => setError(null), 4000);
+    } finally {
+      setBatchDeleting(false);
+    }
+  }, []);
+
   const deleteItem = useCallback(async (id: number) => {
     setDeleting(prev => new Set([...prev, id]));
     try {
@@ -79,66 +105,90 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
     }
   }, []);
 
-  const deleteAllDuplicatesInGroup = useCallback(async (groupIdx: number) => {
-    const group = groups[groupIdx];
-    const visibleItems = group.items.filter(i => !deletedIds.has(i.id));
-    if (visibleItems.length <= 1) return;
-    const toDelete = visibleItems.slice(1);
-    const ids = toDelete.map(i => i.id);
-    setBatchDeleting(true);
-    try {
-      const res = await fetch('/api/admin/duplicates/batch', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      });
-      if (!res.ok) throw new Error('Erro ao deletar em lote');
-      setDeletedIds(prev => new Set([...prev, ...ids]));
-      setSuccessMsg(`${ids.length} duplicata(s) removidas!`);
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (e: any) {
-      setError(e.message);
-      setTimeout(() => setError(null), 4000);
-    } finally {
-      setBatchDeleting(false);
-    }
-  }, [groups, deletedIds]);
-
-  const deleteAllDuplicates = useCallback(async () => {
-    if (!confirm('Deletar TODAS as duplicatas? Apenas o primeiro registro de cada título será mantido. Esta ação não pode ser desfeita!')) return;
-    setBatchDeleting(true);
-    const allIds: number[] = [];
-    for (const group of groups) {
-      const visible = group.items.filter(i => !deletedIds.has(i.id));
-      if (visible.length > 1) allIds.push(...visible.slice(1).map(i => i.id));
-    }
-    if (allIds.length === 0) { setBatchDeleting(false); return; }
-    try {
-      const res = await fetch('/api/admin/duplicates/batch', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: allIds }),
-      });
-      if (!res.ok) throw new Error('Erro ao deletar em lote');
-      setDeletedIds(prev => new Set([...prev, ...allIds]));
-      setSuccessMsg(`${allIds.length} duplicatas removidas!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (e: any) {
-      setError(e.message);
-      setTimeout(() => setError(null), 4000);
-    } finally {
-      setBatchDeleting(false);
-    }
-  }, [groups, deletedIds]);
-
   const toggleGroup = (idx: number) => {
     setGroups(prev => prev.map((g, i) => i === idx ? { ...g, expanded: !g.expanded } : g));
   };
 
-  const activeDuplicateCount = groups.reduce((acc, g) => {
+  const filteredGroups = useMemo(() => {
+    return groups.map((g, idx) => ({ ...g, originalIdx: idx })).filter(g => {
+      const visible = g.items.filter(i => !deletedIds.has(i.id));
+      if (visible.length <= 1) return false;
+      if (filterMode === 'terabox') return visible.some(i => i.video_url);
+      if (filterMode === 'apisflix') return visible.some(i => i.tmdb_id);
+      return true;
+    });
+  }, [groups, deletedIds, filterMode]);
+
+  const activeDuplicateCount = useMemo(() => {
+    return filteredGroups.reduce((acc, g) => {
+      const visible = g.items.filter(i => !deletedIds.has(i.id));
+      return acc + Math.max(0, visible.length - 1);
+    }, 0);
+  }, [filteredGroups, deletedIds]);
+
+  const handleDeleteAllTerabox = async () => {
+    if (!confirm(`Deletar todos os itens com link Terabox? Os itens sem link Terabox serão mantidos. Esta ação não pode ser desfeita!`)) return;
+    const ids: number[] = [];
+    for (const g of filteredGroups) {
+      const visible = g.items.filter(i => !deletedIds.has(i.id));
+      const teraboxItems = visible.filter(i => i.video_url);
+      const nonTeraboxItems = visible.filter(i => !i.video_url);
+      if (nonTeraboxItems.length > 0) {
+        ids.push(...teraboxItems.map(i => i.id));
+      } else {
+        ids.push(...teraboxItems.slice(1).map(i => i.id));
+      }
+    }
+    if (ids.length === 0) return;
+    await batchDelete(ids, `${ids.length} item(s) Terabox removidos!`);
+  };
+
+  const handleDeleteAllApisflix = async () => {
+    if (!confirm(`Deletar TODAS as duplicatas no modo APIs Flix? Apenas o primeiro registro de cada grupo será mantido. Esta ação não pode ser desfeita!`)) return;
+    const ids: number[] = [];
+    for (const g of filteredGroups) {
+      const visible = g.items.filter(i => !deletedIds.has(i.id));
+      if (visible.length > 1) ids.push(...visible.slice(1).map(i => i.id));
+    }
+    await batchDelete(ids, `${ids.length} duplicata(s) APIs Flix removidas!`);
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm('Deletar TODAS as duplicatas? Apenas o primeiro registro de cada título será mantido. Esta ação não pode ser desfeita!')) return;
+    const ids: number[] = [];
+    for (const g of filteredGroups) {
+      const visible = g.items.filter(i => !deletedIds.has(i.id));
+      if (visible.length > 1) ids.push(...visible.slice(1).map(i => i.id));
+    }
+    await batchDelete(ids, `${ids.length} duplicatas removidas!`);
+  };
+
+  const handleDeleteTeraboxInGroup = async (g: DuplicateGroup & { originalIdx: number }) => {
     const visible = g.items.filter(i => !deletedIds.has(i.id));
-    return acc + Math.max(0, visible.length - 1);
-  }, 0);
+    const teraboxItems = visible.filter(i => i.video_url);
+    const nonTeraboxItems = visible.filter(i => !i.video_url);
+    let toDelete: DuplicateItem[];
+    if (nonTeraboxItems.length > 0) {
+      toDelete = teraboxItems;
+    } else {
+      toDelete = teraboxItems.slice(1);
+    }
+    if (toDelete.length === 0) return;
+    await batchDelete(toDelete.map(i => i.id), `${toDelete.length} item(s) Terabox removidos!`);
+  };
+
+  const handleDeleteGroupDuplicates = async (g: DuplicateGroup & { originalIdx: number }) => {
+    const visible = g.items.filter(i => !deletedIds.has(i.id));
+    if (visible.length <= 1) return;
+    const toDelete = visible.slice(1).map(i => i.id);
+    await batchDelete(toDelete, `${toDelete.length} duplicata(s) removidas!`);
+  };
+
+  const filterButtons: { id: FilterMode; label: string; icon: React.ElementType }[] = [
+    { id: 'all', label: 'Todos', icon: Copy },
+    { id: 'terabox', label: 'Com Link Terabox', icon: Server },
+    { id: 'apisflix', label: 'APIs Flix', icon: Monitor },
+  ];
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white pt-20 pb-32 px-4 md:px-12">
@@ -203,6 +253,70 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
           )}
         </AnimatePresence>
 
+        {/* Filtros */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {filterButtons.map(f => {
+            const Icon = f.icon;
+            const active = filterMode === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setFilterMode(f.id)}
+                className={`flex items-center gap-2 text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-full border transition-all ${
+                  active
+                    ? f.id === 'terabox'
+                      ? 'bg-blue-600/20 border-blue-500/40 text-blue-400'
+                      : f.id === 'apisflix'
+                      ? 'bg-orange-600/20 border-orange-500/40 text-orange-400'
+                      : 'bg-white/10 border-white/20 text-white'
+                    : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/8'
+                }`}
+              >
+                <Icon size={12} /> {f.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Info box do modo */}
+        <AnimatePresence mode="wait">
+          {filterMode === 'terabox' && (
+            <motion.div
+              key="terabox-info"
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              className="mb-4 flex items-start gap-3 bg-blue-600/10 border border-blue-500/25 rounded-2xl px-5 py-4"
+            >
+              <Server size={16} className="text-blue-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-blue-300 text-xs font-black uppercase tracking-widest mb-1">Modo Terabox</p>
+                <p className="text-blue-400/70 text-xs leading-relaxed">
+                  Mostra apenas grupos que contêm itens com link Terabox.
+                  Use o botão <span className="text-blue-300 font-black">Deletar Terabox</span> para remover somente os
+                  itens com link Terabox do grupo, mantendo os sem link.
+                </p>
+              </div>
+            </motion.div>
+          )}
+          {filterMode === 'apisflix' && (
+            <motion.div
+              key="apisflix-info"
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              className="mb-4 flex items-start gap-3 bg-orange-600/10 border border-orange-500/25 rounded-2xl px-5 py-4"
+            >
+              <Monitor size={16} className="text-orange-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-orange-300 text-xs font-black uppercase tracking-widest mb-1">Modo APIs Flix</p>
+                <p className="text-orange-400/70 text-xs leading-relaxed">
+                  Mostra grupos com conteúdo que usa APIs Flix. Clique em{' '}
+                  <span className="text-orange-300 font-black">Confirmar Exclusão</span> para escolher qual entrada preservar —
+                  os demais serão deletados ao confirmar.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Botões de ação */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
             onClick={fetchDuplicates}
@@ -212,9 +326,32 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
             <RefreshCcw size={14} className={loading ? 'animate-spin' : ''} />
             Atualizar
           </button>
-          {activeDuplicateCount > 0 && (
+
+          {filterMode === 'terabox' && filteredGroups.length > 0 && (
             <button
-              onClick={deleteAllDuplicates}
+              onClick={handleDeleteAllTerabox}
+              disabled={batchDeleting}
+              className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/30 text-blue-400 font-bold text-sm px-5 py-2.5 rounded-full transition-all"
+            >
+              {batchDeleting ? <Loader2 size={14} className="animate-spin" /> : <Server size={14} />}
+              Deletar todos com Terabox ({filteredGroups.length} grupos)
+            </button>
+          )}
+
+          {filterMode === 'apisflix' && filteredGroups.length > 0 && (
+            <button
+              onClick={handleDeleteAllApisflix}
+              disabled={batchDeleting}
+              className="flex items-center gap-2 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-600/30 text-orange-400 font-bold text-sm px-5 py-2.5 rounded-full transition-all"
+            >
+              {batchDeleting ? <Loader2 size={14} className="animate-spin" /> : <Monitor size={14} />}
+              Deletar todos APIs Flix ({filteredGroups.length} grupos)
+            </button>
+          )}
+
+          {filterMode === 'all' && activeDuplicateCount > 0 && (
+            <button
+              onClick={handleDeleteAll}
               disabled={batchDeleting}
               className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 text-red-400 font-bold text-sm px-5 py-2.5 rounded-full transition-all"
             >
@@ -230,7 +367,7 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
               <div key={i} className="h-20 rounded-2xl bg-white/5 animate-pulse" />
             ))}
           </div>
-        ) : groups.length === 0 ? (
+        ) : filteredGroups.length === 0 ? (
           <div className="text-center py-20 text-gray-600">
             <CheckCircle2 size={48} className="mx-auto mb-4 text-green-600" />
             <p className="text-xl font-black uppercase">Nenhum duplicado encontrado!</p>
@@ -238,19 +375,23 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
           </div>
         ) : (
           <div className="space-y-3">
-            {groups.map((group, groupIdx) => {
+            {filteredGroups.map((group) => {
               const visibleItems = group.items.filter(i => !deletedIds.has(i.id));
-              if (visibleItems.length <= 1 && deletedIds.size > 0) return null;
               const duplicatesInGroup = visibleItems.length - 1;
+              const teraboxItems = visibleItems.filter(i => i.video_url);
+              const nonTeraboxItems = visibleItems.filter(i => !i.video_url);
+              const teraboxToDelete = nonTeraboxItems.length > 0
+                ? teraboxItems.length
+                : Math.max(0, teraboxItems.length - 1);
 
               return (
                 <motion.div
-                  key={group.items[0].title}
+                  key={group.items[0].id}
                   layout
                   className="border border-white/10 rounded-2xl overflow-hidden bg-white/[0.02]"
                 >
                   <button
-                    onClick={() => toggleGroup(groupIdx)}
+                    onClick={() => toggleGroup(group.originalIdx)}
                     className="w-full flex items-center gap-4 p-4 hover:bg-white/5 transition-colors text-left"
                   >
                     {group.items[0].poster_path ? (
@@ -264,24 +405,57 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
                       />
                     ) : (
                       <div className="w-10 h-14 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
-                        {group.items[0].type === 'series' ? <Clapperboard size={16} className="text-gray-600" /> : <Film size={16} className="text-gray-600" />}
+                        {group.items[0].type === 'series'
+                          ? <Clapperboard size={16} className="text-gray-600" />
+                          : <Film size={16} className="text-gray-600" />}
                       </div>
                     )}
+
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-black text-sm uppercase tracking-tight truncate">{group.items[0].title}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${group.items[0].type === 'series' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          group.items[0].type === 'series' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+                        }`}>
                           {group.items[0].type === 'series' ? 'Série' : 'Filme'}
                         </span>
                         <span className="text-[9px] text-gray-500 font-bold">
                           {visibleItems.length}x · {duplicatesInGroup} duplicata{duplicatesInGroup !== 1 ? 's' : ''}
                         </span>
+                        {filterMode === 'terabox' && teraboxItems.length > 0 && (
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                            {teraboxItems.length} Terabox
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {duplicatesInGroup > 0 && (
+
+                    <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                      {filterMode === 'terabox' && teraboxToDelete > 0 && (
                         <button
-                          onClick={e => { e.stopPropagation(); deleteAllDuplicatesInGroup(groupIdx); }}
+                          onClick={() => handleDeleteTeraboxInGroup(group)}
+                          disabled={batchDeleting}
+                          className="flex items-center gap-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/30 text-blue-400 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full transition-all"
+                        >
+                          {batchDeleting ? <Loader2 size={10} className="animate-spin" /> : <Server size={10} />}
+                          Deletar Terabox ({teraboxToDelete})
+                        </button>
+                      )}
+
+                      {filterMode === 'apisflix' && duplicatesInGroup > 0 && (
+                        <button
+                          onClick={() => handleDeleteGroupDuplicates(group)}
+                          disabled={batchDeleting}
+                          className="flex items-center gap-1.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-600/30 text-orange-400 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full transition-all"
+                        >
+                          {batchDeleting ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                          Confirmar Exclusão
+                        </button>
+                      )}
+
+                      {filterMode === 'all' && duplicatesInGroup > 0 && (
+                        <button
+                          onClick={() => handleDeleteGroupDuplicates(group)}
                           disabled={batchDeleting}
                           className="flex items-center gap-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 text-red-400 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full transition-all"
                         >
@@ -289,7 +463,10 @@ export default function Admin3Page({ navigate }: { navigate: (to: any) => void }
                           Limpar
                         </button>
                       )}
-                      {group.expanded ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
+
+                      {group.expanded
+                        ? <ChevronUp size={16} className="text-gray-500" />
+                        : <ChevronDown size={16} className="text-gray-500" />}
                     </div>
                   </button>
 
