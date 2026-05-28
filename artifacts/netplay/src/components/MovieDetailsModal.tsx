@@ -1201,15 +1201,12 @@ const MovieDetailsModal = React.memo(({
               </motion.div>
             </motion.div>
           )}
+        </AnimatePresence>
 
-          {activeInfoTab === 'details' && (
-              <motion.div
-                key="details"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="space-y-8"
-              >
+          <div
+            style={{ display: activeInfoTab === 'details' ? 'block' : 'none' }}
+            className="space-y-8"
+          >
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-24">
                   <div className="md:col-span-2 space-y-8">
                     <div className="space-y-6">
