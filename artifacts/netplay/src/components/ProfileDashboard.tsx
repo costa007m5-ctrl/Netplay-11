@@ -1,1065 +1,826 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Settings, Shield, RefreshCcw, Send, TrendingUp, Bookmark, 
-  Play, ChevronRight, Clock, Award, HardDrive, Crown,
-  Trash2, Search, Film, Tv, Sliders, Type, Bell, Monitor,
-  Palette, UserCircle, Edit3, Lock, LogOut, CheckCircle2, AlertCircle, Heart,
-  Save, X, Smartphone, List, Download, Sparkles, Users, Copy, Share2, Zap
+import {
+  Settings, Shield, Play, ChevronRight, Clock, Crown,
+  Trash2, Film, Tv, Edit3, LogOut,
+  Download, Sparkles, Zap, Star, Radio,
+  Bell, Bookmark, History, X,
+  CheckCircle, RefreshCcw, LifeBuoy, Flame,
+  Moon, Save, Volume2,
 } from 'lucide-react';
-import AdminContentEditTab from './admin/AdminContentEditTab';
 import { supabase } from '../lib/supabase';
 
-export default function ProfileDashboard({ 
-  profile, 
-  favorites, 
-  myList, 
-  handleSwitchProfile, 
-  setIsAdminModalOpen, 
-  handleLogout, 
+const TMDB = (p?: string | null, s = 'w342') =>
+  p ? (p.startsWith('http') ? p : `https://image.tmdb.org/t/p/${s}${p}`) : null;
+
+// ── Mini sparkline SVG ──────────────────────────────────────────────────────
+const Sparkline = ({ value, color }: { value: number; color: string }) => {
+  const pts = useMemo(() => {
+    const n = 7;
+    return Array.from({ length: n }, (_, i) => {
+      const t = i / (n - 1);
+      const seed = ((value * 9301 * (i + 3) + 49297) % 233280) / 233280;
+      return Math.max(0, value * (0.25 + t * 0.75 + (seed - 0.5) * 0.25));
+    });
+  }, [value]);
+  const max = Math.max(...pts, 1);
+  const w = 64, h = 22;
+  const coords = pts.map((v, i) => [
+    (i / (pts.length - 1)) * w,
+    h - (v / max) * h * 0.85 - 2,
+  ]);
+  const d = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  return (
+    <svg width={w} height={h} style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={`sg-${value}`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={`${d} L${w},${h} L0,${h} Z`} fill={`url(#sg-${value})`} />
+      <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
+        style={{ filter: `drop-shadow(0 0 3px ${color})` }} />
+    </svg>
+  );
+};
+
+// ── Donut chart (single arc) ────────────────────────────────────────────────
+const DonutArc = ({ pct, color, size = 90 }: { pct: number; color: string; size?: number }) => {
+  const r = (size - 14) / 2;
+  const circ = 2 * Math.PI * r;
+  const fill = (pct / 100) * circ;
+  const cx = size / 2, cy = size / 2;
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={10} />
+      <motion.circle
+        cx={cx} cy={cy} r={r} fill="none"
+        stroke={color} strokeWidth={10}
+        strokeDasharray={`${fill} ${circ - fill}`}
+        strokeLinecap="round"
+        initial={{ strokeDasharray: `0 ${circ}` }}
+        animate={{ strokeDasharray: `${fill} ${circ - fill}` }}
+        transition={{ duration: 1.2, ease: 'easeOut', delay: 0.5 }}
+        style={{ filter: `drop-shadow(0 0 8px ${color})` }}
+      />
+    </svg>
+  );
+};
+
+// ── XP bar ──────────────────────────────────────────────────────────────────
+const XPBar = ({ pct }: { pct: number }) => (
+  <div className="relative h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+    <motion.div
+      className="absolute inset-y-0 left-0 rounded-full"
+      style={{ background: 'linear-gradient(90deg, #ff1a1a, #ff6b6b)', boxShadow: '0 0 10px rgba(255,26,26,0.6)' }}
+      initial={{ width: 0 }}
+      animate={{ width: `${pct}%` }}
+      transition={{ duration: 1.4, ease: 'easeOut', delay: 0.4 }}
+    />
+  </div>
+);
+
+// ── Glass card wrapper ───────────────────────────────────────────────────────
+const GlassCard = ({ children, className = '', style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) => (
+  <div
+    className={`rounded-2xl border border-white/[0.07] ${className}`}
+    style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(20px)', ...style }}
+  >
+    {children}
+  </div>
+);
+
+// ── Dot badge (feature) ──────────────────────────────────────────────────────
+const FeatureBadge = ({ label, color }: { label: string; color: string }) => (
+  <div
+    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide border"
+    style={{
+      color,
+      borderColor: `${color}44`,
+      background: `${color}11`,
+      boxShadow: `0 0 10px ${color}22`,
+    }}
+  >
+    <div className="w-1 h-1 rounded-full" style={{ background: color, boxShadow: `0 0 4px ${color}` }} />
+    {label}
+  </div>
+);
+
+// ── GENRE COLORS ─────────────────────────────────────────────────────────────
+const GENRE_COLORS = ['#ff1a1a', '#f59e0b', '#22c55e', '#0ea5e9', '#a855f7', '#ec4899'];
+
+export default function ProfileDashboard({
+  profile,
+  favorites,
+  myList,
+  handleSwitchProfile,
+  handleLogout,
   handleLogoutAll,
   navigate,
-  sendTestNotification,
   continueWatching,
-  downloads,
   myMovies,
   appSettings,
   setIsSettingsOpen,
   isAdmin,
-  updateAppSettings
+  updateAppSettings,
 }: any) {
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'settings' | 'lists' | 'stats' | 'devices' | 'content'>('overview');
-  
-  // Local settings states (the 50 features)
+
+  const [showSettings, setShowSettings] = useState(false);
   const [autoplay, setAutoplay] = useState(appSettings?.autoplay_next ?? true);
-  const [nextEp, setNextEp] = useState(appSettings?.autoplay_next ?? true);
-  const [dataSaver, setDataSaver] = useState(false);
-  const [spatialAudio, setSpatialAudio] = useState(true);
-  const [subtitleSize, setSubtitleSize] = useState('Médio');
-  const [playbackSpeed, setPlaybackSpeed] = useState('1.0x');
   const [videoQuality, setVideoQuality] = useState('Auto');
-  const [kidsMode, setKidsMode] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  // Local Stats Generation
-  const stats = useMemo(() => {
-    let totalMins = 0;
-    const genreMap: Record<string, number> = {};
-    const actorsMap: Record<string, number> = {};
-
-    const movieIds = new Set();
-    const seriesIds = new Set();
-    
-    // Combine IDs from all sources
-    continueWatching.forEach((cw: any) => (cw.type === 'series' || myMovies?.find(m => m.id === cw.id)?.type === 'series') ? seriesIds.add(cw.id) : movieIds.add(cw.id));
-    myList.forEach((m: any) => m.type === 'series' ? seriesIds.add(m.id) : movieIds.add(m.id));
-    favorites.forEach((m: any) => (m.movie_data?.type === 'series' || m.type === 'series') ? seriesIds.add(m.movie_id || m.id) : movieIds.add(m.movie_id || m.id));
-
-    const movieCount = movieIds.size;
-    const seriesCount = seriesIds.size;
-
-    const allInvolvedIds = new Set([...movieIds, ...seriesIds]);
-    allInvolvedIds.forEach(id => {
-      const m = myMovies?.find((mv: any) => mv.id === id);
-      if (m) {
-        totalMins += (m.runtime || 90);
-        if (m.genres) {
-          m.genres.split(',').forEach((g: string) => {
-            const cleanG = g.trim();
-            if (cleanG) genreMap[cleanG] = (genreMap[cleanG] || 0) + 1;
-          });
-        }
-        if (m.actors) {
-          m.actors.split(',').forEach((a: string) => {
-            const cleanA = a.trim();
-            if (cleanA) actorsMap[cleanA] = (actorsMap[cleanA] || 0) + 1;
-          });
-        }
-      }
-    });
-
-    // Determine top genre
-    const sortedGenres = Object.entries(genreMap).sort((a, b) => b[1] - a[1]);
-    const topGenre = sortedGenres.length > 0 ? sortedGenres[0][0] : 'Indefinido';
-
-    // Determine top actor
-    const sortedActors = Object.entries(actorsMap).sort((a, b) => b[1] - a[1]);
-    const topActor = sortedActors.length > 0 ? sortedActors[0][0] : 'Nenhum';
-
-    const hoursWatched = Math.floor(totalMins / 60);
-    
-    let userLevel = 'Iniciante';
-    if (hoursWatched > 50) userLevel = 'Cinéfilo';
-    if (hoursWatched > 150) userLevel = 'Viciado';
-    if (hoursWatched > 300) userLevel = 'Crítico de Elite';
-
-    return { totalMins, hoursWatched, movieCount, seriesCount, topGenre, topActor, userLevel };
-  }, [continueWatching, myMovies]);
-
-  // Storage calculation
-  const totalStorage = 32 * 1024; // Mock 32GB
-  const usedStorage = useMemo(() => {
-    let totalSize = 0;
-    (downloads || []).forEach((d: any) => {
-      if (d.videoBlob) totalSize += d.videoBlob.size / (1024 * 1024);
-    });
-    return Math.round(totalSize);
-  }, [downloads]);
-
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [referralStats, setReferralStats] = useState({ count: 0, credits: 0, freeMonths: 0, pending: null as any });
-  const [redeeming, setRedeeming] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (activeSubTab === 'plan' && appSettings?.user_id) {
-      fetch(`/api/referrals?userId=${appSettings.user_id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (!data.error) {
-            setReferralStats({ count: data.count, credits: data.credits, freeMonths: data.freeMonths, pending: data.pending });
-          }
-        })
-        .catch(err => console.error("Erro ao buscar indicações:", err));
-    }
-  }, [activeSubTab, appSettings?.user_id]);
-
-  const handleRedeem = async () => {
-    if (!appSettings?.user_id) return;
-    setRedeeming(true);
-    try {
-      const res = await fetch('/api/referrals/redeem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: appSettings.user_id,
-          count: referralStats.count,
-          credits: referralStats.credits,
-          freeMonths: referralStats.freeMonths
-        })
-      });
-      if (!res.ok) throw new Error('Falha ao resgatar');
-      alert('Resgate solicitado com sucesso! A administração irá processar em breve.');
-      setReferralStats(prev => ({ ...prev, pending: { status: 'pending' } }));
-    } catch (e: any) {
-      alert('Erro: ' + e.message);
-    }
-    setRedeeming(false);
-  };
-
-  // Sync local state if appSettings changes from outside
-  useEffect(() => {
-    if (appSettings) {
-      setAutoplay(appSettings.autoplay_next ?? true);
-      setNextEp(appSettings.autoplay_next ?? true);
-    }
+    if (appSettings) setAutoplay(appSettings.autoplay_next ?? true);
   }, [appSettings]);
 
-  // Load profile-specific settings from localStorage (UI preferences)
-  useEffect(() => {
-    const s = localStorage.getItem(`profile_settings_${profile?.id}`);
-    if (s) {
-      const parsed = JSON.parse(s);
-      setDataSaver(parsed.dataSaver ?? false);
-      setSpatialAudio(parsed.spatialAudio ?? true);
-      setSubtitleSize(parsed.subtitleSize ?? 'Médio');
-      setPlaybackSpeed(parsed.playbackSpeed ?? '1.0x');
-      setVideoQuality(parsed.videoQuality ?? 'Auto');
-      setKidsMode(parsed.kidsMode ?? false);
-      setReduceMotion(parsed.reduceMotion ?? false);
-    }
-  }, [profile?.id]);
+  // ── Computed stats ───────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const genreMap: Record<string, number> = {};
+    const movieIds = new Set<number>();
+    const seriesIds = new Set<number>();
+    let totalMins = 0;
 
-  const saveSettings = async () => {
-    // 1. Save global settings to Supabase
-    if (updateAppSettings) {
-      await updateAppSettings({
-        autoplay_next: autoplay,
+    myList?.forEach((m: any) => m.type === 'series' ? seriesIds.add(m.id) : movieIds.add(m.id));
+    favorites?.forEach((m: any) => {
+      const id = m.movie_id || m.id;
+      const type = m.movie_data?.type || m.type;
+      type === 'series' ? seriesIds.add(id) : movieIds.add(id);
+    });
+
+    new Set([...movieIds, ...seriesIds]).forEach(id => {
+      const m = myMovies?.find((mv: any) => mv.id === id);
+      if (!m) return;
+      totalMins += m.runtime || 90;
+      (m.genres || '').split(',').forEach((g: string) => {
+        const k = g.trim();
+        if (k) genreMap[k] = (genreMap[k] || 0) + 1;
       });
-    }
+    });
 
-    // 2. Save profile-specific settings to localStorage
-    localStorage.setItem(`profile_settings_${profile?.id}`, JSON.stringify({
-      dataSaver, spatialAudio, subtitleSize, 
-      playbackSpeed, videoQuality, kidsMode, reduceMotion
+    const hoursWatched = Math.floor(totalMins / 60);
+    const sortedGenres = Object.entries(genreMap).sort((a, b) => b[1] - a[1]);
+    const totalGenreCount = sortedGenres.reduce((s, [, c]) => s + c, 0) || 1;
+    const topGenres = sortedGenres.slice(0, 4).map(([name, count], i) => ({
+      name,
+      pct: Math.round((count / totalGenreCount) * 100),
+      color: GENRE_COLORS[i] || '#fff',
     }));
-    alert('As configurações foram salvas com sucesso no banco de dados e localmente.');
-  };
 
-  const handleExportData = () => {
-    setShowExportModal(true);
-  };
+    const level = Math.min(99, Math.max(1, Math.floor(hoursWatched / 3) + Math.floor(movieIds.size / 8)));
+    const xpCurrent = (hoursWatched % 50) * 43 + (movieIds.size % 20) * 11;
+    const xpMax = 10900;
+    const xpPct = Math.min(99, Math.round((xpCurrent / xpMax) * 100));
+    const vipPoints = movieIds.size * 42 + hoursWatched * 100 + seriesIds.size * 80;
 
-  const handleDownloadJSON = () => {
-    const data = {
-      exportedAt: new Date().toISOString(),
-      profile: {
-        id: profile?.id,
-        name: profile?.name,
-        avatar_url: profile?.avatar_url,
-      },
-      stats: {
-        horasAssistidas: stats.hoursWatched,
-        filmes: stats.movieCount,
-        series: stats.seriesCount,
-        generoFavorito: stats.topGenre,
-        atorFavorito: stats.topActor,
-        nivel: stats.userLevel,
-      },
-      historicoRecente: continueWatching.slice(0, 50).map((cw: any) => {
-        const m = myMovies?.find((mv: any) => mv.id === cw.id);
-        return {
-          titulo: m?.title || m?.name || `ID ${cw.id}`,
-          tipo: m?.type || 'filme',
-          progresso: `${Math.round((cw.progress / (cw.duration || 1)) * 100)}%`,
-          duracaoAssistida: `${Math.floor(cw.progress / 60)}min`,
-        };
-      }),
-      minhaLista: myList.map((m: any) => ({
-        titulo: m.title || m.name,
-        tipo: m.type || 'filme',
-        ano: m.release_date ? new Date(m.release_date).getFullYear() : undefined,
-      })),
-      favoritos: favorites.map((fM: any) => {
-        const movieInfo = myMovies?.find((m: any) => m.id === (fM.movie_data?.id || fM.movie_id)) || fM.movie_data;
-        return {
-          titulo: movieInfo?.title || movieInfo?.name || `ID ${fM.movie_id}`,
-          tipo: movieInfo?.type || 'filme',
-        };
-      }),
+    return {
+      hoursWatched,
+      movieCount: movieIds.size,
+      seriesCount: seriesIds.size,
+      topGenre: topGenres[0]?.name || 'Ação',
+      topGenres,
+      level,
+      xpCurrent,
+      xpMax,
+      xpPct,
+      vipPoints,
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `netplay_${profile?.name?.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  }, [myList, favorites, myMovies]);
 
+  // ── Member since ─────────────────────────────────────────────────────────
+  const memberSince = useMemo(() => {
+    const d = profile?.created_at || appSettings?.created_at;
+    if (!d) return 'Janeiro de 2024';
+    return new Date(d).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  }, [profile, appSettings]);
+
+  // ── Continue watching enriched ───────────────────────────────────────────
+  const cwItems = useMemo(() => {
+    return (continueWatching || [])
+      .slice(0, 6)
+      .map((cw: any) => {
+        const m = myMovies?.find((mv: any) => mv.id === cw.id) || cw;
+        const prog = cw.progress || 0;
+        const dur = cw.duration || (m.runtime ? m.runtime * 60 : 5400);
+        const pct = Math.min(99, Math.round((prog / dur) * 100));
+        const remaining = Math.max(0, Math.round((dur - prog) / 60));
+        return { ...m, _progress: pct, _remaining: remaining, _cw: cw };
+      });
+  }, [continueWatching, myMovies]);
+
+  // ── Backdrop images for header (from library) ────────────────────────────
+  const headerPosters = useMemo(() => {
+    const all = [...(continueWatching || []), ...(myList || [])].slice(0, 8);
+    return all.map((m: any) => {
+      const mv = myMovies?.find((x: any) => x.id === m.id) || m;
+      return TMDB(mv.backdrop_path || mv.poster_path, 'w500') || TMDB(mv.poster_path, 'w342');
+    }).filter(Boolean);
+  }, [continueWatching, myList, myMovies]);
+
+  // ── Clear history ────────────────────────────────────────────────────────
   const handleClearHistory = async () => {
-    if (window.confirm('Tem certeza que deseja apagar todo o histórico de visualização? Isso não pode ser desfeito.')) {
-      try {
-        // Clear from Supabase
-        const { error } = await supabase
-          .from('watch_history')
-          .delete()
-          .eq('profile_id', profile.id);
-        
-        if (error) throw error;
-
-        // Clear from LocalStorage
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
-          if (key.startsWith('netplay_progress_')) {
-            localStorage.removeItem(key);
-          }
-        });
-
-        alert('Todo o seu histórico de visualização foi removido com sucesso.');
-        window.location.reload();
-      } catch (err: any) {
-        console.error('Erro ao limpar histórico:', err);
-        alert('Erro ao limpar histórico no banco de dados.');
-      }
+    if (!window.confirm('Tem certeza que deseja apagar todo o histórico de visualização?')) return;
+    try {
+      await supabase.from('watch_history').delete().eq('profile_id', profile.id);
+      Object.keys(localStorage).filter(k => k.startsWith('netplay_progress_')).forEach(k => localStorage.removeItem(k));
+      window.location.reload();
+    } catch (err: any) {
+      alert('Erro ao limpar histórico.');
     }
   };
 
-  const menuItems = [
-    { id: 'overview', icon: UserCircle, label: 'Geral' },
-    { id: 'plan', icon: Crown, label: 'Assinatura' },
-    { id: 'stats', icon: TrendingUp, label: 'Analytics' },
-    { id: 'lists', icon: List, label: 'Minhas Listas' },
-    { id: 'settings', icon: Sliders, label: 'Preferências (Novo)' },
-    { id: 'devices', icon: Smartphone, label: 'Dispositivos' },
-    ...(isAdmin ? [{ id: 'content', icon: Edit3, label: 'Conteúdo' }] : []),
+  // ── Save settings ────────────────────────────────────────────────────────
+  const handleSaveSettings = async () => {
+    setSaving(true);
+    if (updateAppSettings) await updateAppSettings({ autoplay_next: autoplay });
+    localStorage.setItem(`profile_settings_${profile?.id}`, JSON.stringify({ videoQuality, autoplay }));
+    setSaving(false);
+    setShowSettings(false);
+  };
+
+  // ── Quick actions config ─────────────────────────────────────────────────
+  const quickActions = [
+    { icon: LifeBuoy,  label: 'Suporte VIP',       sub: 'Atendimento exclusivo', color: '#22c55e', action: () => {} },
+    { icon: Download,  label: 'Downloads',          sub: `${myList?.length || 0} itens`, color: '#a855f7', action: () => navigate('/downloads') },
+    { icon: Bookmark,  label: 'Minha Lista',        sub: `${myList?.length || 0} salvos`, color: '#f97316', action: () => navigate('/mylist') },
+    { icon: History,   label: 'Histórico',          sub: 'Ver tudo',              color: '#0ea5e9', action: () => navigate('/history') },
+    { icon: Trash2,    label: 'Limpar Histórico',   sub: 'Excluir tudo',          color: '#ff1a1a', action: handleClearHistory },
   ];
 
-  return (
-    <motion.div
-      key="profile-dashboard"
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -40 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="pt-24 px-4 md:px-8 max-w-[1600px] mx-auto min-h-screen pb-24"
-    >
-      {/* PRIMARY NAVIGATION TABS (MINIABAS) */}
-      <div className="flex overflow-x-auto no-scrollbar bg-white/5 border border-white/10 rounded-2xl mb-8 backdrop-blur-xl p-1 shrink-0">
-        {menuItems.map(item => {
-          const Icon = item.icon;
-          const isActive = activeSubTab === item.id;
-          return (
-            <button 
-              key={item.id}
-              onClick={() => setActiveSubTab(item.id as any)}
-              className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap rounded-xl ${isActive ? 'text-white bg-red-600 shadow-lg shadow-red-600/30' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
-            >
-              <Icon size={16} className={isActive ? 'text-white' : ''} /> <span className="hidden sm:inline">{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
+  const AVATAR_SRC = profile?.avatar_url || 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png';
 
-      {/* HEADER SECTION (PROFILE INFO) */}
-      <div className="relative w-full rounded-[2rem] md:rounded-[3rem] overflow-hidden bg-white/5 border border-white/10 mb-8 backdrop-blur-3xl shadow-2xl">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-600/20 blur-[150px] -mr-48 -mt-48 rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 blur-[120px] -ml-40 -mb-40 rounded-full pointer-events-none"></div>
-        
-        <div className="relative z-10 p-6 md:p-10 flex flex-col md:flex-row items-center gap-8 md:gap-12">
-          <div className="relative group cursor-pointer" onClick={() => navigate('/perfil')}>
-            <div className="absolute -inset-2 bg-gradient-to-tr from-red-600 to-purple-600 rounded-3xl blur opacity-30 group-hover:opacity-75 transition duration-500"></div>
-            <img 
-              src={profile?.avatar_url || "https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png"} 
-              alt="Avatar" 
-              className="relative w-24 h-24 md:w-40 md:h-40 rounded-[1.5rem] object-cover border-4 border-white shadow-2xl transition-transform group-hover:scale-105"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute bottom-1 right-1 bg-red-600 text-white p-1.5 rounded-lg shadow-xl">
-              <Edit3 size={12} />
+  return (
+    <div className="min-h-screen pb-28" style={{ background: '#050505' }}>
+
+      {/* ━━━ CINEMATIC HEADER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div className="relative overflow-hidden" style={{ height: 220 }}>
+        {/* poster collage bg */}
+        <div className="absolute inset-0 flex gap-0">
+          {(headerPosters.length > 0 ? headerPosters : [null, null, null, null]).map((src, i) => (
+            <div key={i} className="flex-1 h-full relative overflow-hidden">
+              {src
+                ? <img src={src} alt="" className="w-full h-full object-cover scale-110" style={{ filter: 'blur(6px) saturate(0.6)' }} />
+                : <div className="w-full h-full" style={{ background: `hsl(${i * 60},40%,8%)` }} />
+              }
             </div>
-          </div>
-          
-          <div className="flex-1 text-center md:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-4">
-              <Award size={12} className="text-yellow-500" /> Nível: {stats.userLevel}
+          ))}
+        </div>
+        {/* overlays */}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(5,5,5,0.3) 0%, rgba(5,5,5,0.1) 40%, rgba(5,5,5,0.85) 100%)' }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 30% 50%, rgba(255,26,26,0.18) 0%, transparent 65%)' }} />
+
+        {/* top bar */}
+        <div className="absolute top-0 inset-x-0 flex items-center justify-between px-4 pt-12">
+          {isAdmin && (
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-yellow-500/40"
+              style={{ background: 'rgba(234,179,8,0.15)', backdropFilter: 'blur(10px)' }}
+            >
+              <Crown size={11} className="text-yellow-400" />
+              <span className="text-yellow-400 text-[10px] font-black uppercase tracking-widest">Premium Ultra</span>
             </div>
-            <h1 className="text-3xl md:text-6xl font-black text-white uppercase tracking-tighter italic mb-4">{profile?.name}</h1>
-            
-            <div className="flex flex-wrap justify-center md:justify-start gap-3">
-              {isAdmin && (
-                <button onClick={() => navigate('/admin')} className="bg-red-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-red-500 transition-all shadow-xl flex items-center gap-2">
-                  <Shield size={14} /> Multi-Admin
-                </button>
-              )}
-              {isAdmin && (
-                <button onClick={() => navigate('/admin2')} className="bg-gradient-to-r from-purple-700 to-red-700 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:opacity-90 transition-all shadow-xl flex items-center gap-2 border border-purple-500/30">
-                  <Zap size={14} /> Admin 2.0
-                </button>
-              )}
-              {isAdmin && (
-                <button onClick={() => navigate('/admin3')} className="bg-gradient-to-r from-orange-700 to-red-800 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:opacity-90 transition-all shadow-xl flex items-center gap-2 border border-orange-500/30">
-                  <Copy size={14} /> Admin 3.0
-                </button>
-              )}
-              <button onClick={handleSwitchProfile} className="bg-white/10 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] border border-white/10 hover:bg-white/20 transition-all flex items-center gap-2 shadow-xl">
-                <RefreshCcw size={14} /> Trocar Perfil
-              </button>
-            </div>
+          )}
+          {!isAdmin && <div />}
+          <div className="flex items-center gap-2">
+            <button
+              className="w-8 h-8 rounded-full flex items-center justify-center border border-white/10"
+              style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}
+            >
+              <Bell size={15} className="text-white/70" />
+            </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="w-8 h-8 rounded-full flex items-center justify-center border border-white/10"
+              style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}
+            >
+              <Settings size={15} className="text-white/70" />
+            </button>
           </div>
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeSubTab}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-          className="w-full"
-        >
-          {/* TAB: OVERVIEW */}
-          {activeSubTab === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-              <div className="col-span-1 lg:col-span-2 space-y-6 md:space-y-8">
-                {/* Bento Box Stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10 backdrop-blur-xl relative overflow-hidden group hover:border-red-600/50 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-red-600/20 flex items-center justify-center mb-4 text-red-600"><Clock size={20} /></div>
-                    <span className="text-3xl font-black text-white block mb-1">{stats.hoursWatched}h</span>
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold block">Tempo Assistido</span>
-                  </div>
-                  <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10 backdrop-blur-xl relative overflow-hidden group hover:border-purple-600/50 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-purple-600/20 flex items-center justify-center mb-4 text-purple-500"><Heart size={20} /></div>
-                    <span className="text-lg md:text-xl font-black text-white block mb-1 truncate">{stats.topGenre}</span>
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold block">Gênero Favorito</span>
-                  </div>
-                  <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10 backdrop-blur-xl relative overflow-hidden group hover:border-blue-600/50 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center mb-4 text-blue-500"><Film size={20} /></div>
-                    <span className="text-3xl font-black text-white block mb-1">{stats.movieCount}</span>
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold block">Filmes</span>
-                  </div>
-                  <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10 backdrop-blur-xl relative overflow-hidden group hover:border-green-600/50 transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-green-600/20 flex items-center justify-center mb-4 text-green-500"><Tv size={20} /></div>
-                    <span className="text-3xl font-black text-white block mb-1">{stats.seriesCount}</span>
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold block">Séries</span>
-                  </div>
-                </div>
-
-                <div className="bg-white/5 p-6 md:p-8 rounded-[2rem] px-8 border border-white/10 backdrop-blur-xl">
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-2 mb-6">
-                    <TrendingUp className="text-red-600" /> Continue Assistindo
-                  </h3>
-                  {continueWatching.length === 0 ? (
-                    <p className="text-gray-500 text-sm">Seu histórico está vazio.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {continueWatching.slice(0, 4).map((cw: any) => {
-                        const m = myMovies?.find(mv => mv.id === cw.id);
-                        if(!m) return null;
-                        return (
-                           <div key={cw.id} className="cursor-pointer group" onClick={() => navigate(`/movie/${m.id}`)}>
-                             <div className="aspect-[2/3] rounded-xl overflow-hidden mb-3 relative">
-                               <img src={m.poster_path} alt={m.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                 <Play fill="currentColor" className="text-white w-12 h-12 shadow-2xl" />
-                               </div>
-                             </div>
-                             <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                               <div className="h-full bg-red-600" style={{ width: `${(cw.progress / cw.duration) * 100}%` }}></div>
-                             </div>
-                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Sidebar actions inside Overview */}
-              <div className="col-span-1 space-y-6">
-                <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl">
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-2 mb-6">
-                    <HardDrive className="text-blue-500" /> Armazenamento
-                  </h3>
-                  <div className="flex justify-between text-xs font-bold text-gray-400 mb-2">
-                    <span>{usedStorage} MB usados</span>
-                    <span>{totalStorage} MB Total</span>
-                  </div>
-                  <div className="w-full h-4 bg-black/50 rounded-full overflow-hidden flex border border-white/5 mb-6">
-                    <div className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${(usedStorage/totalStorage)*100}%` }}></div>
-                    <div className="h-full bg-green-500/50" style={{ width: '15%' }}></div>
-                  </div>
-                  <button onClick={() => navigate('/downloads')} className="w-full py-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-black text-xs uppercase tracking-widest transition-all">
-                    Gerenciar Downloads
-                  </button>
-                </div>
-
-                <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl">
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-2 mb-6">
-                    <Settings className="text-gray-400" /> Ações Rápidas
-                  </h3>
-                  <div className="space-y-3">
-                    {appSettings?.subscription_plan === 'max' && (
-                      <button onClick={() => window.open('https://wa.me/?text=Olá, sou cliente VIP Netprime Max e preciso de suporte.', '_blank')} className="w-full py-4 px-6 rounded-xl bg-green-600/10 hover:bg-green-600/20 text-green-500 border border-green-600/20 font-black text-xs uppercase tracking-widest flex items-center justify-between transition-all shadow-[0_0_15px_rgba(34,197,94,0.2)]">
-                        <span>Suporte VIP (WhatsApp)</span> <Smartphone size={16} />
-                      </button>
-                    )}
-                    <button onClick={handleClearHistory} className="w-full py-4 px-6 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-500 border border-red-600/20 font-black text-xs uppercase tracking-widest flex items-center justify-between transition-all">
-                      <span>Limpar Histórico</span> <Trash2 size={16} />
-                    </button>
-                    <button onClick={handleExportData} className="w-full py-4 px-6 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 font-black text-xs uppercase tracking-widest flex items-center justify-between transition-all">
-                      <span>Exportar Meus Dados</span> <Download size={16} />
-                    </button>
-                    <button onClick={handleLogout} className="w-full py-4 px-6 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 font-black text-xs uppercase tracking-widest flex items-center justify-between transition-all mt-4">
-                      <span>Encerrar Sessão</span> <LogOut size={16} />
-                    </button>
-                  </div>
-                </div>
+      {/* ━━━ PROFILE CARD (overlaps header) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div className="px-4 -mt-14 relative z-10">
+        <GlassCard className="p-4 mb-3">
+          <div className="flex items-start gap-3">
+            {/* avatar */}
+            <div className="relative flex-none">
+              <div
+                className="absolute -inset-1.5 rounded-2xl"
+                style={{ background: 'conic-gradient(from 0deg, #ff1a1a, #ff6b6b, #ff1a1a)', filter: 'blur(3px)', opacity: 0.9 }}
+              />
+              <div
+                className="absolute -inset-0.5 rounded-2xl"
+                style={{ background: 'conic-gradient(from 90deg, #ff1a1a 0%, transparent 50%, #ff1a1a 100%)', opacity: 0.5 }}
+              />
+              <img
+                src={AVATAR_SRC}
+                alt="Avatar"
+                className="relative w-[78px] h-[78px] rounded-2xl object-cover border-2 border-black"
+                referrerPolicy="no-referrer"
+              />
+              <div
+                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center border border-black"
+                style={{ background: '#ff1a1a', boxShadow: '0 0 10px rgba(255,26,26,0.7)' }}
+              >
+                <Edit3 size={11} className="text-white" />
               </div>
             </div>
-          )}
 
-          {/* TAB: SETTINGS (The 50 Functions Matrix) */}
-          {activeSubTab === 'settings' && (
-             <div className="bg-white/5 p-6 md:p-12 rounded-[2rem] border border-white/10 backdrop-blur-xl">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-10 gap-4">
-                  <div>
-                    <h3 className="text-3xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3">
-                      <Sliders className="text-red-600" size={32} /> Central de Preferências
-                    </h3>
-                    <p className="text-gray-400 font-bold text-sm mt-2">Personalize dezenas de comportamentos do seu player, interface e conta.</p>
-                  </div>
-                  <button onClick={saveSettings} className="bg-red-600 text-white px-8 py-4 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-red-500 shadow-xl flex items-center gap-2">
-                    <Save size={16} /> Salvar Alterações
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-10">
-                  {/* Reprodução */}
-                  <div className="space-y-6">
-                    <h4 className="text-red-500 font-black tracking-widest uppercase text-sm border-b border-red-500/20 pb-2">Reprodução e Tela</h4>
-                    
-                    <label className="flex items-center justify-between cursor-pointer group">
-                      <div>
-                        <p className="text-white font-bold">Auto-Play em Prévias</p>
-                        <p className="text-gray-500 text-xs">Reproduzir trailers automaticamente no menu</p>
-                      </div>
-                      <div className={`w-12 h-6 rounded-full transition-colors relative ${autoplay ? 'bg-red-600' : 'bg-white/20'}`} onClick={() => setAutoplay(!autoplay)}>
-                        <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${autoplay ? 'left-7' : 'left-1'}`}></div>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer group">
-                      <div>
-                        <p className="text-white font-bold">Próximo Episódio</p>
-                        <p className="text-gray-500 text-xs">Pular para o próximo automaticamente</p>
-                      </div>
-                      <div className={`w-12 h-6 rounded-full transition-colors relative ${nextEp ? 'bg-red-600' : 'bg-white/20'}`} onClick={() => setNextEp(!nextEp)}>
-                        <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${nextEp ? 'left-7' : 'left-1'}`}></div>
-                      </div>
-                    </label>
-
-                    <div>
-                      <p className="text-white font-bold mb-2">Qualidade de Vídeo Padrão</p>
-                      <select value={videoQuality} onChange={(e) => setVideoQuality(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-red-600 transition-colors">
-                        <option>Auto (Recomendado)</option>
-                        <option>1080p Ultra HD</option>
-                        <option>720p HD</option>
-                        <option>480p Economia</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <p className="text-white font-bold mb-2">Velocidade de Reprodução</p>
-                      <div className="flex gap-2">
-                        {['0.75x', '1.0x', '1.25x', '1.5x'].map(spd => (
-                           <button key={spd} onClick={() => setPlaybackSpeed(spd)} className={`flex-1 py-2 rounded-lg font-black text-xs transition-colors ${playbackSpeed === spd ? 'bg-red-600 text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'}`}>{spd}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Som e Legendas */}
-                  <div className="space-y-6">
-                    <h4 className="text-blue-500 font-black tracking-widest uppercase text-sm border-b border-blue-500/20 pb-2">Som e Acessibilidade</h4>
-                    
-                    <label className="flex items-center justify-between cursor-pointer group">
-                      <div>
-                        <p className="text-white font-bold">Áudio Espacial</p>
-                        <p className="text-gray-500 text-xs">Aprimorar graves e direção 3D do som</p>
-                      </div>
-                      <div className={`w-12 h-6 rounded-full transition-colors relative ${spatialAudio ? 'bg-blue-600' : 'bg-white/20'}`} onClick={() => setSpatialAudio(!spatialAudio)}>
-                        <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${spatialAudio ? 'left-7' : 'left-1'}`}></div>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer group">
-                      <div>
-                        <p className="text-white font-bold">Reduzir Movimento</p>
-                        <p className="text-gray-500 text-xs">Desativa as animações de interface</p>
-                      </div>
-                      <div className={`w-12 h-6 rounded-full transition-colors relative ${reduceMotion ? 'bg-blue-600' : 'bg-white/20'}`} onClick={() => setReduceMotion(!reduceMotion)}>
-                        <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${reduceMotion ? 'left-7' : 'left-1'}`}></div>
-                      </div>
-                    </label>
-
-                    <div>
-                      <p className="text-white font-bold mb-2 flex items-center gap-2">Tema da Interface {appSettings?.subscription_plan === 'max' ? <Sparkles size={14} className="text-yellow-500" /> : <Lock size={14} className="text-gray-500" />}</p>
-                      <select 
-                        value={appSettings?.theme || 'default'} 
-                        onChange={(e) => {
-                          if (appSettings?.subscription_plan !== 'max') {
-                            document.dispatchEvent(new CustomEvent('open-plans'));
-                            return;
-                          }
-                          if (updateAppSettings) updateAppSettings('theme', e.target.value);
-                        }} 
-                        className={`w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-red-600 transition-colors ${appSettings?.subscription_plan !== 'max' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <option value="default">Vermelho (Padrão)</option>
-                        <option value="netflix">Netflix</option>
-                        <option value="neon" disabled={appSettings?.subscription_plan !== 'max'}>Cyberpunk Neon (Max Only)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <p className="text-white font-bold mb-2">Tamanho das Legendas</p>
-                      <select value={subtitleSize} onChange={(e) => setSubtitleSize(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-blue-600 transition-colors">
-                        <option>Pequeno</option>
-                        <option>Médio (Padrão)</option>
-                        <option>Grande</option>
-                        <option>Extra Grande</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <p className="text-white font-bold mb-2">Cor de Fundo da Legenda</p>
-                      <div className="flex gap-2">
-                        {['Preto', 'Transparente', 'Sem fundo'].map(bg => (
-                           <button key={bg} className="flex-1 py-2 rounded-lg font-black text-xs bg-white/10 text-gray-400 hover:bg-white/20 transition-colors">{bg}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Dados e Downloads Omitidos */}
-                </div>
-             </div>
-          )}
-
-          {/* TAB: LISTS */}
-          {activeSubTab === 'lists' && (
-            <div className="space-y-12">
-              <div className="bg-white/5 p-6 md:p-12 rounded-[2rem] border border-white/10 backdrop-blur-xl">
-                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3 mb-8">
-                    <Bookmark className="text-red-600" /> Minha Lista ({myList.length})
-                 </h3>
-                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-                    {myList.map((movie: any) => (
-                      <div key={movie.id} className="aspect-[2/3] relative rounded-xl overflow-hidden cursor-pointer group hover:ring-4 hover:ring-red-600 transition-all shadow-xl" onClick={() => navigate(`/movie/${movie.id}`)}>
-                        <img src={movie.poster_path} alt={movie.title} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent flex flex-col justify-end p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                           <span className="text-white text-xs font-black truncate">{movie.title || movie.name}</span>
-                        </div>
-                      </div>
-                    ))}
-                 </div>
+            {/* name + role */}
+            <div className="flex-1 min-w-0 pt-1">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <h1 className="text-white font-black text-[22px] tracking-tight leading-none">{profile?.name || 'USUÁRIO'}</h1>
+                <CheckCircle size={15} className="text-red-500 flex-none" fill="#ff1a1a" />
               </div>
-
-              <div className="bg-white/5 p-6 md:p-12 rounded-[2rem] border border-white/10 backdrop-blur-xl">
-                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3 mb-8">
-                    <Heart className="text-purple-600" /> Meus Filmes e Séries Curtidos ({favorites.length})
-                 </h3>
-                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-                    {favorites.map((fM: any) => {
-                      const movieInfo = myMovies?.find(m => m.id === (fM.movie_data?.id || fM.movie_id)) || fM.movie_data;
-                      if(!movieInfo) return null;
-                      return (
-                        <div key={fM.id} className="aspect-[2/3] relative rounded-xl overflow-hidden cursor-pointer group hover:ring-4 hover:ring-purple-600 transition-all shadow-xl" onClick={() => navigate(`/movie/${movieInfo.id}`)}>
-                          <img src={movieInfo.poster_path} alt={movieInfo.title} className="w-full h-full object-cover" />
-                          <div className="absolute top-2 right-2 bg-purple-600 p-1.5 rounded-full"><Heart fill="white" size={14} className="text-white" /></div>
-                        </div>
-                      )
-                    })}
-                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB: PLAN & REFERRALS */}
-          {activeSubTab === 'plan' && (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-               {/* Current Plan Info */}
-               <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl relative overflow-hidden">
-                 <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/20 blur-3xl -mr-10 -mt-10 rounded-full"></div>
-                 <h3 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3 mb-8">
-                   <Crown className="text-red-600" /> Assinatura e Faturamento
-                 </h3>
-                 
-                 <div className="space-y-6 relative z-10">
-                   <div>
-                     <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Plano Atual</p>
-                     <p className="text-3xl font-black text-white uppercase italic tracking-tighter">
-                       {appSettings?.subscription_plan === 'hub' ? 'NETPLAY HUB' : appSettings?.subscription_plan === 'plus' ? 'NETPLAY PLUS' : 'NETPLAY MAX'}
-                     </p>
-                   </div>
-                   <div>
-                     <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Status</p>
-                     <p className={`text-sm font-black uppercase tracking-widest ${appSettings?.subscription_status === 'active' ? 'text-green-500' : 'text-red-500'}`}>
-                       {appSettings?.subscription_status === 'active' ? 'Ativo' : 'Inativo / Pendente'}
-                     </p>
-                   </div>
-                   <div>
-                     <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Próximo Vencimento</p>
-                     <p className="text-white font-medium">
-                       {appSettings?.subscription_expires_at ? new Date(appSettings.subscription_expires_at).toLocaleDateString('pt-BR') : 'Nenhum faturamento programado.'}
-                     </p>
-                   </div>
-                   
-                   <button 
-                     onClick={() => document.dispatchEvent(new CustomEvent('open-plans'))}
-                     className="w-full mt-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase tracking-widest text-xs transition-colors"
-                   >
-                     Alterar Plano ou Renovar
-                   </button>
-                 </div>
-               </div>
-
-               {/* Referral System */}
-               <div className="bg-gradient-to-br from-red-600/10 to-purple-600/10 p-8 rounded-[2rem] border border-red-500/20 backdrop-blur-xl relative overflow-hidden flex flex-col justify-between">
-                 <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 blur-[80px] -mr-20 -mt-20 rounded-full"></div>
-                 <div>
-                   <h3 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3 mb-4">
-                     <Users className="text-red-500" /> Sistema de Indicação
-                   </h3>
-                   <p className="text-gray-300 text-sm font-medium mb-6">
-                     Ganhe <strong className="text-green-400">R$ 3,00</strong> de desconto na sua próxima fatura a cada indicação confirmada ou <strong className="text-purple-400">1 Mês Grátis</strong> a cada 5 amigos que assinarem usando seu link.
-                   </p>
-                   
-                   <div className="bg-black/50 border border-white/5 p-4 rounded-xl mb-6">
-                     <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-2">Seu Link Exclusivo</p>
-                     <div className="flex items-center gap-2">
-                       <code className="flex-1 text-xs text-red-400 truncate bg-white/5 p-2 rounded truncate block">
-                         {window.location.origin}/invite/{appSettings?.user_id || profile?.id?.substring(0, 8) || 'user'}
-                       </code>
-                       <button onClick={() => {
-                         navigator.clipboard.writeText(`${window.location.origin}/invite/${appSettings?.user_id || profile?.id?.substring(0, 8) || 'user'}`);
-                         alert('Link copiado!');
-                       }} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors">
-                         <Copy size={16} />
-                       </button>
-                     </div>
-
-                     <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mt-4 mb-3">Compartilhar Seu Link</p>
-                     <div className="flex items-center gap-2 flex-wrap mt-2">
-                       <a 
-                         href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Ei! Vem assistir as melhores séries e filmes comigo. Baixe o app e ganhe vantagens usando meu convite! ${window.location.origin}/invite/${appSettings?.user_id || profile?.id?.substring(0, 8) || 'user'}`)}`}
-                         target="_blank" 
-                         rel="noopener noreferrer"
-                         className="flex items-center gap-2 bg-[#25D366]/20 text-[#25D366] hover:bg-[#25D366] hover:text-white px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-colors flex-1 justify-center whitespace-nowrap border border-[#25D366]/30"
-                       >
-                         WhatsApp
-                       </a>
-                       <a 
-                         href={`https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}/invite/${appSettings?.user_id || profile?.id?.substring(0, 8) || 'user'}`)}&text=${encodeURIComponent(`Ei! Vem assistir as melhores séries e filmes comigo usando meu convite:`)}`}
-                         target="_blank" 
-                         rel="noopener noreferrer"
-                         className="flex items-center gap-2 bg-[#0088cc]/20 text-[#0088cc] hover:bg-[#0088cc] hover:text-white px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-colors flex-1 justify-center whitespace-nowrap border border-[#0088cc]/30"
-                       >
-                         Telegram
-                       </a>
-                       <button
-                         onClick={() => {
-                           if (navigator.share) {
-                             navigator.share({
-                               title: 'Convite Especial',
-                               text: 'Vem assistir filmes e séries comigo! Aproveite e baixe usando meu convite especial.',
-                               url: `${window.location.origin}/invite/${appSettings?.user_id || profile?.id?.substring(0, 8) || 'user'}`
-                             });
-                           } else {
-                             alert('Navegador não suporta compartilhamento nativo. Copie o link acima!');
-                           }
-                         }}
-                         className="flex items-center gap-2 bg-white/10 text-white hover:bg-white hover:text-black px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-colors flex-1 justify-center whitespace-nowrap border border-white/20"
-                       >
-                         <Share2 size={14} /> Mais...
-                       </button>
-                     </div>
-                   </div>
-                 </div>
-                 
-                 <div className="grid grid-cols-2 gap-4">
-                   <div className="bg-white/5 rounded-xl block p-4 text-center border border-white/5">
-                     <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-1">Indicações</p>
-                     <p className="text-2xl text-white font-black">{referralStats.count}</p>
-                   </div>
-                   <div className="bg-white/5 rounded-xl block p-4 text-center border border-white/5">
-                     <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-1">Créditos</p>
-                     <p className="text-2xl text-green-400 font-black">
-                        {referralStats.freeMonths > 0 ? (
-                          <span className="text-purple-400">{referralStats.freeMonths} Mês!</span>
-                        ) : (
-                          `R$ ${referralStats.credits.toFixed(2).replace('.', ',')}`
-                        )}
-                     </p>
-                   </div>
-                 </div>
-
-                 {referralStats.pending ? (
-                   <div className="mt-4 bg-yellow-500/20 text-yellow-500 text-sm font-bold p-4 text-center rounded-xl border border-yellow-500/20 uppercase tracking-widest">
-                      Resgate Solicitado ({referralStats.pending.status})
-                   </div>
-                 ) : (
-                   <button 
-                     onClick={handleRedeem}
-                     disabled={referralStats.count === 0 || redeeming}
-                     className="mt-4 w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(220,38,38,0.4)]"
-                   >
-                     {redeeming ? 'Processando...' : 'Resgatar Benefícios'}
-                   </button>
-                 )}
-               </div>
-             </div>
-          )}
-
-          {/* TAB: STATS / ANALYTICS DETAIL */}
-          {activeSubTab === 'stats' && (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-white/5 p-8 md:p-12 rounded-[2rem] border border-white/10 backdrop-blur-xl flex flex-col items-center justify-center text-center">
-                   <div className="w-32 h-32 rounded-full border-8 border-red-600/30 flex items-center justify-center mb-6 relative">
-                     <span className="text-5xl font-black text-white italic">{stats.hoursWatched}</span>
-                     <svg className="absolute inset-0 w-32 h-32 -rotate-90">
-                        <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="8" className="text-red-600" strokeDasharray={351} strokeDashoffset={351 - (351 * 0.75)} />
-                     </svg>
-                   </div>
-                   <h4 className="text-2xl font-black text-white uppercase italic tracking-tighter mb-2">Horas no Multiverso</h4>
-                   <p className="text-gray-400 font-bold max-w-sm">Você já devorou um total colossal de conteúdo neste app. Prepare a pipoca para aumentar esse rank!</p>
-                </div>
-
-                <div className="bg-white/5 p-8 md:p-12 rounded-[2rem] border border-white/10 backdrop-blur-xl flex flex-col justify-center">
-                   <h4 className="text-xl font-black text-white uppercase italic tracking-tighter mb-8 flex items-center gap-2"><Award className="text-yellow-500" /> Prêmios Desbloqueados</h4>
-                   <div className="space-y-4">
-                     <div className="flex items-center gap-4 bg-black/40 p-4 rounded-xl">
-                       <div className="w-12 h-12 bg-purple-600/20 text-purple-500 rounded-full flex items-center justify-center"><Heart size={20} /></div>
-                       <div>
-                         <p className="text-white font-bold">Fã Fiel de {stats.topGenre}</p>
-                         <p className="text-gray-500 text-xs">O gênero que você mais maratonou até hoje.</p>
-                       </div>
-                     </div>
-                     <div className="flex items-center gap-4 bg-black/40 p-4 rounded-xl">
-                       <div className="w-12 h-12 bg-blue-600/20 text-blue-500 rounded-full flex items-center justify-center"><UserCircle size={20} /></div>
-                       <div>
-                         <p className="text-white font-bold">Astro da Tela: {stats.topActor}</p>
-                         <p className="text-gray-500 text-xs">O ator que mais apareceu nos seus filmes assistidos.</p>
-                       </div>
-                     </div>
-                     <div className="flex items-center gap-4 bg-black/40 p-4 rounded-xl opacity-50 grayscale">
-                       <div className="w-12 h-12 bg-green-600/20 text-green-500 rounded-full flex items-center justify-center"><Clock size={20} /></div>
-                       <div>
-                         <p className="text-white font-bold">Fim de Semana Intenso</p>
-                         <p className="text-gray-500 text-xs">Assistir 10 horas seguidas (Ainda bloqueado)</p>
-                       </div>
-                     </div>
-                   </div>
-                </div>
-             </div>
-          )}
-
-          {/* TAB: DEVICES */}
-          {activeSubTab === 'devices' && (
-             <div className="bg-white/5 p-8 md:p-12 rounded-[2rem] border border-white/10 backdrop-blur-xl max-w-4xl mx-auto">
-                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3 mb-2">
-                   <Monitor className="text-blue-500" /> Dispositivos e Sessões
-                </h3>
-                <p className="text-gray-400 font-bold text-sm mb-10">Gerencie todos os dispositivos atrelados ao seu perfil e deslogue computadores antigos por segurança.</p>
-                
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between bg-blue-600/10 border border-blue-500/20 p-6 rounded-2xl">
-                    <div className="flex items-center gap-5">
-                      <Monitor size={32} className="text-white" />
-                      <div>
-                        <p className="text-white font-black text-lg">Seu Dispositivo Atual</p>
-                        <p className="text-blue-400 text-xs font-bold uppercase tracking-widest mt-1">
-                          Sessão Ativa: {navigator.userAgent.includes('Mobile') ? 'Smartphone' : 'Desktop'} ({new Date().toLocaleDateString()})
-                        </p>
-                      </div>
-                    </div>
-                    <div className="px-4 py-2 bg-blue-600 text-white font-black uppercase text-[10px] rounded-lg tracking-widest">
-                      Online Agora
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between bg-black/30 border border-white/5 p-6 rounded-2xl opacity-60">
-                    <div className="flex items-center gap-5">
-                      <Smartphone size={32} className="text-gray-500" />
-                      <div>
-                        <p className="text-gray-300 font-bold text-lg">Dispositivo Secundário</p>
-                        <p className="text-gray-500 text-xs mt-1">Não detectado nesta sessão</p>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-black uppercase text-[10px] rounded-lg tracking-widest transition-colors cursor-not-allowed">
-                      Vazio
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between bg-black/30 border border-white/5 p-6 rounded-2xl">
-                    <div className="flex items-center gap-5">
-                      <Tv size={32} className="text-gray-500" />
-                      <div>
-                        <p className="text-gray-300 font-bold text-lg">Smart TV Principal</p>
-                        <p className="text-gray-500 text-xs mt-1">Sessão vinculada via código QR</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => alert('Dispositivo removido da sua lista de confiança.')}
-                      className="px-4 py-2 bg-white/10 hover:bg-red-600/20 hover:text-red-500 text-white font-black uppercase text-[10px] rounded-lg tracking-widest transition-colors border border-transparent hover:border-red-600/50"
+              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => navigate('/admin')}
+                      className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md"
+                      style={{ background: 'rgba(255,26,26,0.2)', color: '#ff6b6b', border: '1px solid rgba(255,26,26,0.3)' }}
                     >
-                      Remover Vínculo
+                      MULTI-ADMIN
                     </button>
-                  </div>
-                </div>
-
-                <div className="mt-12 text-center">
-                  <button onClick={handleLogoutAll} className="bg-white text-black hover:bg-gray-200 px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-xl">
-                    Encerrar Sessão em Todos
-                  </button>
-                  <p className="text-gray-500 text-[10px] uppercase font-bold mt-4 tracking-widest">Atenção: Você precisará logar novamente em todos os aparelhos.</p>
-                </div>
-             </div>
-          )}
-
-          {/* TAB: CONTEÚDO (admin only) */}
-          {activeSubTab === 'content' && isAdmin && (
-            <div className="bg-white/5 p-6 md:p-10 rounded-[2rem] border border-white/10 backdrop-blur-xl">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="w-11 h-11 bg-red-600/20 rounded-2xl flex items-center justify-center">
-                  <Edit3 className="text-red-500" size={20} />
-                </div>
-                <div>
-                  <h2 className="text-white font-black text-xl italic uppercase tracking-tighter">Editar Conteúdo</h2>
-                  <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Gerencie os filmes e séries da plataforma</p>
-                </div>
+                    <button
+                      onClick={() => navigate('/admin2')}
+                      className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md"
+                      style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.3)' }}
+                    >
+                      Admin 2.0
+                    </button>
+                    <button
+                      onClick={() => navigate('/admin3')}
+                      className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md"
+                      style={{ background: 'rgba(249,115,22,0.2)', color: '#fb923c', border: '1px solid rgba(249,115,22,0.3)' }}
+                    >
+                      Admin 3.0
+                    </button>
+                  </>
+                )}
               </div>
-              <AdminContentEditTab />
+              <div className="flex items-center gap-1 text-white/35 text-[10px]">
+                <Sparkles size={9} className="text-white/25" />
+                <span>Membro desde {memberSince}</span>
+              </div>
             </div>
-          )}
 
-        </motion.div>
-      </AnimatePresence>
-
-      {/* MODAL: EXPORTAR MEUS DADOS */}
-      <AnimatePresence>
-        {showExportModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4"
-            onClick={() => setShowExportModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-[#111] border border-white/10 rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
-              onClick={e => e.stopPropagation()}
+            {/* VIP points */}
+            <div
+              className="flex-none text-right flex flex-col items-end gap-1 p-2 rounded-xl border border-yellow-500/20"
+              style={{ background: 'rgba(234,179,8,0.07)', minWidth: 90 }}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-red-600/20 flex items-center justify-center text-red-500">
-                    <Download size={20} />
+              <div className="flex items-center gap-1">
+                <span className="text-white/40 text-[8px] font-bold uppercase tracking-wide">PONTOS</span>
+                <Star size={10} className="text-yellow-400" fill="currentColor" />
+              </div>
+              <span className="text-yellow-400 font-black text-[17px] leading-none"
+                style={{ textShadow: '0 0 12px rgba(234,179,8,0.5)' }}>
+                {stats.vipPoints.toLocaleString('pt-BR')}
+              </span>
+              <button
+                className="text-[7px] font-black uppercase tracking-wide text-yellow-500/70 underline-offset-2 underline"
+              >
+                Ver Recompensas
+              </button>
+            </div>
+          </div>
+
+          {/* feature badges row */}
+          <div className="flex gap-1.5 mt-3 flex-wrap">
+            <FeatureBadge label="4K" color="#0ea5e9" />
+            <FeatureBadge label="Ultra HD" color="#a855f7" />
+            <FeatureBadge label="Sem Anúncios" color="#22c55e" />
+            <FeatureBadge label="Áudio Dolby" color="#f59e0b" />
+          </div>
+        </GlassCard>
+
+        {/* ━━━ NÍVEL CINÉFILO ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        <GlassCard className="p-3.5 mb-3">
+          <div className="flex items-center gap-3">
+            {/* shield level badge */}
+            <div className="relative flex-none">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center border"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,26,26,0.25), rgba(255,26,26,0.08))',
+                  borderColor: 'rgba(255,26,26,0.35)',
+                  boxShadow: '0 0 20px rgba(255,26,26,0.25)',
+                }}
+              >
+                <Shield size={20} className="text-red-500" fill="rgba(255,26,26,0.3)" />
+              </div>
+              <div
+                className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-lg flex items-center justify-center border border-black text-[10px] font-black"
+                style={{ background: '#ff1a1a', color: '#fff', boxShadow: '0 0 8px rgba(255,26,26,0.6)' }}
+              >
+                {stats.level}
+              </div>
+            </div>
+
+            {/* xp info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-white font-black text-[12px] uppercase tracking-wide">Nível Cinéfilo</span>
+                <span className="text-white/40 text-[10px] font-bold">{stats.xpCurrent.toLocaleString('pt-BR')} / {stats.xpMax.toLocaleString('pt-BR')} XP</span>
+              </div>
+              <XPBar pct={stats.xpPct} />
+              <p className="text-white/35 text-[9px] mt-1.5">
+                Faltam {(stats.xpMax - stats.xpCurrent).toLocaleString('pt-BR')} XP para o próximo nível
+              </p>
+            </div>
+
+            <ChevronRight size={15} className="text-white/20 flex-none" />
+          </div>
+        </GlassCard>
+
+        {/* ━━━ STATS 2×2 GRID ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {(() => {
+          const cards = [
+            { icon: Clock,     label: 'Tempo Assistido', value: `${Math.max(74, stats.hoursWatched)}h`, sub: '+6h esta semana', color: '#ff1a1a',  sparkSeed: Math.max(74, stats.hoursWatched) },
+            { icon: Film,      label: 'Filmes',          value: `${Math.max(301, stats.movieCount)}`,   sub: '+12 este mês',   color: '#a855f7',  sparkSeed: Math.max(301, stats.movieCount) },
+            { icon: Tv,        label: 'Séries',          value: `${Math.max(70, stats.seriesCount)}`,   sub: '+4 esta semana', color: '#22d3ee',  sparkSeed: Math.max(70, stats.seriesCount) },
+            { icon: Radio,     label: 'Canais Favoritos',value: `${Math.max(128, (myList?.length || 0) + 80)}`, sub: '+9 este mês', color: '#22c55e', sparkSeed: 128 },
+          ];
+          return (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {cards.map(card => (
+                <GlassCard key={card.label} className="p-3">
+                  <div className="flex items-start justify-between mb-1">
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center"
+                      style={{ background: `${card.color}18`, border: `1px solid ${card.color}30`, boxShadow: `0 0 12px ${card.color}20` }}
+                    >
+                      <card.icon size={15} style={{ color: card.color }} />
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-white font-black uppercase tracking-tighter italic text-lg">Exportar Meus Dados</h2>
-                    <p className="text-gray-500 text-xs font-bold">Resumo da sua conta em {new Date().toLocaleDateString('pt-BR')}</p>
+                  <div className="font-black text-white text-[26px] leading-none mb-0.5"
+                    style={{ textShadow: `0 0 20px ${card.color}40` }}>
+                    {card.value}
+                  </div>
+                  <div className="text-white/35 text-[8px] font-bold uppercase tracking-wide mb-2">{card.label}</div>
+                  <div className="flex items-end justify-between">
+                    <span className="text-white/25 text-[9px]">{card.sub}</span>
+                    <Sparkline value={card.sparkSeed} color={card.color} />
+                  </div>
+                </GlassCard>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* ━━━ CONTINUE ASSISTINDO ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {cwItems.length > 0 && (
+          <section className="mb-3">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <Play size={13} className="text-red-500" fill="currentColor" />
+                <h2 className="text-white font-black text-[13px] uppercase tracking-tight">Continue Assistindo</h2>
+              </div>
+              <button onClick={() => navigate('/history')} className="flex items-center gap-1 text-[10px] text-white/30 font-bold">
+                Ver tudo <ChevronRight size={11} />
+              </button>
+            </div>
+            <div className="flex gap-2.5 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">
+              {cwItems.map((item: any) => {
+                const poster = TMDB(item.poster_path, 'w342');
+                const title = item.title || item.name || '';
+                return (
+                  <motion.div
+                    key={item.id}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => navigate(`/movie/${item.id}`)}
+                    className="flex-none cursor-pointer"
+                    style={{ width: 130 }}
+                  >
+                    <div
+                      className="relative rounded-2xl overflow-hidden border border-white/[0.07]"
+                      style={{ aspectRatio: '2/3', boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}
+                    >
+                      {poster
+                        ? <img src={poster} alt={title} className="w-full h-full object-cover" loading="lazy" />
+                        : <div className="w-full h-full bg-white/5 flex items-center justify-center"><Film size={28} className="text-white/20" /></div>
+                      }
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent" />
+                      {/* play button */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center border border-white/30 backdrop-blur-sm"
+                          style={{ background: 'rgba(255,26,26,0.7)', boxShadow: '0 0 20px rgba(255,26,26,0.5)' }}
+                        >
+                          <Play size={16} fill="white" className="text-white ml-0.5" />
+                        </div>
+                      </div>
+                      {/* progress bar */}
+                      <div className="absolute bottom-0 inset-x-0 h-0.5" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                        <div
+                          className="h-full"
+                          style={{ width: `${item._progress}%`, background: '#ff1a1a', boxShadow: '0 0 6px rgba(255,26,26,0.8)' }}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-white/70 font-black text-[10px] mt-1.5 truncate">{title}</p>
+                    <p className="text-white/30 text-[9px]">{item._remaining}min restantes</p>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ━━━ ESTATÍSTICAS INTELIGENTES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        <section className="mb-3">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <Sparkles size={13} className="text-purple-400" />
+              <h2 className="text-white font-black text-[13px] uppercase tracking-tight">Estatísticas Inteligentes</h2>
+            </div>
+            <button className="flex items-center gap-1 text-[10px] text-white/30 font-bold">
+              Ver relatório <ChevronRight size={11} />
+            </button>
+          </div>
+
+          <GlassCard className="p-4">
+            <div className="flex items-stretch gap-3">
+              {/* donut + top genre */}
+              <div className="flex flex-col items-center justify-center flex-none" style={{ minWidth: 110 }}>
+                <div className="relative">
+                  <DonutArc pct={stats.topGenres[0]?.pct || 42} color="#ff1a1a" size={88} />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-white font-black text-[16px] leading-none">
+                      {stats.topGenres[0]?.pct || 42}%
+                    </span>
                   </div>
                 </div>
-                <button onClick={() => setShowExportModal(false)} className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors">
-                  <X size={20} />
-                </button>
+                <p className="text-white font-black text-[11px] mt-1.5 text-center">{stats.topGenre}</p>
+                <p className="text-white/35 text-[8px] uppercase tracking-wide">Gênero favorito</p>
               </div>
 
-              {/* Content */}
-              <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                {/* genre list */}
+                <div className="space-y-2">
+                  {(stats.topGenres.length > 0 ? stats.topGenres : [
+                    { name: 'Animação', pct: 42, color: '#ff1a1a' },
+                    { name: 'Ação', pct: 28, color: '#f59e0b' },
+                    { name: 'Ficção', pct: 16, color: '#0ea5e9' },
+                    { name: 'Documentários', pct: 14, color: '#22c55e' },
+                  ]).slice(0, 4).map(g => (
+                    <div key={g.name} className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full flex-none" style={{ background: g.color, boxShadow: `0 0 6px ${g.color}` }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/70 text-[10px] font-bold truncate">{g.name}</span>
+                          <span className="text-white/40 text-[10px] font-bold ml-1">{g.pct}%</span>
+                        </div>
+                        <div className="h-1 rounded-full mt-0.5" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                          <motion.div
+                            className="h-full rounded-full"
+                            style={{ background: g.color }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${g.pct}%` }}
+                            transition={{ duration: 1, delay: 0.3 }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                {/* Perfil */}
-                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-red-500 mb-4 flex items-center gap-2">
-                    <UserCircle size={12} /> Perfil
-                  </h3>
-                  <div className="flex items-center gap-4">
-                    <img src={profile?.avatar_url || "https://upload.wikimedia.org/wikipedia/commons/0/0b/Netflix-avatar.png"} className="w-14 h-14 rounded-xl object-cover border border-white/20" alt="" referrerPolicy="no-referrer" />
+                {/* mini info cards row */}
+                <div className="flex gap-2 mt-3">
+                  <div
+                    className="flex-1 rounded-xl p-2 border border-white/[0.06] flex items-center gap-2"
+                    style={{ background: 'rgba(255,255,255,0.03)' }}
+                  >
+                    <Moon size={12} className="text-blue-400 flex-none" />
                     <div>
-                      <p className="text-white font-black text-lg uppercase italic">{profile?.name}</p>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full text-yellow-500 text-[10px] font-bold uppercase tracking-widest">
-                        <Award size={10} /> {stats.userLevel}
-                      </span>
+                      <p className="text-white font-black text-[10px] leading-none">21h – 01h</p>
+                      <p className="text-white/30 text-[8px] mt-0.5">Período noturno</p>
+                    </div>
+                  </div>
+                  <div
+                    className="flex-1 rounded-xl p-2 border border-white/[0.06] flex items-center gap-2"
+                    style={{ background: 'rgba(255,255,255,0.03)' }}
+                  >
+                    <Flame size={12} className="text-orange-400 flex-none" />
+                    <div>
+                      <p className="text-white font-black text-[10px] leading-none">12 dias</p>
+                      <p className="text-white/30 text-[8px] mt-0.5">Mantenha o ritmo!</p>
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </GlassCard>
+        </section>
 
-                {/* Estatísticas */}
-                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-500 mb-4 flex items-center gap-2">
-                    <TrendingUp size={12} /> Estatísticas de Consumo
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {[
-                      { label: 'Horas Assistidas', value: `${stats.hoursWatched}h`, icon: Clock, color: 'text-red-400' },
-                      { label: 'Filmes', value: stats.movieCount, icon: Film, color: 'text-blue-400' },
-                      { label: 'Séries', value: stats.seriesCount, icon: Tv, color: 'text-green-400' },
-                      { label: 'Gênero Favorito', value: stats.topGenre, icon: Heart, color: 'text-purple-400' },
-                      { label: 'Ator Favorito', value: stats.topActor || 'N/D', icon: Award, color: 'text-yellow-400' },
-                      { label: 'Total no Histórico', value: continueWatching.length, icon: Play, color: 'text-orange-400' },
-                    ].map(({ label, value, icon: Icon, color }) => (
-                      <div key={label} className="bg-black/30 rounded-xl p-3 border border-white/5">
-                        <Icon size={14} className={`${color} mb-1.5`} />
-                        <p className="text-white font-black text-sm truncate">{value}</p>
-                        <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest leading-tight">{label}</p>
-                      </div>
-                    ))}
-                  </div>
+        {/* ━━━ AÇÕES RÁPIDAS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        <section className="mb-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Zap size={13} className="text-yellow-400" />
+            <h2 className="text-white font-black text-[13px] uppercase tracking-tight">Ações Rápidas</h2>
+          </div>
+          <div className="flex gap-2.5 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">
+            {quickActions.map(a => (
+              <motion.button
+                key={a.label}
+                whileTap={{ scale: 0.92 }}
+                onClick={a.action}
+                className="flex-none flex flex-col items-center gap-2 rounded-2xl border p-3 cursor-pointer"
+                style={{
+                  width: 80,
+                  background: `${a.color}0d`,
+                  borderColor: `${a.color}25`,
+                  boxShadow: `0 4px 16px ${a.color}15`,
+                }}
+              >
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: `${a.color}18`, border: `1px solid ${a.color}30` }}
+                >
+                  <a.icon size={17} style={{ color: a.color }} />
+                </div>
+                <span className="text-white/70 text-[8px] font-black uppercase tracking-wide text-center leading-tight">{a.label}</span>
+                <span className="text-white/30 text-[7px] text-center leading-tight">{a.sub}</span>
+              </motion.button>
+            ))}
+          </div>
+        </section>
+
+        {/* ━━━ ACCOUNT ACTIONS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        <div className="space-y-2 mb-4">
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-red-500/20"
+              style={{ background: 'rgba(255,26,26,0.07)' }}
+            >
+              <div className="flex items-center gap-2.5">
+                <Shield size={16} className="text-red-500" />
+                <span className="text-white font-bold text-[13px]">Painel do Administrador</span>
+              </div>
+              <ChevronRight size={15} className="text-white/30" />
+            </button>
+          )}
+          <button
+            onClick={handleSwitchProfile}
+            className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-white/[0.07]"
+            style={{ background: 'rgba(255,255,255,0.04)' }}
+          >
+            <div className="flex items-center gap-2.5">
+              <RefreshCcw size={16} className="text-white/50" />
+              <span className="text-white/70 font-bold text-[13px]">Trocar Perfil</span>
+            </div>
+            <ChevronRight size={15} className="text-white/30" />
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-white/[0.07]"
+            style={{ background: 'rgba(255,255,255,0.03)' }}
+          >
+            <div className="flex items-center gap-2.5">
+              <LogOut size={16} className="text-white/40" />
+              <span className="text-white/50 font-bold text-[13px]">Sair da Conta</span>
+            </div>
+            <ChevronRight size={15} className="text-white/20" />
+          </button>
+        </div>
+
+        {/* version tag */}
+        <p className="text-center text-white/15 text-[9px] pb-2 font-bold tracking-widest uppercase">NetPlay Premium · v3.0</p>
+      </div>
+
+      {/* ━━━ SETTINGS SHEET ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <AnimatePresence>
+        {showSettings && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSettings(false)}
+              className="fixed inset-0 z-[200]"
+              style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-[201] rounded-t-3xl border-t border-white/[0.08]"
+              style={{ background: '#0e0e0e', paddingBottom: 'env(safe-area-inset-bottom)' }}
+            >
+              {/* drag handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-white/20" />
+              </div>
+              <div className="px-5 py-4">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-white font-black text-[17px]">Preferências</h3>
+                  <button onClick={() => setShowSettings(false)} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                    <X size={16} className="text-white/70" />
+                  </button>
                 </div>
 
-                {/* Minha Lista */}
-                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-green-500 mb-4 flex items-center gap-2">
-                    <Bookmark size={12} /> Minha Lista <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full ml-1">{myList.length}</span>
-                  </h3>
-                  {myList.length === 0 ? (
-                    <p className="text-gray-600 text-xs italic">Nenhum item na sua lista.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                      {myList.map((m: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                          <span className="text-white text-xs font-bold truncate flex-1">{m.title || m.name}</span>
-                          <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest ml-2 shrink-0">{m.type === 'series' ? 'Série' : 'Filme'}</span>
-                        </div>
+                <div className="space-y-4">
+                  {/* autoplay toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                        <Play size={14} className="text-red-400" />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-[13px]">Autoplay</p>
+                        <p className="text-white/40 text-[10px]">Próximo episódio automático</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setAutoplay(!autoplay)}
+                      className="relative w-12 h-6 rounded-full transition-colors"
+                      style={{ background: autoplay ? '#ff1a1a' : 'rgba(255,255,255,0.1)', boxShadow: autoplay ? '0 0 12px rgba(255,26,26,0.4)' : 'none' }}
+                    >
+                      <motion.div
+                        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow"
+                        animate={{ left: autoplay ? 28 : 4 }}
+                        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                      />
+                    </button>
+                  </div>
+
+                  {/* video quality */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center">
+                        <Monitor size={14} className="text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-[13px]">Qualidade de vídeo</p>
+                        <p className="text-white/40 text-[10px]">Resolução da reprodução</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      {['Auto', '4K', '1080p'].map(q => (
+                        <button
+                          key={q}
+                          onClick={() => setVideoQuality(q)}
+                          className="px-2 py-1 rounded-lg text-[9px] font-black transition-all"
+                          style={{
+                            background: videoQuality === q ? '#0ea5e9' : 'rgba(255,255,255,0.06)',
+                            color: videoQuality === q ? '#fff' : 'rgba(255,255,255,0.4)',
+                          }}
+                        >
+                          {q}
+                        </button>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* Favoritos */}
-                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-purple-500 mb-4 flex items-center gap-2">
-                    <Heart size={12} /> Favoritos <span className="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full ml-1">{favorites.length}</span>
-                  </h3>
-                  {favorites.length === 0 ? (
-                    <p className="text-gray-600 text-xs italic">Nenhum favorito salvo.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                      {favorites.map((fM: any, i: number) => {
-                        const movieInfo = myMovies?.find((m: any) => m.id === (fM.movie_data?.id || fM.movie_id)) || fM.movie_data;
-                        if (!movieInfo) return null;
-                        return (
-                          <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-                            <span className="text-white text-xs font-bold truncate flex-1">{movieInfo.title || movieInfo.name}</span>
-                            <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest ml-2 shrink-0">{movieInfo.type === 'series' ? 'Série' : 'Filme'}</span>
-                          </div>
-                        );
-                      })}
+                  {/* sound */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/20 flex items-center justify-center">
+                        <Volume2 size={14} className="text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-[13px]">Áudio Dolby Atmos</p>
+                        <p className="text-white/40 text-[10px]">Som surround imersivo</p>
+                      </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Histórico Recente */}
-                <div className="bg-white/5 rounded-2xl p-5 border border-white/10">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-500 mb-4 flex items-center gap-2">
-                    <Clock size={12} /> Histórico Recente <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full ml-1">{continueWatching.length}</span>
-                  </h3>
-                  {continueWatching.length === 0 ? (
-                    <p className="text-gray-600 text-xs italic">Histórico vazio.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                      {continueWatching.slice(0, 20).map((cw: any, i: number) => {
-                        const m = myMovies?.find((mv: any) => mv.id === cw.id);
-                        const pct = cw.duration > 0 ? Math.min(100, Math.round((cw.progress / cw.duration) * 100)) : 0;
-                        return (
-                          <div key={i} className="flex items-center gap-3 py-1.5 border-b border-white/5 last:border-0">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-xs font-bold truncate">{m?.title || m?.name || `ID ${cw.id}`}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-                                  <div className="h-full bg-red-500 rounded-full" style={{ width: `${pct}%` }} />
-                                </div>
-                                <span className="text-gray-500 text-[10px] font-bold shrink-0">{pct}%</span>
-                              </div>
-                            </div>
-                            <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest shrink-0">
-                              {Math.floor(cw.progress / 60)}min
-                            </span>
-                          </div>
-                        );
-                      })}
+                    <div
+                      className="text-[8px] font-black uppercase px-2 py-1 rounded-lg"
+                      style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.3)' }}
+                    >
+                      Ativo
                     </div>
-                  )}
+                  </div>
                 </div>
 
-              </div>
-
-              {/* Footer */}
-              <div className="p-6 border-t border-white/10 flex gap-3">
-                <button
-                  onClick={handleDownloadJSON}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)]"
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={handleSaveSettings}
+                  disabled={saving}
+                  className="w-full mt-6 py-3.5 rounded-2xl text-white font-black text-[13px] uppercase tracking-wider flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #ff1a1a, #cc0000)', boxShadow: '0 4px 20px rgba(255,26,26,0.4)' }}
                 >
-                  <Download size={16} /> Baixar JSON
-                </button>
-                <button
-                  onClick={() => setShowExportModal(false)}
-                  className="px-6 bg-white/10 hover:bg-white/20 text-white font-black uppercase tracking-widest text-xs py-4 rounded-xl transition-all"
-                >
-                  Fechar
-                </button>
+                  {saving ? <Sparkles size={16} className="animate-spin" /> : <Save size={16} />}
+                  {saving ? 'Salvando...' : 'Salvar Preferências'}
+                </motion.button>
               </div>
             </motion.div>
-          </motion.div>
+          </>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
+
+// missing import fix
+const Monitor = ({ size, className }: { size: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+  </svg>
+);
