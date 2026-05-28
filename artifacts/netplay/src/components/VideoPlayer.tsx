@@ -83,6 +83,63 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   const [rfCurrentUrl, setRfCurrentUrl] = useState<string>('');
   const [rfCurrentEpisodeIndex, setRfCurrentEpisodeIndex] = useState<number>(-1);
 
+  // Net 2.0 (Vidsrc) — URL resolvida assincronamente quando playerStyle='vidsrc'
+  const [vidsrcInitUrl, setVidsrcInitUrl] = useState<string>('');
+
+  // Inicializa URLs corretas para players externos quando vindo de "Continue Assistindo"
+  // (a URL armazenada é TeraBox; o player externo precisa de sua própria URL por ID TMDB)
+  useEffect(() => {
+    const currentUrl = movie.videoUrl || '';
+    const tmdbId = (movie as any).tmdb_id || movie.id;
+
+    // Flix 3.0 — constrói URL pelo ID TMDB se a URL atual não for redeflix
+    if (playerStyle === 'redeflix' && !currentUrl.includes('redeflixapi.store')) {
+      if (movie.type !== 'series') {
+        setRfCurrentUrl(buildRedeFlixMovieUrl(tmdbId));
+      } else {
+        // Séries: o efeito bfEpisodes irá carregar os episódios; usa o primeiro disponível
+        const ep = (movie.episodes || [])[0] as any;
+        if (ep) setRfCurrentUrl(buildRedeFlixSerieUrl(tmdbId, ep.season || 1, ep.episode || 1));
+        setRfCurrentEpisodeIndex(0);
+      }
+    }
+
+    // API Flix (BetterFlix) — constrói URL pelo ID TMDB se necessário
+    if (playerStyle === 'betterflix' && !currentUrl.includes('betterflix.click') && !currentUrl.includes('embedtv.lat')) {
+      const isMovie = movie.type !== 'series';
+      if (isMovie) {
+        setBfCurrentUrl(buildBetterFlixUrl(tmdbId, 'movie'));
+      } else {
+        const ep = (movie.episodes || [])[0] as any;
+        if (ep) setBfCurrentUrl(buildBetterFlixUrl(tmdbId, 'tv', ep.season || 1, ep.episode || 1));
+        setBfCurrentEpisodeIndex(0);
+      }
+    }
+
+    // Net 2.0 (Vidsrc) — busca assíncrona do ID TMDB e monta URL
+    const vidsrcDomains = ['vidsrc.me','vidsrc.to','vidsrc.xyz','vidsrc.cc','vidsrc.rip','vidsrc.net','vidsrc.pm','vidsrc.icu'];
+    if (playerStyle === 'vidsrc' && !vidsrcDomains.some(d => currentUrl.includes(d))) {
+      (async () => {
+        try {
+          const { buildVidsrcMovieUrlSafe, buildVidsrcTvUrlSafe } = await import('./admin/AdminNet2Tab');
+          const { lookupTmdbId } = await import('../services/tmdb');
+          const isMovie = movie.type !== 'series';
+          const title = (movie as any).title || (movie as any).name || '';
+          const year = movie.release_date
+            ? new Date(movie.release_date).getFullYear()
+            : (movie as any).first_air_date
+            ? new Date((movie as any).first_air_date).getFullYear()
+            : null;
+          const resolvedId = (await lookupTmdbId(title, isMovie ? 'movie' : 'tv', year)) || movie.id;
+          const vUrl = isMovie
+            ? await buildVidsrcMovieUrlSafe(resolvedId)
+            : await buildVidsrcTvUrlSafe(resolvedId, 1, 1);
+          setVidsrcInitUrl(vUrl);
+        } catch {}
+      })();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Net 2.0 — dica de áudio em Português
   const [showVidsrcHint, setShowVidsrcHint] = useState(true);
   useEffect(() => {
@@ -1126,10 +1183,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movie, onClose, profileId, pr
   if (isVidsrcUrl || playerStyle === 'vidsrc') {
     const vsTitle = movie.title || movie.name || 'Assistindo';
     const vsIsTV = movie.type === 'series';
+    // Usa a URL resolvida async (quando vindo de "Continue Assistindo" com URL TeraBox)
+    const vsSrc = isVidsrcUrl ? url : (vidsrcInitUrl || url);
     return (
       <div className="relative w-full h-full">
         <NetflixPlayer
-          src={url}
+          src={vsSrc}
           title={vsTitle}
           seriesTitle={vsIsTV ? (movie.title || movie.name || '') : undefined}
           backdropUrl={movie.backdrop_path}

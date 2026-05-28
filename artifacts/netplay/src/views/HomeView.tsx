@@ -265,7 +265,22 @@ const HomeView = React.memo(({
               whileHover={{ scale: 1.015 }}
               className="flex-1 card-premium rounded-[1.5rem] p-5 md:p-7 flex items-center justify-between shadow-[0_20px_60px_rgba(0,0,0,0.6)] group cursor-pointer relative overflow-hidden"
               onClick={() => {
-                if (continueWatching.length > 0) handleSelectMovie(continueWatching[0]);
+                if (continueWatching.length === 0) return;
+                const movie = continueWatching[0];
+                // Recupera preferência de player salva para esse conteúdo
+                let savedPlayerStyle: string | undefined;
+                try {
+                  const prefRaw = localStorage.getItem(`netplay_server_pref_${movie.id}`);
+                  if (prefRaw) savedPlayerStyle = prefRaw;
+                } catch {}
+                // Resolve a URL do episódio para séries
+                const resolvedUrl = movie.type === 'series'
+                  ? (movie.savedEpisodeUrl
+                      || localStorage.getItem(`netplay_progress_url_${movie.id}`)
+                      || (movie.episodes && movie.episodes.length > 0 ? movie.episodes[0].videoUrl : undefined))
+                  : movie.videoUrl;
+                const position = movie.last_position || 0;
+                handlePlayMovie(movie, resolvedUrl, position, savedPlayerStyle);
               }}
             >
               <div className="absolute inset-0 bg-red-600/[0.04] group-hover:bg-red-600/[0.08] transition-colors duration-500 rounded-[1.5rem]" />

@@ -37,10 +37,11 @@ const ContinueCard = React.memo(({ movie, onSelectMovie, onPlayMovie }: { movie:
 
   const handleClick = () => {
     // Recupera a preferência de API/player salva para esse conteúdo
+    // SmartPlayerSelector salva o ID da opção diretamente (string simples)
     let savedPlayerStyle: string | undefined;
     try {
       const prefRaw = localStorage.getItem(`netplay_server_pref_${movie.id}`);
-      if (prefRaw) savedPlayerStyle = JSON.parse(prefRaw)?.playerStyle;
+      if (prefRaw) savedPlayerStyle = prefRaw;
     } catch {}
 
     if (movie.type === 'series') {
