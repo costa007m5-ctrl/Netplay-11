@@ -40,6 +40,8 @@ import ContentFilteredPage from './views/ContentFilteredPage';
 import NewEpisodesView from './views/NewEpisodesView';
 import UniverseTabView from './views/UniverseTabView';
 import MyListView from './views/MyListView';
+import MinhaListaPremiumView from './views/MinhaListaPremiumView';
+import NovidadesView from './views/NovidadesView';
 import TrendingView from './views/TrendingView';
 import ProviderViewWrapper from './views/ProviderViewWrapper';
 import { MovieDetailRouteWrapper, PlayerRouteWrapper } from './views/RouteWrappers';
@@ -3459,7 +3461,29 @@ export default function App() {
               favoriteIds={favoriteIds}
             />
           } />
-          <Route path="/mylist" element={<MyListView myList={myList} handleSelectMovie={handleSelectMovie} navigate={navigate} />} />
+          <Route path="/mylist" element={
+            <MinhaListaPremiumView
+              myList={myList}
+              continueWatching={continueWatching}
+              favorites={favorites}
+              watchHistory={watchHistory}
+              handleSelectMovie={handleSelectMovie}
+              toggleMyList={toggleMyList}
+              profile={profile}
+            />
+          } />
+          <Route path="/novidades" element={
+            <NovidadesView
+              newMovies={newMovies}
+              top10Movies={top10Movies}
+              top10Series={top10Series}
+              myMovies={myMovies}
+              handleSelectMovie={handleSelectMovie}
+              toggleMyList={toggleMyList}
+              myListIds={myListIds}
+              profile={profile}
+            />
+          } />
           <Route path="/trending" element={
             <TrendingView 
               top10Movies={top10Movies}

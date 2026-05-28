@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, User, LogOut, ChevronDown, Search, Bell, Play, ChevronLeft, X, Home, Film, Tv, Bookmark, Tv2 } from 'lucide-react';
+import { Settings, User, LogOut, ChevronDown, Search, Bell, Play, ChevronLeft, X, Home, Film, Tv, Bookmark, Tv2, Sparkles } from 'lucide-react';
 import AdminModal from './AdminModal';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
@@ -87,11 +87,11 @@ const Navbar = React.memo(({
   ];
 
   const mobileNavItems = [
-    { id: 'home', label: 'Início', icon: Home, path: '/menu' },
-    { id: 'canais', label: 'Canais', icon: Tv2, path: '/canais' },
-    { id: 'search', label: 'Buscar', icon: Search, path: '/search' },
-    { id: 'mylist', label: 'Lista', icon: Bookmark, path: '/mylist' },
-    { id: 'profile', label: 'Perfil', icon: User, path: '/perfil', isProfile: true },
+    { id: 'home',      label: 'Início',    icon: Home,      path: '/menu' },
+    { id: 'canais',    label: 'Canais',    icon: Tv2,       path: '/canais' },
+    { id: 'search',    label: 'Buscar',    icon: Search,    path: '/search' },
+    { id: 'novidades', label: 'Novidades', icon: Sparkles,  path: '/novidades' },
+    { id: 'profile',   label: 'Perfil',    icon: User,      path: '/perfil', isProfile: true },
   ];
 
   return (
