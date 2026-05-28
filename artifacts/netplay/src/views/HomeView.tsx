@@ -6,6 +6,26 @@ import Banner from '../components/Banner';
 import Row from '../components/Row';
 import ParticlesAmbience from '../components/ParticlesAmbience';
 
+const RecentlyAddedCard = React.memo(({ m, idx, onSelectMovie }: { m: any; idx: number; onSelectMovie: (m: any) => void }) => (
+  <div className="group cursor-pointer" onClick={() => onSelectMovie(m)}>
+    <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/[0.06] group-hover:border-red-600/50 transition-colors duration-150 shadow-xl">
+      <img
+        src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w185${m.backdrop_path}` : '/placeholder.png')}
+        alt={m.title || m.name}
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-150"
+        loading={idx < 8 ? 'eager' : 'lazy'}
+        referrerPolicy="no-referrer"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+        <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{m.title || m.name}</p>
+        {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
+      </div>
+      <div className="absolute top-2 left-2 bg-red-600/90 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full">Novo</div>
+    </div>
+    <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
+  </div>
+));
+
 const StreamingHub = React.lazy(() => import('../components/StreamingHub'));
 const ContinueWatchingRow = React.lazy(() => import('../components/ContinueWatchingRow'));
 const NewReleasesRow = React.lazy(() => import('../components/NewReleasesRow'));
@@ -94,10 +114,10 @@ const HomeView = React.memo(({
   const optimizedGenreMovies = useMemo(() => {
     const optimized: Record<string, any[]> = {};
     for (const [genre, movies] of Object.entries(moviesByGenre as Record<string, any[]>)) {
-      optimized[genre] = [...movies].sort(() => 0.5 - Math.random()).slice(0, 10);
+      optimized[genre] = [...movies].sort((a: any, b: any) => (b.rating || b.vote_average || 0) - (a.rating || a.vote_average || 0)).slice(0, 10);
     }
     return optimized;
-  }, [moviesByGenre, profile?.id]);
+  }, [moviesByGenre]);
 
   const [recentlyAddedExpanded, setRecentlyAddedExpanded] = useState(false);
   const [recentlyAddedCount, setRecentlyAddedCount] = useState(30);
@@ -107,32 +127,8 @@ const HomeView = React.memo(({
       new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     ), [myMovies]);
 
-  const RecentlyAddedCard = useMemo(() => React.memo(({ m, idx }: { m: any; idx: number }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(idx * 0.015, 0.3) }}
-      className="group cursor-pointer"
-      onClick={() => handleSelectMovie(m)}
-    >
-      <div className="aspect-[2/3] rounded-xl overflow-hidden relative border border-white/[0.06] group-hover:border-red-600/50 transition-all shadow-xl">
-        <img
-          src={m.poster_path ? (m.poster_path.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`) : (m.backdrop_path ? `https://image.tmdb.org/t/p/w185${m.backdrop_path}` : '/placeholder.png')}
-          alt={m.title || m.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading={idx < 5 ? 'eager' : 'lazy'}
-          fetchPriority={idx < 5 ? 'high' : 'auto'}
-          referrerPolicy="no-referrer"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
-          <p className="text-white font-black text-[10px] uppercase leading-tight truncate">{m.title || m.name}</p>
-          {m.vote_average ? <p className="text-yellow-400 text-[9px] font-bold mt-0.5">★ {(m.vote_average as number).toFixed(1)}</p> : null}
-        </div>
-        <div className="absolute top-2 left-2 bg-red-600/90 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full">Novo</div>
-      </div>
-      <p className="text-gray-400 text-[10px] font-bold mt-1.5 truncate group-hover:text-white transition-colors leading-tight">{m.title || m.name}</p>
-    </motion.div>
-  )), [handleSelectMovie]);
+  const handleSelectMovieRef = React.useRef(handleSelectMovie);
+  React.useLayoutEffect(() => { handleSelectMovieRef.current = handleSelectMovie; }, [handleSelectMovie]);
 
   if (searchQuery) {
     return (
@@ -651,7 +647,7 @@ const HomeView = React.memo(({
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 md:gap-4">
                     {recentlyAddedSorted.slice(0, recentlyAddedCount).map((m: any, idx: number) =>
-                      <RecentlyAddedCard key={m.id} m={m} idx={idx} />
+                      <RecentlyAddedCard key={m.id} m={m} idx={idx} onSelectMovie={handleSelectMovie} />
                     )}
                   </div>
                   {recentlyAddedCount < recentlyAddedSorted.length && (

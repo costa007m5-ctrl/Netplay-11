@@ -1,0 +1,164 @@
+Pelo print, isso parece ser um problema de **lazy loading**, **virtualização do carrossel** ou das **URLs das imagens**.
+
+Os sintomas que você descreveu são:
+
+* As imagens aparecem quando a tela abre.
+* Ao rolar para baixo, elas somem.
+* Quando volta para cima, elas reaparecem.
+
+Isso normalmente acontece por um destes motivos:
+
+### 1. URLs das imagens expiram
+
+Se você está usando links do TeraBox, TMDB proxy, Replit ou algum servidor que gera URLs temporárias, a imagem pode perder a referência.
+
+Exemplo:
+
+```html
+<img src="https://servidor.com/imagem-temporaria.jpg">
+```
+
+Quando o componente é recriado durante o scroll, a URL já não responde corretamente.
+
+---
+
+### 2. Problema no React com Key
+
+Se você usa React e faz:
+
+```jsx
+{movies.map((movie, index) => (
+  <Card key={index} />
+))}
+```
+
+Pode dar problemas quando a lista é renderizada novamente.
+
+O correto é:
+
+```jsx
+{movies.map((movie) => (
+  <Card key={movie.id} />
+))}
+```
+
+---
+
+### 3. Lazy Loading mal configurado
+
+Se existir algo parecido com:
+
+```jsx
+<img loading="lazy" />
+```
+
+ou
+
+```jsx
+<LazyLoad>
+```
+
+O navegador remove a imagem quando ela sai da tela para economizar memória.
+
+Em alguns celulares isso dá bug.
+
+Teste removendo:
+
+```html
+loading="lazy"
+```
+
+---
+
+### 4. Erro de CSS
+
+Vejo vários cards pretos vazios no print.
+
+Pode ser que a imagem esteja lá mas escondida.
+
+Verifique se não existe:
+
+```css
+opacity: 0;
+visibility: hidden;
+display: none;
+```
+
+ou
+
+```css
+transform: translateY(...)
+```
+
+quando faz scroll.
+
+---
+
+### 5. Componente desmontando
+
+Se estiver usando React:
+
+```jsx
+{isVisible && <MovieCard />}
+```
+
+Quando você desce a página:
+
+```js
+isVisible = false
+```
+
+O React destrói o card.
+
+Ao subir:
+
+```js
+isVisible = true
+```
+
+Ele recria.
+
+---
+
+### 6. Replit ficando sem memória
+
+Como seu projeto está hospedado no Replit, pode acontecer:
+
+* API demora responder
+* Imagens não ficam em cache
+* Scroll força nova renderização
+
+Aí os posters somem temporariamente.
+
+---
+
+### Como descobrir o motivo exato
+
+Abra o aplicativo e aperte:
+
+**F12 → Console**
+
+ou
+
+**Inspecionar → Network**
+
+Depois role a página.
+
+Veja se aparecem erros como:
+
+```txt
+Failed to load resource
+404
+403
+CORS
+```
+
+ou
+
+```txt
+Image failed to load
+```
+
+---
+
+Se você me enviar o arquivo **ZIP atualizado do NetPlay** (o projeto completo), eu consigo analisar o código e apontar exatamente qual componente está fazendo as imagens desaparecerem durante o scroll.

@@ -26,6 +26,10 @@ interface RowProps {
 
 const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectMovie, cardStyle, type = 'standard', rank, rankColor, highlightProvider, idx = 99 }: any) => {
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = React.useRef<HTMLImageElement>(null);
+  React.useEffect(() => {
+    if (imgRef.current?.complete) setIsLoaded(true);
+  }, []);
   const matchPercentage = 80 + (movie.id % 20);
 
   const providers = useMemo(() => {
@@ -145,7 +149,8 @@ const MovieCard = React.memo(({ movie, isLargeRow, isContinueWatching, onSelectM
         {/* Main image */}
         {imgSrc ? (
           <img
-            className={`object-cover w-full h-full transition-opacity duration-400 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+            ref={imgRef}
+            className={`object-cover w-full h-full transition-opacity duration-200 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
             src={imgSrc}
             alt={movie.title || movie.name}
             onLoad={() => setIsLoaded(true)}
