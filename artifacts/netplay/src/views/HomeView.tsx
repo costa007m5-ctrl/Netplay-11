@@ -365,14 +365,14 @@ const HomeView = React.memo(({
             </div>
             <div className="grid grid-cols-4 md:grid-cols-8 gap-2 md:gap-3">
               {[
-                { name: 'Filmes', icon: Film },
-                { name: 'Séries', icon: Tv },
-                { name: 'Anime', icon: Sparkles },
-                { name: 'Documentários', icon: Activity },
-                { name: 'Ação', icon: Zap },
-                { name: 'Comédia', icon: Star },
-                { name: 'Terror', icon: Zap },
-                { name: 'Infantil', icon: Sparkles },
+                { name: 'Filmes', icon: Film, path: '/filmes' },
+                { name: 'Séries', icon: Tv, path: '/series' },
+                { name: 'Anime', icon: Sparkles, path: '/genre/Anime' },
+                { name: 'Documentários', icon: Activity, path: '/genre/Documentários' },
+                { name: 'Ação', icon: Zap, path: '/genre/Ação' },
+                { name: 'Comédia', icon: Star, path: '/genre/Comédia' },
+                { name: 'Terror', icon: Zap, path: '/genre/Terror' },
+                { name: 'Infantil', icon: Sparkles, path: '/genre/Infantil' },
               ].map((cat, idx) => (
                 <motion.button
                   key={cat.name}
@@ -381,7 +381,7 @@ const HomeView = React.memo(({
                   transition={{ delay: idx * 0.04 }}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate(`/genre/${cat.name}`)}
+                  onClick={() => navigate(cat.path)}
                   className={`relative flex flex-col items-center justify-center gap-1.5 py-3 md:py-4 rounded-xl md:rounded-2xl bg-gradient-to-br ${CATEGORY_COLORS[idx % CATEGORY_COLORS.length]} border backdrop-blur-xl cursor-pointer transition-all overflow-hidden group`}
                 >
                   <cat.icon size={16} className="text-white/80 group-hover:scale-110 transition-transform" />
@@ -391,23 +391,6 @@ const HomeView = React.memo(({
             </div>
           </section>
 
-          {/* GENRE FILTER PILLS */}
-          <section className="px-4 md:px-12 flex flex-wrap gap-2 md:gap-2.5 mb-6 md:mb-8 relative z-20">
-            {['Em Alta', 'Universos', 'Ação', 'Comédia', 'Drama', 'Sci-Fi', 'Romance'].map((tag, idx) => (
-              <motion.button
-                key={tag}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                onClick={() => navigate(`/genre/${tag}`)}
-                className="relative px-4 py-1.5 overflow-hidden bg-white/[0.04] border border-white/[0.08] rounded-full group hover:border-red-500/40 hover:bg-red-500/10 transition-all shadow-md"
-              >
-                <span className="relative z-10 text-[9px] md:text-[10px] font-black text-white/50 group-hover:text-white uppercase tracking-wider italic transition-colors">
-                  {tag}
-                </span>
-              </motion.button>
-            ))}
-          </section>
 
           {/* STATS CARDS */}
           <section className="px-4 md:px-12 mb-6 md:mb-8">
@@ -447,7 +430,7 @@ const HomeView = React.memo(({
             </div>
           </section>
 
-          {/* CANAIS PREMIUM */}
+          {/* CANAIS DE TV */}
           <section className="px-4 md:px-12 mb-6 md:mb-8">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base md:text-3xl font-black text-white uppercase tracking-tighter italic section-title-premium flex items-center gap-2.5">
@@ -463,26 +446,40 @@ const HomeView = React.memo(({
             </div>
             <div className="flex gap-3 md:gap-4 overflow-x-auto no-scrollbar pb-2">
               {[
-                { name: 'Netflix', bg: 'bg-[#0a0a0a]', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg', border: 'border-red-900/40', glow: 'hover:shadow-[0_0_25px_rgba(229,9,20,0.3)]' },
-                { name: 'Disney+', bg: 'bg-[#040714]', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg', border: 'border-blue-900/40', glow: 'hover:shadow-[0_0_25px_rgba(0,99,229,0.3)]' },
-                { name: 'HBO', bg: 'bg-[#000814]', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/ce/Max_logo.svg', border: 'border-blue-800/40', glow: 'hover:shadow-[0_0_25px_rgba(0,43,231,0.3)]' },
-                { name: 'Prime', bg: 'bg-[#0f171e]', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png', border: 'border-blue-700/30', glow: 'hover:shadow-[0_0_25px_rgba(0,168,225,0.2)]' },
-                { name: 'Apple TV+', bg: 'bg-[#111]', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Apple_TV_Plus_Logo.svg', border: 'border-gray-800/40', glow: 'hover:shadow-[0_0_25px_rgba(255,255,255,0.1)]' },
+                { name: 'Globo', bg: 'bg-[#0a0f1a]', border: 'border-blue-900/40', glow: 'hover:shadow-[0_0_20px_rgba(0,80,200,0.3)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Rede_Globo_logo_2021.svg/200px-Rede_Globo_logo_2021.svg.png', live: true },
+                { name: 'SBT', bg: 'bg-[#0a0a12]', border: 'border-purple-900/40', glow: 'hover:shadow-[0_0_20px_rgba(120,40,200,0.3)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/SBT_2020.svg/200px-SBT_2020.svg.png', live: true },
+                { name: 'Record TV', bg: 'bg-[#120a0a]', border: 'border-red-900/40', glow: 'hover:shadow-[0_0_20px_rgba(200,0,0,0.3)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Record_TV_logo.svg/200px-Record_TV_logo.svg.png', live: true },
+                { name: 'Band', bg: 'bg-[#0a100a]', border: 'border-green-900/40', glow: 'hover:shadow-[0_0_20px_rgba(0,160,0,0.2)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Band_logo_2014.svg/200px-Band_logo_2014.svg.png', live: true },
+                { name: 'CNN Brasil', bg: 'bg-[#0a0a0a]', border: 'border-red-800/30', glow: 'hover:shadow-[0_0_20px_rgba(200,0,0,0.2)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/CNN_Brasil.svg/200px-CNN_Brasil.svg.png', live: true },
+                { name: 'GloboNews', bg: 'bg-[#080c14]', border: 'border-blue-800/30', glow: 'hover:shadow-[0_0_20px_rgba(0,60,180,0.25)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/GloboNews_2021_logo.svg/200px-GloboNews_2021_logo.svg.png', live: true },
+                { name: 'SporTV', bg: 'bg-[#080c14]', border: 'border-green-800/30', glow: 'hover:shadow-[0_0_20px_rgba(0,160,80,0.25)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/SporTV_logo.svg/200px-SporTV_logo.svg.png', live: true },
+                { name: 'RedeTV!', bg: 'bg-[#100c08]', border: 'border-orange-900/30', glow: 'hover:shadow-[0_0_20px_rgba(200,100,0,0.2)]', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Logo_RedeTV%21.svg/200px-Logo_RedeTV%21.svg.png', live: true },
               ].map((channel) => (
                 <motion.button
                   key={channel.name}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
-                  onClick={() => navigate(`/provider/${channel.name}`)}
-                  className={`${channel.bg} border ${channel.border} rounded-2xl flex items-center justify-center min-w-[110px] md:min-w-[160px] h-14 md:h-20 flex-shrink-0 transition-all ${channel.glow} cursor-pointer p-3 md:p-5`}
+                  onClick={() => navigate('/canais')}
+                  className={`${channel.bg} border ${channel.border} rounded-2xl flex flex-col items-center justify-center min-w-[90px] md:min-w-[130px] h-16 md:h-20 flex-shrink-0 transition-all ${channel.glow} cursor-pointer p-3 md:p-4 relative overflow-hidden group`}
                 >
+                  {channel.live && (
+                    <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600/90 px-1.5 py-0.5 rounded-full">
+                      <div className="w-1 h-1 bg-white rounded-full animate-pulse" />
+                      <span className="text-white text-[6px] font-black uppercase tracking-wider">Ao Vivo</span>
+                    </div>
+                  )}
                   <img
                     src={channel.logo}
                     alt={channel.name}
-                    className="h-5 md:h-8 object-contain w-full"
+                    className="h-5 md:h-7 object-contain w-full filter brightness-90 group-hover:brightness-110 transition-all"
                     loading="lazy"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
                   />
+                  <span className="hidden text-white font-black text-[10px] uppercase tracking-tight">{channel.name}</span>
                 </motion.button>
               ))}
             </div>
