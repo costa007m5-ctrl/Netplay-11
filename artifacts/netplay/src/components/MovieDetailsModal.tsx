@@ -13,6 +13,7 @@ import { buildBetterFlixUrl } from './admin/AdminFlixAPITab';
 interface MovieDetailsModalProps {
   movie: Movie;
   similarMovies: Movie[];
+  allMovies?: Movie[];
   onClose: () => void;
   onPlay: (movie: Movie, episodeUrl?: string, startTime?: number, playerStyle?: string, episodeIndex?: number) => void;
   onSelectSimilar: (movie: Movie) => void;
@@ -161,6 +162,7 @@ function saveTmdbMetaCache(movieId: number, data: Omit<TmdbMetaCache, 'ts'>) {
 const MovieDetailsModal = React.memo(({ 
   movie, 
   similarMovies, 
+  allMovies,
   onClose, 
   onPlay, 
   onSelectSimilar, 
@@ -178,7 +180,7 @@ const MovieDetailsModal = React.memo(({
   const [showVideo, setShowVideo] = useState(false);
   const [isPlayingFullscreen, setIsPlayingFullscreen] = useState(false);
   const isSeries = movie.type === 'series' || movie.media_type === 'tv';
-  const [activeInfoTab, setActiveInfoTab] = useState<'details' | 'episodes' | 'similar'>(isSeries ? 'episodes' : 'details');
+  const [activeInfoTab, setActiveInfoTab] = useState<'details' | 'episodes' | 'similar' | 'collection'>(isSeries ? 'episodes' : 'details');
 
   // Atualiza o tab ativo quando o tipo do filme muda (ex: carregamento assíncrono)
   useEffect(() => {
@@ -1124,6 +1126,17 @@ const MovieDetailsModal = React.memo(({
                 <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
               )}
             </button>
+            {(movie.collection_id || movie.collection_name) && (
+              <button
+                onClick={() => setActiveInfoTab('collection')}
+                className={`relative px-4 md:px-6 py-2.5 rounded-full font-black text-[10px] md:text-xs uppercase tracking-[0.2em] transition-all whitespace-nowrap ${activeInfoTab === 'collection' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                Coleção
+                {activeInfoTab === 'collection' && (
+                  <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+                )}
+              </button>
+            )}
           </div>
 
         {/* Conteúdo das Tabs */}
@@ -1498,69 +1511,159 @@ const MovieDetailsModal = React.memo(({
               </motion.div>
             )}
             {activeInfoTab === 'similar' && (
-              <div 
+              <motion.div
                 key="similar"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
               >
                 {similarMovies.length > 0 ? (
-                  similarMovies.map((similar, idx) => {
-                    const simProvider = getProvider(similar);
-                    const simAgeRating = getAgeRating(similar.id);
-                    const simMatch = 80 + (similar.id % 20);
-                    const simYear = 2010 + (similar.id % 15);
-
-                    return (
-                      <div 
-                        key={similar.id}
-                        className="bg-white/5 rounded-[2rem] overflow-hidden cursor-pointer group border border-white/5 hover:border-red-600/30 transition-all hover:-translate-y-2 shadow-2xl animate-fade-in"
-                        style={{ animationDelay: `${idx * 0.05}s` }}
-                        onClick={() => {
-                          const modalContent = document.querySelector('.custom-scrollbar');
-                          if (modalContent) modalContent.scrollTo({ top: 0, behavior: 'smooth' });
-                          onSelectSimilar(similar);
-                        }}
-                      >
-                        <div className="relative aspect-video">
-                          <img 
-                            src={similar.backdrop_path ? (similar.backdrop_path.startsWith('http') ? similar.backdrop_path : `https://image.tmdb.org/t/p/w500/${similar.backdrop_path}`) : 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=500&q=80'}
-                            alt={similar.title}
-                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  <>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-5 flex items-center gap-2">
+                      <span className="w-4 h-px bg-red-600 inline-block" />
+                      Títulos Relacionados
+                    </p>
+                    <div className="grid grid-cols-3 gap-3 md:gap-4">
+                      {similarMovies.slice(0, 6).map((similar, idx) => (
+                        <motion.div
+                          key={similar.id}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: idx * 0.05 }}
+                          whileHover={{ scale: 1.05, y: -4 }}
+                          className="relative aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden cursor-pointer group border border-white/[0.06] hover:border-red-500/50 shadow-xl transition-all"
+                          onClick={() => {
+                            const modalContent = document.querySelector('.custom-scrollbar');
+                            if (modalContent) modalContent.scrollTo({ top: 0, behavior: 'smooth' });
+                            onSelectSimilar(similar);
+                          }}
+                        >
+                          <img
+                            src={similar.poster_path ? (similar.poster_path.startsWith('http') ? similar.poster_path : `https://image.tmdb.org/t/p/w342/${similar.poster_path}`) : (similar.backdrop_path ? (similar.backdrop_path.startsWith('http') ? similar.backdrop_path : `https://image.tmdb.org/t/p/w500/${similar.backdrop_path}`) : `https://picsum.photos/seed/${similar.id}/300/450`)}
+                            alt={similar.title || similar.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
                           />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Play size={48} className="text-white fill-white" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent" />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="w-9 h-9 bg-red-600/90 rounded-full flex items-center justify-center shadow-lg">
+                              <Play size={14} fill="white" className="text-white ml-0.5" />
+                            </div>
                           </div>
-                          <div className="absolute top-4 right-4">
-                            {simProvider.logo && (
-                              <div className={`${simProvider.bg} p-2 rounded-xl shadow-2xl border border-white/10 backdrop-blur-md`}>
-                                <img src={simProvider.logo} alt={simProvider.name} className="h-4 object-contain" referrerPolicy="no-referrer" />
-                              </div>
+                          {similar.type === 'series' && (
+                            <div className="absolute top-1.5 left-1.5 bg-blue-600/80 text-white text-[6px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md backdrop-blur-sm">
+                              Série
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 left-0 right-0 p-2">
+                            <p className="text-white font-black text-[8px] md:text-[9px] uppercase italic truncate leading-tight">
+                              {similar.title || similar.name}
+                            </p>
+                            {(similar.rating || similar.vote_average) && (
+                              <span className="text-yellow-400 text-[7px] font-black">★ {((similar.rating || similar.vote_average) as number).toFixed(1)}</span>
                             )}
                           </div>
-                        </div>
-                        <div className="p-8 space-y-4">
-                          <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest">
-                            <span className="text-green-500">{simMatch}% Match</span>
-                            <span className={`px-2 py-0.5 rounded-md ${getRatingColor(simAgeRating)} text-white`}>{simAgeRating}</span>
-                            <span className="text-gray-500">{simYear}</span>
-                          </div>
-                          <h4 className="text-white font-black text-xl uppercase tracking-tighter italic group-hover:text-red-500 transition-colors truncate">
-                            {similar.title}
-                          </h4>
-                          <p className="text-gray-500 text-sm line-clamp-3 font-medium italic leading-relaxed">
-                            {similar.overview}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
+                        </motion.div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
-                  <div className="col-span-full text-center py-20 bg-white/5 rounded-[3rem] border border-dashed border-white/10">
-                    <Sparkles size={48} className="text-gray-800 mx-auto mb-4" />
-                    <p className="text-gray-500 font-black uppercase tracking-widest italic">Nenhum título semelhante encontrado.</p>
+                  <div className="text-center py-16 bg-white/5 rounded-[2rem] border border-dashed border-white/10">
+                    <Sparkles size={36} className="text-gray-800 mx-auto mb-3" />
+                    <p className="text-gray-500 font-black uppercase tracking-widest text-xs italic">Nenhum título semelhante encontrado.</p>
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
+            {activeInfoTab === 'collection' && (() => {
+              const collectionMovies = (allMovies || []).filter((m: Movie) => {
+                if (m.id === movie.id) return false;
+                if (movie.collection_id && m.collection_id && String(m.collection_id) === String(movie.collection_id)) return true;
+                if (movie.collection_name && m.collection_name && m.collection_name.trim().toLowerCase() === movie.collection_name.trim().toLowerCase()) return true;
+                const movieTitleBase = (movie.title || movie.name || '').toLowerCase().replace(/[:\-–—]/g, '').split(' ').filter(w => w.length > 3).slice(0, 3).join(' ');
+                const mTitleBase = (m.title || m.name || '').toLowerCase().replace(/[:\-–—]/g, '').split(' ').filter((w: string) => w.length > 3).slice(0, 3).join(' ');
+                return movieTitleBase.length > 4 && (movieTitleBase.includes(mTitleBase) || mTitleBase.includes(movieTitleBase));
+              });
+              return (
+                <motion.div
+                  key="collection"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                >
+                  <div className="flex items-center gap-3 mb-5">
+                    <Sparkles size={14} className="text-red-500 animate-pulse" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">
+                      {movie.collection_name || 'Franquia'}
+                    </p>
+                    <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">
+                      {collectionMovies.length + 1} títulos
+                    </span>
+                  </div>
+                  {collectionMovies.length === 0 ? (
+                    <div className="text-center py-16 bg-white/5 rounded-[2rem] border border-dashed border-white/10">
+                      <Sparkles size={36} className="text-gray-800 mx-auto mb-3" />
+                      <p className="text-gray-500 font-black uppercase tracking-widest text-xs italic">Apenas este título disponível no catálogo.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-3 md:gap-4">
+                      {[movie, ...collectionMovies].map((item, idx) => (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: idx * 0.05 }}
+                          whileHover={{ scale: item.id === movie.id ? 1 : 1.05, y: item.id === movie.id ? 0 : -4 }}
+                          className={`relative aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden cursor-pointer group border shadow-xl transition-all
+                            ${item.id === movie.id ? 'border-red-500/60 ring-2 ring-red-500/30' : 'border-white/[0.06] hover:border-red-500/50'}`}
+                          onClick={() => {
+                            if (item.id === movie.id) return;
+                            const modalContent = document.querySelector('.custom-scrollbar');
+                            if (modalContent) modalContent.scrollTo({ top: 0, behavior: 'smooth' });
+                            onSelectSimilar(item);
+                          }}
+                        >
+                          <img
+                            src={item.poster_path ? (item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w342/${item.poster_path}`) : `https://picsum.photos/seed/${item.id}/300/450`}
+                            alt={item.title || item.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent" />
+                          {item.id === movie.id && (
+                            <div className="absolute top-1.5 right-1.5 bg-red-600 text-white text-[6px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                              Assistindo
+                            </div>
+                          )}
+                          {item.type === 'series' && item.id !== movie.id && (
+                            <div className="absolute top-1.5 left-1.5 bg-blue-600/80 text-white text-[6px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md backdrop-blur-sm">
+                              Série
+                            </div>
+                          )}
+                          {item.id !== movie.id && (
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="w-9 h-9 bg-red-600/90 rounded-full flex items-center justify-center shadow-lg">
+                                <Play size={14} fill="white" className="text-white ml-0.5" />
+                              </div>
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 left-0 right-0 p-2">
+                            <p className="text-white font-black text-[8px] md:text-[9px] uppercase italic truncate leading-tight">
+                              {item.title || item.name}
+                            </p>
+                            {(item.release_year || item.release_date) && (
+                              <span className="text-gray-400 text-[7px] font-bold">{item.release_year || String(item.release_date || '').substring(0, 4)}</span>
+                            )}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })()}
           </AnimatePresence>
         </div>
       </div>

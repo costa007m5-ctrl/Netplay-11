@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Movie } from '../types';
-import { ChevronLeft, ChevronRight, Zap, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, TrendingUp, Play } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface NewReleasesRowProps {
@@ -9,63 +9,77 @@ interface NewReleasesRowProps {
   onSelectMovie: (movie: Movie) => void;
 }
 
-const NewCard = React.memo(({ movie, idx, onSelectMovie }: { movie: Movie, idx: number, onSelectMovie: (movie: Movie) => void }) => {
+const NewCard = React.memo(({ movie, idx, onSelectMovie }: { movie: Movie; idx: number; onSelectMovie: (m: Movie) => void }) => {
+  const img = movie.backdrop_path
+    ? movie.backdrop_path.startsWith('http')
+      ? movie.backdrop_path
+      : `https://image.tmdb.org/t/p/w780/${movie.backdrop_path}`
+    : movie.poster_path
+    ? movie.poster_path.startsWith('http')
+      ? movie.poster_path
+      : `https://image.tmdb.org/t/p/w500/${movie.poster_path}`
+    : `https://picsum.photos/seed/${movie.id}/780/440`;
+
   return (
-    <div 
-      className="relative flex-none snap-start w-[160px] md:w-[320px] group/new animate-fade-in"
+    <motion.div
+      className="relative flex-none w-[220px] md:w-[300px] group/new cursor-pointer"
       style={{ animationDelay: `${idx * 0.03}s` }}
+      whileHover={{ scale: 1.03, y: -4 }}
+      whileTap={{ scale: 0.97 }}
       onClick={() => onSelectMovie(movie)}
     >
-      <div className="relative aspect-[2/3] rounded-[2rem] md:rounded-[3.5rem] overflow-hidden border-4 border-white/5 group-hover/new:border-red-600 transition-colors duration-300 cursor-pointer">
-        {/* The Card Background with intense zoom on hover */}
-        <img 
-          src={movie.poster_path?.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w500/${movie.poster_path}`}
-          className="w-full h-full object-cover transition-transform duration-300 group-hover/new:scale-105"
+      <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/[0.07] group-hover/new:border-red-500/50 transition-all shadow-2xl">
+        <img
+          src={img}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover/new:scale-105"
           alt={movie.title || movie.name}
           referrerPolicy="no-referrer"
-          loading="lazy"
+          loading={idx < 4 ? 'eager' : 'lazy'}
         />
-        
-        {/* Brutalist "NEW" Overlay */}
-        <div className="absolute top-6 right-[-20px] rotate-[-15deg] z-20">
-          <div className="bg-red-600 text-white font-black italic uppercase text-[10px] md:text-sm py-1 px-8 md:px-12 shadow-[0_4px_15px_rgba(220,38,38,0.6)] transform skew-x-[-10deg]">
-             New Release
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+
+        {/* EM ALTA badge */}
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-red-600/90 backdrop-blur-sm px-2 py-0.5 rounded-lg shadow-lg">
+          <div className="w-1 h-1 bg-white rounded-full animate-ping" />
+          <span className="text-white text-[7px] font-black uppercase tracking-wider">Em Alta</span>
+        </div>
+
+        {/* Play button on hover */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/new:opacity-100 transition-opacity duration-300">
+          <div className="w-11 h-11 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center border border-white/30">
+            <Play size={16} fill="white" className="text-white ml-0.5" />
           </div>
         </div>
 
-        {/* Dynamic Scan Line Effect */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-red-600/10 to-transparent h-20 -top-20 group-hover/new:animate-scan z-10 pointer-events-none"></div>
-
-        {/* Gradient Bottom */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex flex-col justify-end p-6 md:p-10 opacity-0 group-hover/new:opacity-100 transition-opacity duration-300">
-           {movie.logo_path ? (
-              <img 
-                src={movie.logo_path.startsWith('http') ? movie.logo_path : `https://image.tmdb.org/t/p/original/${movie.logo_path}`} 
-                className="h-10 md:h-16 object-contain mb-4"
-                referrerPolicy="no-referrer"
-              />
-           ) : (
-              <h3 className="text-white font-black italic uppercase text-lg md:text-3xl leading-none mb-4">{movie.title || movie.name}</h3>
-           )}
-           <div className="flex gap-2">
-              <span className="text-[10px] font-bold px-3 py-1 bg-white text-black rounded-full uppercase tracking-widest">{movie.genres?.split(',')[0]}</span>
-              <span className="text-[10px] font-bold px-3 py-1 bg-red-600 text-white rounded-full uppercase tracking-widest flex items-center gap-1">
-                <Zap size={10} fill="currentColor" /> UHD
+        {/* Meta bottom */}
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          {movie.logo_path ? (
+            <img
+              src={movie.logo_path.startsWith('http') ? movie.logo_path : `https://image.tmdb.org/t/p/original/${movie.logo_path}`}
+              className="h-6 md:h-8 object-contain object-left mb-1.5"
+              referrerPolicy="no-referrer"
+              alt=""
+            />
+          ) : (
+            <h3 className="text-white font-black italic uppercase text-sm md:text-base leading-tight truncate mb-1">
+              {movie.title || movie.name}
+            </h3>
+          )}
+          <div className="flex items-center gap-2">
+            {movie.genres && (
+              <span className="text-[8px] font-black px-2 py-0.5 bg-white/15 text-white rounded-full uppercase tracking-widest backdrop-blur-sm">
+                {movie.genres.split(',')[0].trim()}
               </span>
-           </div>
+            )}
+            {movie.vote_average && (
+              <span className="text-[8px] font-black text-yellow-400">★ {(movie.vote_average as number).toFixed(1)}</span>
+            )}
+          </div>
         </div>
       </div>
-      
-      {/* Decorative ID Number (Brutalist style) */}
-      <div className="mt-4 flex items-center justify-between px-4">
-        <span className="font-mono text-[10px] text-gray-500 font-bold tracking-widest">ID_{movie.id.toString().substring(0, 8)}</span>
-        <div className="flex gap-1">
-           {Array.from({ length: 5 }).map((_, i) => (
-             <div key={i} className={`w-1 h-1 rounded-full ${i < Math.floor(movie.rating || 0 / 2) ? 'bg-red-600' : 'bg-white/10'}`} />
-           ))}
-        </div>
-      </div>
-    </div>
+    </motion.div>
   );
 });
 
@@ -75,41 +89,33 @@ const NewReleasesRow = ({ title, movies, onSelectMovie }: NewReleasesRowProps) =
   const scroll = (dir: 'left' | 'right') => {
     if (scrollRef.current) {
       const { scrollLeft, clientWidth } = scrollRef.current;
-      const amount = clientWidth * 0.8;
-      scrollRef.current.scrollTo({ left: dir === 'left' ? scrollLeft - amount : scrollLeft + amount, behavior: 'smooth' });
+      scrollRef.current.scrollTo({ left: dir === 'left' ? scrollLeft - clientWidth * 0.8 : scrollLeft + clientWidth * 0.8, behavior: 'smooth' });
     }
   };
 
   if (!movies.length) return null;
 
   return (
-    <div className="relative py-8 md:py-10 px-4 md:px-12 bg-gradient-to-r from-red-600/5 via-transparent to-transparent">
-      <div className="flex flex-col md:flex-row items-end justify-between mb-4 md:mb-6 gap-6">
-        <div>
-           <div className="flex items-center gap-4 mb-4">
-             <div className="h-[2px] w-12 bg-red-600"></div>
-             <Sparkles className="text-red-600 animate-pulse" size={20} />
-             <div className="h-[2px] w-12 bg-red-600"></div>
-           </div>
-           <h2 className="text-4xl md:text-[8rem] font-black italic uppercase tracking-tighter leading-[0.8] text-white/100">
-             {title.split(' ')[0]} <br/>
-             <span className="text-red-600 drop-shadow-[0_0_30px_rgba(220,38,38,0.3)]">{title.split(' ').slice(1).join(' ')}</span>
-           </h2>
+    <div className="relative py-4 md:py-6">
+      <div className="flex items-center justify-between mb-3 px-4 md:px-12">
+        <div className="flex items-center gap-2.5">
+          <div className="w-1 h-6 md:h-8 bg-red-600 rounded-full shadow-[0_0_12px_rgba(220,38,38,0.5)]" />
+          <TrendingUp className="text-red-500" size={15} />
+          <h2 className="text-base md:text-2xl font-black text-white italic uppercase tracking-tighter">{title}</h2>
         </div>
-        
-        <div className="flex gap-4 mb-4">
-           <button onClick={() => scroll('left')} className="w-16 h-16 flex items-center justify-center bg-white/5 hover:bg-black rounded-full border border-white/10 transition-all hover:border-red-600 group">
-             <ChevronLeft size={32} className="group-hover:text-red-600" />
-           </button>
-           <button onClick={() => scroll('right')} className="w-16 h-16 flex items-center justify-center bg-white/5 hover:bg-black rounded-full border border-white/10 transition-all hover:border-red-600 group">
-             <ChevronRight size={32} className="group-hover:text-red-600" />
-           </button>
+        <div className="flex gap-2">
+          <button onClick={() => scroll('left')} className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center hover:bg-red-600 hover:border-red-600 transition-all">
+            <ChevronLeft size={14} className="text-white" />
+          </button>
+          <button onClick={() => scroll('right')} className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center hover:bg-red-600 hover:border-red-600 transition-all">
+            <ChevronRight size={14} className="text-white" />
+          </button>
         </div>
       </div>
 
-      <div 
+      <div
         ref={scrollRef}
-        className="flex overflow-x-auto scrollbar-hide gap-6 md:gap-10 snap-x pb-6 pt-4"
+        className="flex overflow-x-auto no-scrollbar gap-3 md:gap-4 px-4 md:px-12 pb-2"
       >
         {movies.map((movie, idx) => (
           <NewCard key={movie.id} movie={movie} idx={idx} onSelectMovie={onSelectMovie} />

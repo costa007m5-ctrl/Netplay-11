@@ -134,6 +134,30 @@ export const MovieDetailRouteWrapper = ({
     );
   }
 
+  const genreBasedSimilar = useMemo(() => {
+    if (!movie) return [];
+    const movieGenres = (movie.genres || movie.genre || '').split(',').map((g: string) => g.trim().toLowerCase()).filter(Boolean);
+    const scored = myMovies
+      .filter((m: any) => m.id?.toString() !== movie.id?.toString())
+      .map((m: any) => {
+        const mGenres = (m.genres || m.genre || '').split(',').map((g: string) => g.trim().toLowerCase());
+        const shared = mGenres.filter((g: string) => movieGenres.includes(g)).length;
+        return { m, shared };
+      })
+      .filter(({ shared }) => shared > 0)
+      .sort((a, b) => b.shared - a.shared || (b.m.rating || 0) - (a.m.rating || 0));
+    const top = scored.slice(0, 6).map(({ m }) => m);
+    if (top.length < 6) {
+      const ids = new Set(top.map((m: any) => m.id?.toString()));
+      const rest = myMovies
+        .filter((m: any) => m.id?.toString() !== movie.id?.toString() && !ids.has(m.id?.toString()))
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 6 - top.length);
+      return [...top, ...rest];
+    }
+    return top;
+  }, [movie, myMovies]);
+
   return (
     <MovieDetailsModal
       movie={movie}
@@ -141,7 +165,8 @@ export const MovieDetailRouteWrapper = ({
       onPlay={(m: any, url: any, time: any, playerStyle: any, episodeIndex: any) => handlePlayMovie(m, url, time, playerStyle, episodeIndex)}
       onToggleMyList={() => toggleMyList(movie)}
       onToggleFavorite={() => toggleFavorite(movie)}
-      similarMovies={myMovies.filter((m: any) => m.id?.toString() !== movie.id?.toString()).slice(0, 10)}
+      similarMovies={genreBasedSimilar}
+      allMovies={myMovies}
       onSelectSimilar={(similar: any) => navigate(`/movie/${similar.id}`, { state: location.state })}
       onWatchParty={() => onWatchParty(movie)}
       isAddedToMyList={myListIds.has(movie.id)}
