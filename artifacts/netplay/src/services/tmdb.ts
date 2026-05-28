@@ -4,19 +4,6 @@ import axios, { AxiosInstance } from 'axios';
 const sessionCache = new Map<string, { data: any; ts: number }>();
 const SESSION_TTL = 2 * 60 * 60 * 1000; // 2 horas — dados de filmes mudam raramente
 
-// Chave direta (fallback quando o API server não está disponível)
-const VITE_TMDB_KEY = import.meta.env.VITE_TMDB_API_KEY as string | undefined;
-const TMDB_DIRECT_BASE = 'https://api.themoviedb.org/3';
-
-async function fetchDirect(url: string, config?: any): Promise<any> {
-  if (!VITE_TMDB_KEY) throw new Error('VITE_TMDB_API_KEY não configurada');
-  const params = new URLSearchParams({ ...(config?.params || {}), api_key: VITE_TMDB_KEY });
-  const fullUrl = `${TMDB_DIRECT_BASE}${url.startsWith('/') ? url : '/' + url}?${params}`;
-  const resp = await fetch(fullUrl);
-  if (!resp.ok) throw new Error(`TMDB direto HTTP ${resp.status}`);
-  return { data: await resp.json(), status: resp.status };
-}
-
 function makeCachedAxios(): AxiosInstance {
   const instance = axios.create({
     baseURL: '/api/tmdb',
@@ -33,30 +20,12 @@ function makeCachedAxios(): AxiosInstance {
     }
     try {
       const response = await originalGet(url, config);
-      // Se a resposta vier vazia por causa do servidor, tenta direto
-      if (!response.data || (response.data.results !== undefined && response.data.results.length === 0 && VITE_TMDB_KEY)) {
-        try {
-          const direct = await fetchDirect(url, config);
-          if (direct.data?.results?.length > 0 || direct.data?.id) {
-            sessionCache.set(key, { data: direct.data, ts: Date.now() });
-            return direct;
-          }
-        } catch (_) { /* ignora fallback error */ }
-      }
       sessionCache.set(key, { data: response.data, ts: Date.now() });
       return response;
     } catch (error: any) {
-      // Fallback direto ao TMDB quando o API server não responde
-      if (VITE_TMDB_KEY) {
-        try {
-          const direct = await fetchDirect(url, config);
-          sessionCache.set(key, { data: direct.data, ts: Date.now() });
-          return direct;
-        } catch (_) { /* ignora */ }
-      }
       // Retorna cache stale ou vazio como último recurso
       if (hit) return { data: hit.data, status: 200, statusText: 'OK (stale)', headers: {}, config };
-      console.warn('TMDB fetch falhou (proxy + direto):', error?.message);
+      console.warn('TMDB fetch falhou:', error?.message);
       return { data: { results: [], cast: [], logos: [], flatrate: [], buy: [] }, status: 200 };
     }
   };
