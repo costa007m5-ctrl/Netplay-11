@@ -78,20 +78,19 @@ async function supabaseInsert(
   authToken: string,
   record: Record<string, any>
 ): Promise<void> {
-  // Upsert por tmdb_id: se já existe, atualiza; se não, insere
-  const res = await fetch(`${supabaseUrl}/rest/v1/movies?on_conflict=tmdb_id`, {
+  const res = await fetch(`${supabaseUrl}/rest/v1/movies`, {
     method: "POST",
     headers: {
       apikey: anonKey,
       Authorization: `Bearer ${authToken}`,
       "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates",
+      Prefer: "return=minimal",
     },
     body: JSON.stringify(record),
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Supabase upsert failed: ${res.status} — ${body}`);
+    throw new Error(`Supabase insert failed: ${res.status} — ${body}`);
   }
 }
 
