@@ -682,19 +682,19 @@ const MovieDetailsModal = React.memo(({
       onClick={onClose}
     >
       <div 
-        className={`${theme.bg} w-full min-h-screen relative ${theme.font}`}
+        className="bg-[#050505] w-full min-h-screen relative font-sans"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Botão Fechar */}
         <button 
           onClick={onClose}
-          className="absolute top-4 md:top-8 right-4 md:right-8 z-[190] bg-white/10 backdrop-blur-md text-white p-2 md:p-4 rounded-lg md:rounded-2xl hover:bg-red-600 transition-all hover:scale-110 active:scale-95 border border-white/10"
+          className="absolute top-4 md:top-6 right-4 md:right-6 z-[190] bg-white/[0.08] backdrop-blur-xl text-white p-2.5 md:p-3 rounded-xl hover:bg-red-600/90 transition-all hover:scale-105 active:scale-95 border border-white/[0.08] shadow-2xl"
         >
-          <X size={18} className="md:w-6 md:h-6" />
+          <X size={17} className="md:w-5 md:h-5" />
         </button>
         
         {/* Hero Section do Modal */}
-        <div className="relative h-[40vh] md:h-[85vh] bg-black">
+        <div className="relative h-[45vh] md:h-[88vh] bg-[#050505]">
           <AnimatePresence>
             {showVideo && movie.videoUrl ? (
               <div 
@@ -753,9 +753,9 @@ const MovieDetailsModal = React.memo(({
             )}
           </AnimatePresence>
           
-          <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-[#111]/60 to-transparent z-10 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#111] via-transparent to-transparent z-10 pointer-events-none" />
-          <div className="absolute inset-0 bg-black/20 z-[5] pointer-events-none" />
+          <div className="cinema-overlay absolute inset-0 z-10 pointer-events-none" />
+          <div className="hero-side-fade absolute inset-0 z-10 pointer-events-none" />
+          <div className="absolute inset-0 bg-black/15 z-[5] pointer-events-none" />
           
           {/* Provider Logo removed as requested */}
 
@@ -899,12 +899,13 @@ const MovieDetailsModal = React.memo(({
                             triggerSmartPlay(resolvePlayUrl(), 0, undefined, undefined, savedPref || undefined);
                           }
                         }}
-                        className={`${isLocked ? 'bg-zinc-800 text-gray-400 border border-zinc-600' : 'bg-white text-black hover:bg-gray-200'} px-6 md:px-10 py-3 md:py-4 rounded-md font-bold uppercase tracking-widest flex items-center gap-2 md:gap-3 text-xs md:text-sm shadow-xl transition-colors`}
+                        className={`${isLocked ? 'bg-zinc-900 text-gray-400 border border-zinc-700' : 'btn-premium-red text-white'} px-6 md:px-10 py-3 md:py-4 rounded-xl font-black uppercase tracking-widest flex items-center gap-2.5 md:gap-3 text-xs md:text-sm shadow-xl transition-all relative overflow-hidden group`}
                       >
+                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12" />
                         {isLocked ? (
-                          <><Lock size={14} className="md:w-6 md:h-6 text-yellow-500" /><span className="whitespace-nowrap text-yellow-500">Upgrade (Plus/Max)</span></>
+                          <><Lock size={14} className="md:w-5 md:h-5 text-yellow-500 relative z-10" /><span className="whitespace-nowrap text-yellow-500 relative z-10">Upgrade (Plus/Max)</span></>
                         ) : (
-                          <><Play fill="currentColor" size={14} className="md:w-6 md:h-6" /><span className="whitespace-nowrap">Assistir</span></>
+                          <><Play fill="currentColor" size={14} className="md:w-5 md:h-5 relative z-10" /><span className="whitespace-nowrap relative z-10">Assistir Agora</span></>
                         )}
                       </motion.button>
 
@@ -942,57 +943,67 @@ const MovieDetailsModal = React.memo(({
                 </>
               )}
 
-              <div className="flex bg-black/20 rounded-full items-center gap-3 md:gap-4 p-1">
-                <motion.button 
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => onToggleMyList(movie)}
-                  className={`w-10 h-10 md:w-14 md:h-14 rounded-full border-2 transition-all flex items-center justify-center ${isAddedToMyList ? 'bg-white border-white text-black' : 'bg-transparent border-white text-white hover:bg-white inset-0 hover:text-black'}`}
-                  title="Minha Lista"
-                >
-                  <Plus size={14} className={`md:w-6 md:h-6 transition-transform duration-700 ${isAddedToMyList ? 'rotate-45' : ''}`} />
-                </motion.button>
-
-                <motion.button 
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => onWatchParty(movie)}
-                  className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-transparent border-2 border-white text-white hover:bg-white hover:text-black transition-all flex items-center justify-center"
-                  title="Assistir em Grupo"
-                >
-                  <Users size={14} className="md:w-6 md:h-6" />
-                </motion.button>
-
-                <motion.button 
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => {
-                    const url = `${window.location.origin}/movie/${movie.id}`;
-                    if (navigator.share) {
-                      navigator.share({
-                        title: movie.title || movie.name,
-                        text: `Assista agora no aplicativo: ${movie.title || movie.name}\n\n`,
-                        url: url
-                      }).catch(console.error);
-                    } else {
-                      navigator.clipboard.writeText(`${window.location.origin}/movie/${movie.id}`);
-                      alert("Link copiado!");
-                    }
-                  }}
-                  className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-transparent border-2 border-white text-white hover:bg-white hover:text-black transition-all flex items-center justify-center"
-                  title="Compartilhar"
-                >
-                  <Share2 size={14} className="md:w-6 md:h-6" />
-                </motion.button>
+              {/* Premium action icons row */}
+              <div className="flex items-center gap-4 md:gap-6">
+                {[
+                  {
+                    icon: Plus,
+                    label: 'Minha Lista',
+                    active: isAddedToMyList,
+                    onClick: () => onToggleMyList(movie),
+                    activeClass: 'bg-white text-black border-white',
+                  },
+                  {
+                    icon: ThumbsUp,
+                    label: 'Avaliar',
+                    active: isFavorite,
+                    onClick: () => onToggleFavorite(movie),
+                    activeClass: 'bg-red-600/20 text-red-400 border-red-600/50',
+                  },
+                  {
+                    icon: Users,
+                    label: 'Grupo',
+                    active: false,
+                    onClick: () => onWatchParty(movie),
+                    activeClass: '',
+                  },
+                  {
+                    icon: Share2,
+                    label: 'Compartilhar',
+                    active: false,
+                    onClick: () => {
+                      if (navigator.share) {
+                        navigator.share({ title: movie.title || movie.name, url: `${window.location.origin}/movie/${movie.id}` }).catch(console.error);
+                      } else {
+                        navigator.clipboard.writeText(`${window.location.origin}/movie/${movie.id}`);
+                      }
+                    },
+                    activeClass: '',
+                  },
+                ].map((action, i) => (
+                  <motion.button
+                    key={action.label}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    onClick={action.onClick}
+                    className={`flex flex-col items-center gap-1.5 group transition-all`}
+                    title={action.label}
+                  >
+                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full border-2 flex items-center justify-center transition-all ${action.active ? action.activeClass : 'bg-white/[0.06] border-white/20 text-white hover:bg-white/15 hover:border-white/40'}`}>
+                      <action.icon size={14} className="md:w-5 md:h-5" strokeWidth={action.active ? 2.5 : 2} />
+                    </div>
+                    <span className="text-[8px] md:text-[9px] font-bold text-gray-400 group-hover:text-white uppercase tracking-wider transition-colors whitespace-nowrap">{action.label}</span>
+                  </motion.button>
+                ))}
               </div>
             </div>
           </div>
         </div>
 
         {/* Informações Detalhadas */}
-        <div className="p-6 md:p-12 space-y-8 md:space-y-12">
-          {/* Essential Info Bar (Streaming & Genres) - Now more prominent and higher up */}
-          <div className="flex flex-col md:flex-row gap-6 md:gap-12 items-stretch md:items-center justify-between bg-white/5 p-6 md:p-10 rounded-[2rem] border border-white/5 shadow-2xl backdrop-blur-sm">
+        <div className="p-6 md:p-10 space-y-6 md:space-y-10">
+          {/* Essential Info Bar */}
+          <div className="flex flex-col md:flex-row gap-5 md:gap-10 items-stretch md:items-center justify-between card-premium p-5 md:p-8 rounded-2xl shadow-2xl">
             <div className="space-y-3 md:space-y-4 flex-1">
               <h3 className="text-gray-500 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[10px] md:text-xs italic">Onde Assistir</h3>
               <div className="flex flex-wrap gap-3 md:gap-5">
@@ -1082,30 +1093,36 @@ const MovieDetailsModal = React.memo(({
             </div>
           </div>
 
-          {/* Tabs Section */}
-          <div className="flex gap-6 md:gap-10 mb-8 md:mb-12 border-b-2 border-white/10 overflow-x-auto no-scrollbar sticky top-0 bg-[#040714]/80 backdrop-blur-3xl z-50 py-2 px-6 md:px-12">
+          {/* Tabs Section — Premium */}
+          <div className="flex gap-1 mb-6 md:mb-10 overflow-x-auto no-scrollbar sticky top-0 bg-[#050505]/95 backdrop-blur-[40px] z-50 px-6 md:px-12 pt-4 pb-2 border-b border-white/[0.05]">
             {isSeries && (
               <button 
                 onClick={() => setActiveInfoTab('episodes')}
-                className={`pb-4 md:pb-5 text-sm md:text-base font-bold uppercase tracking-[0.15em] transition-all relative whitespace-nowrap pt-4 ${activeInfoTab === 'episodes' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                className={`relative px-4 md:px-6 py-2.5 rounded-full font-black text-[10px] md:text-xs uppercase tracking-[0.2em] transition-all whitespace-nowrap ${activeInfoTab === 'episodes' ? 'text-white bg-white/10 border border-white/15' : 'text-gray-500 hover:text-gray-300'}`}
               >
                 Episódios
-                {activeInfoTab === 'episodes' && <motion.div layoutId="tab" className={`absolute bottom-[-2px] left-0 right-0 h-[3px] bg-white rounded-t-sm shadow-[0_0_10px_rgba(255,255,255,0.5)]`} />}
+                {activeInfoTab === 'episodes' && (
+                  <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+                )}
               </button>
             )}
             <button 
-              onClick={() => setActiveInfoTab('similar')}
-              className={`pb-4 md:pb-5 text-sm md:text-base font-bold uppercase tracking-[0.15em] transition-all relative whitespace-nowrap pt-4 ${activeInfoTab === 'similar' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              onClick={() => setActiveInfoTab('details')}
+              className={`relative px-4 md:px-6 py-2.5 rounded-full font-black text-[10px] md:text-xs uppercase tracking-[0.2em] transition-all whitespace-nowrap ${activeInfoTab === 'details' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
             >
-              Sugestões
-              {activeInfoTab === 'similar' && <motion.div layoutId="tab" className={`absolute bottom-[-2px] left-0 right-0 h-[3px] bg-white rounded-t-sm shadow-[0_0_10px_rgba(255,255,255,0.5)]`} />}
+              Sobre
+              {activeInfoTab === 'details' && (
+                <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+              )}
             </button>
             <button 
-              onClick={() => setActiveInfoTab('details')}
-              className={`pb-4 md:pb-5 text-sm md:text-base font-bold uppercase tracking-[0.15em] transition-all relative whitespace-nowrap pt-4 ${activeInfoTab === 'details' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              onClick={() => setActiveInfoTab('similar')}
+              className={`relative px-4 md:px-6 py-2.5 rounded-full font-black text-[10px] md:text-xs uppercase tracking-[0.2em] transition-all whitespace-nowrap ${activeInfoTab === 'similar' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
             >
-              Detalhes
-              {activeInfoTab === 'details' && <motion.div layoutId="tab" className={`absolute bottom-[-2px] left-0 right-0 h-[3px] bg-white rounded-t-sm shadow-[0_0_10px_rgba(255,255,255,0.5)]`} />}
+              Relacionados
+              {activeInfoTab === 'similar' && (
+                <motion.div layoutId="modal-tab-pill" className="absolute inset-0 rounded-full bg-white/10 border border-white/15 -z-10" transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }} />
+              )}
             </button>
           </div>
 

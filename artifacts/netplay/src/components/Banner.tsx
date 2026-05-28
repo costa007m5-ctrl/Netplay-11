@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Play, Info, Sparkles, Star, ChevronDown } from 'lucide-react';
+import { Play, Info, Sparkles, Star, ChevronDown, Clock } from 'lucide-react';
 import tmdb, { requests, getMovieLogo } from '../services/tmdb';
 import { Movie } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -52,7 +52,6 @@ const Banner = React.memo(({ onPlay, onInfo, movieOverride, movies = [] }: Banne
     return str?.length > n ? str.substr(0, n - 1) + '...' : str;
   }
 
-  // Use `original` size for maximum sharpness on the banner
   const backgroundUrl = movie?.backdrop_path?.startsWith('http')
     ? movie.backdrop_path
     : movie?.backdrop_path
@@ -74,22 +73,28 @@ const Banner = React.memo(({ onPlay, onInfo, movieOverride, movies = [] }: Banne
     onPlay(movie, savedUrl || defaultUrl);
   };
 
+  const year = movie?.release_date
+    ? new Date(movie.release_date).getFullYear()
+    : movie?.first_air_date
+    ? new Date((movie as any).first_air_date).getFullYear()
+    : null;
+
   return (
     <header
-      className="relative text-white flex flex-col justify-end overflow-hidden bg-[#080808]"
-      style={{ height: 'min(100svh, 760px)', minHeight: '560px' }}
+      className="relative text-white flex flex-col justify-end overflow-hidden"
+      style={{ height: 'min(100svh, 780px)', minHeight: '580px', backgroundColor: '#050505' }}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      {/* Background image — full resolution for maximum sharpness */}
+      {/* Background image */}
       {backgroundUrl && (
         <AnimatePresence mode="wait">
           <motion.div
             key={movie?.id}
-            initial={{ opacity: 0, scale: 1.04 }}
-            animate={{ opacity: imgLoaded ? 1 : 0, scale: imgLoaded ? 1 : 1.04 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
+            initial={{ opacity: 0, scale: 1.06 }}
+            animate={{ opacity: imgLoaded ? 1 : 0, scale: imgLoaded ? 1 : 1.06 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="absolute inset-0 z-0"
           >
             <img
@@ -106,111 +111,166 @@ const Banner = React.memo(({ onPlay, onInfo, movieOverride, movies = [] }: Banne
         </AnimatePresence>
       )}
 
-      {/* Cinematic gradient layers — bottom-heavy so image stays sharp at top */}
+      {/* Cinematic gradient stack */}
       <div className="absolute inset-0 z-10 pointer-events-none">
-        {/* Lateral vignette */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/10 to-black/30" />
-        {/* Bottom fade — tall so content is always readable */}
-        <div className="absolute bottom-0 left-0 right-0 h-[75%] bg-gradient-to-t from-[#080808] via-[#080808]/60 to-transparent" />
-        {/* Very subtle top darkening */}
-        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/40 to-transparent" />
+        {/* Bottom cinema fade */}
+        <div className="cinema-overlay absolute inset-0" />
+        {/* Left side fade for readability */}
+        <div className="hero-side-fade absolute inset-0" />
+        {/* Subtle top darkening for navbar */}
+        <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-black/50 to-transparent" />
+        {/* Overall depth layer */}
+        <div className="absolute inset-0 bg-black/15" />
       </div>
 
-      {/* Slide Indicators */}
+      {/* Slide Indicators — vertical right side */}
       {movies.length > 1 && !movieOverride && (
-        <div className="absolute top-1/2 right-5 md:right-10 -translate-y-1/2 z-30 flex flex-col items-center gap-2.5">
+        <div className="absolute top-1/2 right-5 md:right-8 -translate-y-1/2 z-30 flex flex-col items-center gap-3">
           {movies.slice(0, 5).map((_, i) => (
             <button
               key={i}
               onClick={() => setCurrentIndex(i)}
-              className={`transition-all duration-400 rounded-full ${
+              className={`transition-all duration-500 rounded-full ${
                 i === currentIndex
-                  ? 'w-1.5 h-10 bg-white shadow-[0_0_12px_rgba(255,255,255,0.6)]'
-                  : 'w-1 h-4 bg-white/25 hover:bg-white/50'
+                  ? 'w-1.5 h-12 bg-red-500 shadow-[0_0_15px_rgba(255,26,26,0.7)]'
+                  : 'w-1 h-5 bg-white/20 hover:bg-white/50'
               }`}
             />
           ))}
         </div>
       )}
 
-      {/* Content */}
-      <div className="relative z-20 px-5 md:px-16 pb-10 md:pb-16 max-w-4xl">
+      {/* Hero Content */}
+      <div className="relative z-20 px-5 md:px-14 pb-12 md:pb-20 max-w-3xl">
         <AnimatePresence mode="wait">
           {movie && (
             <motion.div
               key={movie.id}
-              initial={{ opacity: 0, y: 24 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.45, ease: 'easeOut' }}
-              className="space-y-4 md:space-y-6"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="space-y-4 md:space-y-5"
             >
-              {/* Badges */}
-              <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                <div className="flex items-center gap-1.5 bg-[#e50914] px-3 md:px-5 py-1.5 md:py-2 rounded-md shadow-[0_0_20px_rgba(229,9,20,0.4)]">
-                  <Sparkles size={11} className="text-white md:w-3.5 md:h-3.5" />
-                  <span className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.25em]">Catálogo Premium</span>
+              {/* Badges row */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1, duration: 0.4 }}
+                className="flex flex-wrap items-center gap-2 md:gap-3"
+              >
+                <div className="flex items-center gap-1.5 bg-[#ff1a1a] px-3 md:px-4 py-1.5 rounded-md shadow-[0_0_20px_rgba(255,26,26,0.5)] neon-glow-red">
+                  <Sparkles size={10} className="text-white md:w-3 md:h-3" />
+                  <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.25em]">Catálogo Premium</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-3 md:px-5 py-1.5 md:py-2 rounded-md border border-white/15">
-                  <Star size={11} className="text-yellow-400 fill-yellow-400 md:w-3.5 md:h-3.5" />
-                  <span className="text-[9px] md:text-[11px] font-bold text-white/90">{movie.vote_average?.toFixed(1) || '—'}</span>
-                </div>
-                {movie.release_date && (
-                  <div className="hidden sm:flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-gray-300">
-                      {new Date(movie.release_date).getFullYear()}
-                    </span>
+                {movie.vote_average && movie.vote_average > 0 ? (
+                  <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-xl px-3 py-1.5 rounded-md border border-white/15">
+                    <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                    <span className="text-[9px] md:text-[11px] font-bold text-white/90">{movie.vote_average.toFixed(1)}</span>
+                  </div>
+                ) : null}
+                {year && (
+                  <div className="hidden sm:flex items-center bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-gray-300">{year}</span>
                   </div>
                 )}
-              </div>
+                {movie.type === 'series' && (
+                  <div className="hidden sm:flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-gray-300">Série</span>
+                  </div>
+                )}
+              </motion.div>
 
-              {/* Title — logo or text */}
+              {/* Title */}
               {logoUrl ? (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="h-20 md:h-36 lg:h-44 w-fit max-w-[85%]"
+                  transition={{ delay: 0.15, duration: 0.5 }}
+                  className="h-16 md:h-32 lg:h-40 w-fit max-w-[80%]"
                 >
                   <img
                     src={logoUrl}
                     alt={movie?.title || movie?.name}
-                    className="h-full w-auto object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)]"
+                    className="h-full w-auto object-contain drop-shadow-[0_6px_30px_rgba(0,0,0,1)]"
                     referrerPolicy="no-referrer"
                     decoding="async"
                   />
                 </motion.div>
               ) : (
-                <h1 className="text-4xl md:text-7xl lg:text-8xl font-black uppercase tracking-tighter italic leading-[0.88] text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] select-none pr-4">
+                <motion.h1
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15, duration: 0.5 }}
+                  className="text-4xl md:text-7xl lg:text-8xl font-black uppercase tracking-tighter italic leading-[0.88] text-white drop-shadow-[0_6px_30px_rgba(0,0,0,1)] select-none pr-4 section-title-premium"
+                >
                   {movie?.title || movie?.name || movie?.original_name}
-                </h1>
+                </motion.h1>
+              )}
+
+              {/* Continue watching info */}
+              {savedProgress > 5 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="flex items-center gap-2"
+                >
+                  <Clock size={11} className="text-red-400" />
+                  <span className="text-[9px] md:text-[11px] font-bold text-gray-300 uppercase tracking-widest">
+                    Continue de onde parou
+                    {savedEpisodeInfo && ` — ${savedEpisodeInfo}`}
+                  </span>
+                  {/* Progress bar */}
+                  <div className="flex-1 max-w-[120px] h-0.5 bg-white/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-red-500 rounded-full"
+                      style={{ width: `${Math.min(savedProgress / 7200 * 100, 95)}%` }}
+                    />
+                  </div>
+                </motion.div>
               )}
 
               {/* Synopsis */}
-              <p className="max-w-lg leading-relaxed text-[11px] md:text-sm text-gray-300 font-medium line-clamp-2 md:line-clamp-3 drop-shadow-md">
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.25, duration: 0.5 }}
+                className="max-w-md leading-relaxed text-[11px] md:text-sm text-gray-300/90 font-medium line-clamp-2 md:line-clamp-3 drop-shadow-md"
+              >
                 {truncate(movie?.overview || '', 220) || 'Explore agora este conteúdo exclusivo em altíssima definição.'}
-              </p>
+              </motion.p>
 
               {/* CTA Buttons */}
-              <div className="flex flex-wrap items-center gap-3 md:gap-4 pt-1">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.45 }}
+                className="flex flex-wrap items-center gap-3 md:gap-4 pt-1"
+              >
                 <motion.button
-                  whileHover={{ scale: 1.03, brightness: 1.1 }}
-                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
                   onClick={handlePlayClick}
-                  className="cursor-pointer text-white font-black rounded-lg px-6 md:px-10 py-3 md:py-4 bg-[#e50914] flex items-center gap-2.5 md:gap-3 text-[11px] md:text-sm uppercase tracking-[0.2em] shadow-[0_4px_20px_rgba(229,9,20,0.45)] hover:bg-[#ff0f1f] transition-colors"
+                  className="btn-premium-red cursor-pointer text-white font-black rounded-xl px-7 md:px-10 py-3.5 md:py-4 flex items-center gap-2.5 md:gap-3 text-[11px] md:text-sm uppercase tracking-[0.2em] relative overflow-hidden group"
                 >
-                  <Play fill="white" size={16} className="md:w-5 md:h-5" />
-                  {savedProgress > 5 ? (savedEpisodeInfo ? `Continuar (${savedEpisodeInfo})` : 'Continuar') : (movie.type === 'series' ? 'Assistir Série' : 'Assistir')}
+                  <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12" />
+                  <Play fill="white" size={16} className="md:w-5 md:h-5 relative z-10" />
+                  <span className="relative z-10">
+                    {savedProgress > 5 ? (savedEpisodeInfo ? `Continuar (${savedEpisodeInfo})` : 'Continuar') : (movie.type === 'series' ? 'Assistir Série' : 'Assistir')}
+                  </span>
                 </motion.button>
+
                 <motion.button
-                  whileHover={{ scale: 1.03, backgroundColor: 'rgba(255,255,255,0.18)' }}
-                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.04, backgroundColor: 'rgba(255,255,255,0.16)' }}
+                  whileTap={{ scale: 0.96 }}
                   onClick={() => onInfo(movie)}
-                  className="cursor-pointer text-white font-black rounded-lg px-6 md:px-10 py-3 md:py-4 bg-white/10 border border-white/25 flex items-center gap-2.5 md:gap-3 text-[11px] md:text-sm backdrop-blur-md uppercase tracking-[0.2em] hover:bg-white/16 transition-colors"
+                  className="cursor-pointer text-white font-black rounded-xl px-7 md:px-10 py-3.5 md:py-4 bg-white/10 border border-white/20 flex items-center gap-2.5 md:gap-3 text-[11px] md:text-sm backdrop-blur-xl uppercase tracking-[0.2em] hover:bg-white/14 transition-all duration-300"
                 >
-                  <Info size={16} className="md:w-5 md:h-5" /> Detalhes
+                  <Info size={16} className="md:w-5 md:h-5" />
+                  Detalhes
                 </motion.button>
-              </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -219,15 +279,20 @@ const Banner = React.memo(({ onPlay, onInfo, movieOverride, movies = [] }: Banne
       {/* Scroll hint */}
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: imgLoaded ? 0.4 : 0 }}
-        transition={{ delay: 2, duration: 0.6 }}
-        className="absolute bottom-3 right-1/2 translate-x-1/2 z-20 hidden md:flex flex-col items-center gap-1"
+        animate={{ opacity: imgLoaded ? 0.35 : 0 }}
+        transition={{ delay: 2.5, duration: 0.8 }}
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 hidden md:flex flex-col items-center gap-1"
       >
-        <ChevronDown size={18} className="text-white animate-bounce" />
+        <ChevronDown size={18} className="text-white/70 animate-bounce" />
       </motion.div>
 
       {/* Red accent line on left edge */}
-      <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-transparent via-[#e50914]/70 to-transparent z-30 hidden lg:block" />
+      <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-transparent via-[#ff1a1a]/80 to-transparent z-30 hidden lg:block shadow-[0_0_15px_rgba(255,26,26,0.5)]" />
+
+      {/* Loading skeleton overlay */}
+      {!imgLoaded && backgroundUrl && (
+        <div className="absolute inset-0 z-5 skeleton-premium" />
+      )}
     </header>
   );
 });
