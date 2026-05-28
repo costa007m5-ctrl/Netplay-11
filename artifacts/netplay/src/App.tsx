@@ -3219,18 +3219,33 @@ export default function App() {
     checkPaymentSuccess();
   }, [user]); // run when user is authenticated, independently of profile
 
-  if (loading || showIntro) {
+  if (showIntro) {
     return (
       <Suspense fallback={<div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
-        <IntroVignette 
-          isLoading={loading} 
-          onComplete={() => {
+        <IntroVignette
+          isLoading={loading}
+          onComplete={(mode) => {
             try { sessionStorage.setItem('netplay_intro_shown', '1'); } catch {}
+            if (mode) setInitialLoginMode(mode);
             setShowIntro(false);
-          }} 
+          }}
           movies={myMovies}
         />
       </Suspense>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-2 border-[#ff1a1a]/30 border-t-[#ff1a1a] rounded-full animate-spin" />
+          <div className="flex items-baseline gap-0">
+            <span className="text-2xl font-black text-white uppercase italic tracking-tighter">NET</span>
+            <span className="text-2xl font-black uppercase italic tracking-tighter text-[#ff1a1a]">PLAY</span>
+          </div>
+        </div>
+      </div>
     );
   }
 
