@@ -9,10 +9,10 @@ const CAROUSEL_LIMIT = 20;
 const EXPAND_STEP = 30;
 
 const GENRE_ALIASES: Record<string, string[]> = {
-  'Anime':         ['Anime', 'Animação', 'Animation'],
+  'Anime':         ['Anime'],
   'Infantil':      ['Infantil', 'Família', 'Kids', 'Family'],
   'Documentários': ['Documentários', 'Documentário', 'Documentary'],
-  'Animação':      ['Animação', 'Anime', 'Animation'],
+  'Animação':      ['Animação', 'Animation'],
   'Família':       ['Família', 'Infantil', 'Kids'],
   'Documentário':  ['Documentário', 'Documentários'],
 };

@@ -53,15 +53,25 @@ const MOODS = [
   { id: 'light',    label: 'Algo leve',       icon: Popcorn, query: 'family romance',   color: '#0ea5e9', bg: 'from-blue-900/40' },
 ];
 
-// ─── gêneros premium (mistura CATEGORIES + esportes) ────────────────────────
-const GENRES = [
-  { name: 'Ação',    backdrop: CATEGORIES.find(c => c.name === 'Ação')?.backdrop    || '', color: '#f59e0b', icon: Zap },
-  { name: 'Terror',  backdrop: CATEGORIES.find(c => c.name === 'Terror')?.backdrop  || '', color: '#7c3aed', icon: Ghost },
-  { name: 'Anime',   backdrop: 'https://image.tmdb.org/t/p/original/2vFuG6bWGyQUzYS9d69E5l85nIz.jpg', color: '#ff6600', icon: Zap },
-  { name: 'Futebol', backdrop: 'https://image.tmdb.org/t/p/original/fkHJT8bHMXFbHaUB3RMYMFNdgjr.jpg', color: '#22c55e', icon: Activity },
-  { name: 'Drama',   backdrop: CATEGORIES.find(c => c.name === 'Drama')?.backdrop   || '', color: '#0ea5e9', icon: Heart },
-  { name: 'Ficção',  backdrop: CATEGORIES.find(c => c.name === 'Ficção')?.backdrop  || '', color: '#00d4ff', icon: Rocket },
+// ─── definições estáticas de gênero (backdrop resolvido dinamicamente) ──────
+const GENRE_DEFINITIONS = [
+  { name: 'Ação',    aliases: ['ação', 'acao', 'action'],                              color: '#f59e0b', icon: Zap,      fallbackId: 'Ação'    },
+  { name: 'Terror',  aliases: ['terror', 'horror'],                                    color: '#7c3aed', icon: Ghost,    fallbackId: 'Terror'  },
+  { name: 'Anime',   aliases: ['anime'],                                               color: '#ff6600', icon: Zap,      fallbackId: null      },
+  { name: 'Comédia', aliases: ['comédia', 'comedia', 'comedy'],                        color: '#fbbf24', icon: Laugh,    fallbackId: 'Comédia' },
+  { name: 'Drama',   aliases: ['drama'],                                               color: '#0ea5e9', icon: Heart,    fallbackId: 'Drama'   },
+  { name: 'Ficção',  aliases: ['ficção', 'ficção científica', 'sci-fi', 'ciência'],     color: '#00d4ff', icon: Rocket,   fallbackId: 'Ficção'  },
+  { name: 'Crime',   aliases: ['crime', 'policial', 'criminal'],                       color: '#ef4444', icon: Wand2,    fallbackId: 'Crime'   },
+  { name: 'Futebol', aliases: ['futebol', 'esporte', 'sport', 'esportes'],             color: '#22c55e', icon: Activity, fallbackId: null      },
 ];
+
+// ─── mapeamento de gêneros por humor ─────────────────────────────────────────
+const MOOD_GENRES: Record<string, string[]> = {
+  epic:     ['ação', 'acao', 'action', 'aventura', 'adventure', 'fantasia', 'fantasy'],
+  laugh:    ['comédia', 'comedia', 'comedy'],
+  suspense: ['thriller', 'suspense', 'mistério', 'misterio', 'mystery', 'crime'],
+  light:    ['família', 'familia', 'family', 'romance', 'animação', 'animation'],
+};
 
 // ─── sub-componentes ─────────────────────────────────────────────────────────
 
@@ -91,7 +101,7 @@ const QuickChip = ({ label, icon: Icon, active, onClick, color = '#ff1a1a' }: {
 );
 
 // Card de gênero premium
-const GenreCard = ({ genre, onClick }: { genre: typeof GENRES[0]; onClick: () => void }) => (
+const GenreCard = ({ genre, onClick }: { genre: { name: string; backdrop: string; color: string; icon: any }; onClick: () => void }) => (
   <motion.div
     whileTap={{ scale: 0.94 }}
     onClick={onClick}
@@ -453,13 +463,71 @@ const DiscoverySearchView = React.memo(({
   }, [setSearchParams]);
 
   const handleMoodClick = useCallback((mood: typeof MOODS[0]) => {
-    if (mood.nav) { navigate(mood.nav); return; }
-    if (mood.query) doSearch(mood.query);
-  }, [navigate, doSearch]);
+    if ((mood as any).nav) { navigate((mood as any).nav); return; }
+    const keywords = MOOD_GENRES[mood.id] || [];
+    const filtered = myMovies
+      .filter(m => {
+        const g = (m.genres || '').toLowerCase();
+        return keywords.some(k => g.includes(k));
+      })
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 24);
+    setMoodResult({ id: mood.id, label: mood.label, color: mood.color, icon: mood.icon, movies: filtered });
+  }, [navigate, myMovies]);
 
   const handleGenreClick = useCallback((name: string) => {
     navigate(`/genre/${name}`);
   }, [navigate]);
+
+  // ── estado do painel de humor ─────────────────────────────────────────────
+  const [moodResult, setMoodResult] = useState<{ id: string; label: string; color: string; icon: any; movies: Movie[] } | null>(null);
+
+  // ── canais de TV para busca ───────────────────────────────────────────────
+  const [channels, setChannels] = useState<any[]>([]);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!debouncedQuery || channelsLoaded || debouncedQuery.length < 2) return;
+    fetch('/api/betterflix/canais')
+      .then(r => r.json())
+      .then(data => {
+        const ch = data.channels || (Array.isArray(data) ? data : []);
+        setChannels(ch);
+        setChannelsLoaded(true);
+      })
+      .catch(() => setChannelsLoaded(true));
+  }, [debouncedQuery, channelsLoaded]);
+
+  const matchingChannels = useMemo(() => {
+    if (!debouncedQuery || debouncedQuery.length < 2) return [];
+    const q = debouncedQuery.toLowerCase();
+    return channels.filter(ch => (ch.name || '').toLowerCase().includes(q)).slice(0, 4);
+  }, [debouncedQuery, channels]);
+
+  const matchingFranchises = useMemo(() => {
+    if (!debouncedQuery || debouncedQuery.length < 2) return [];
+    const q = debouncedQuery.toLowerCase();
+    return dynamicFranchises.filter(f => (f.name || '').toLowerCase().includes(q)).slice(0, 3);
+  }, [debouncedQuery, dynamicFranchises]);
+
+  // ── gêneros dinâmicos (backdrops extraídos da biblioteca real) ────────────
+  const dynamicGenres = useMemo(() => {
+    return GENRE_DEFINITIONS.map(def => {
+      const movie = myMovies.find(m => {
+        const g = (m.genres || '').toLowerCase();
+        return (def.aliases as readonly string[]).some(a => g.includes(a));
+      });
+      let backdrop = '';
+      if (movie?.backdrop_path) {
+        backdrop = movie.backdrop_path.startsWith('http')
+          ? movie.backdrop_path
+          : `https://image.tmdb.org/t/p/w500${movie.backdrop_path}`;
+      } else if (def.fallbackId) {
+        backdrop = CATEGORIES.find(c => c.name === def.fallbackId)?.backdrop || '';
+      }
+      return { name: def.name, backdrop, color: def.color, icon: def.icon };
+    });
+  }, [myMovies]);
 
   // carrosséis de descoberta
   const trendingCards = useMemo(() =>
@@ -572,6 +640,64 @@ const DiscoverySearchView = React.memo(({
               exit={{ opacity: 0 }}
               className="mt-2"
             >
+              {/* ── franquias correspondentes ─── */}
+              {matchingFranchises.length > 0 && (
+                <div className="mb-3 space-y-1.5">
+                  {matchingFranchises.map(f => (
+                    <motion.div
+                      key={f.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => { onSelectFranchise(f); navigate(`/universe/${f.id}`); }}
+                      className="relative flex items-center gap-3 px-3 h-14 rounded-2xl overflow-hidden cursor-pointer border border-yellow-500/20"
+                      style={{ background: 'rgba(234,179,8,0.07)' }}
+                    >
+                      {f.backdrop && <img src={f.backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />}
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent" />
+                      <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
+                        <Trophy size={15} className="text-yellow-400 flex-none" />
+                        <div className="min-w-0">
+                          <p className="text-white font-black text-[13px] truncate">{f.name}</p>
+                          <p className="text-yellow-400/60 text-[9px] font-bold uppercase tracking-wide">Universo & Saga</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={13} className="relative text-white/30 flex-none" />
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── canais de TV correspondentes ─── */}
+              {matchingChannels.length > 0 && (
+                <div className="mb-3 space-y-1.5">
+                  {matchingChannels.map((ch: any) => (
+                    <motion.div
+                      key={ch.id || ch.name}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => navigate(`/canais?ch=${ch.id || ch.name}`)}
+                      className="flex items-center gap-3 px-3 h-14 rounded-2xl cursor-pointer border border-red-500/20"
+                      style={{ background: 'rgba(255,26,26,0.06)' }}
+                    >
+                      {ch.logo
+                        ? <img src={ch.logo} alt={ch.name} className="w-10 h-10 rounded-xl object-contain bg-white/10 p-1 flex-none" />
+                        : <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center flex-none"><Radio size={16} className="text-red-400" /></div>
+                      }
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white font-black text-[13px] truncate">{ch.name}</p>
+                        <p className="text-red-400/60 text-[9px] font-bold uppercase tracking-wide">Canal ao vivo</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-none">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-red-400 text-[9px] font-black">AO VIVO</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
               {/* contagem */}
               <div className="flex items-center justify-between mb-3 px-1">
                 <p className="text-white/40 text-[11px] font-bold">
@@ -743,7 +869,7 @@ const DiscoverySearchView = React.memo(({
                   <h2 className="text-white font-black text-[15px] uppercase tracking-tight">Explorar por gênero</h2>
                 </div>
                 <div className="flex gap-2.5 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">
-                  {GENRES.map(g => (
+                  {dynamicGenres.map(g => (
                     <GenreCard key={g.name} genre={g} onClick={() => handleGenreClick(g.name)} />
                   ))}
                 </div>
@@ -761,10 +887,18 @@ const DiscoverySearchView = React.memo(({
                       key={mood.id}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleMoodClick(mood)}
-                      className="flex-none flex flex-col items-center justify-center gap-2 rounded-2xl border border-white/[0.07] cursor-pointer"
+                      className="flex-none flex flex-col items-center justify-center gap-2 rounded-2xl border cursor-pointer transition-all"
                       style={{
                         width: 88, height: 88,
-                        background: `linear-gradient(135deg, ${mood.bg.replace('from-', '').replace('/40', '20')}33, rgba(5,5,5,0.9))`,
+                        background: moodResult?.id === mood.id
+                          ? `${mood.color}22`
+                          : 'rgba(255,255,255,0.04)',
+                        borderColor: moodResult?.id === mood.id
+                          ? `${mood.color}88`
+                          : 'rgba(255,255,255,0.07)',
+                        boxShadow: moodResult?.id === mood.id
+                          ? `0 0 20px ${mood.color}44`
+                          : 'none',
                       }}
                     >
                       <div
@@ -780,6 +914,70 @@ const DiscoverySearchView = React.memo(({
                   ))}
                 </div>
               </section>
+
+              {/* ── PAINEL DE RESULTADOS POR HUMOR ──── */}
+              <AnimatePresence>
+                {moodResult && (
+                  <motion.section
+                    key="mood-panel"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-4 overflow-hidden"
+                  >
+                    <div
+                      className="rounded-2xl p-3 border"
+                      style={{
+                        background: `linear-gradient(135deg, ${moodResult.color}11, rgba(5,5,5,0.95))`,
+                        borderColor: `${moodResult.color}33`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <moodResult.icon size={14} style={{ color: moodResult.color }} />
+                          <span className="text-white font-black text-[13px]">{moodResult.label}</span>
+                          <span className="text-white/30 text-[10px]">{moodResult.movies.length} títulos</span>
+                        </div>
+                        <button
+                          onClick={() => setMoodResult(null)}
+                          className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center"
+                        >
+                          <X size={11} className="text-white/60" />
+                        </button>
+                      </div>
+                      {moodResult.movies.length === 0 ? (
+                        <p className="text-white/30 text-[11px] text-center py-4">
+                          Nenhum título encontrado nessa categoria na sua biblioteca.
+                        </p>
+                      ) : (
+                        <div className="flex gap-2.5 overflow-x-auto scrollbar-hide -mx-3 px-3 pb-1">
+                          {moodResult.movies.map(m => {
+                            const poster = TMDB_IMG(m.poster_path, 'w342');
+                            const title  = m.title || (m as any).name || '';
+                            return (
+                              <motion.div
+                                key={m.id}
+                                whileTap={{ scale: 0.93 }}
+                                onClick={() => { setMoodResult(null); handleResultClick(m); }}
+                                className="flex-none cursor-pointer"
+                                style={{ width: 80 }}
+                              >
+                                <div className="rounded-xl overflow-hidden border border-white/[0.07]" style={{ aspectRatio: '2/3' }}>
+                                  {poster
+                                    ? <img src={poster} alt={title} className="w-full h-full object-cover" loading="lazy" />
+                                    : <div className="w-full h-full bg-white/5 flex items-center justify-center"><Film size={14} className="text-white/20" /></div>
+                                  }
+                                </div>
+                                <p className="text-white/50 text-[8px] font-bold mt-1 truncate">{title}</p>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </motion.section>
+                )}
+              </AnimatePresence>
 
               {/* ── TENDÊNCIAS ──────────────────────── */}
               {trendingCards.length > 0 && (
