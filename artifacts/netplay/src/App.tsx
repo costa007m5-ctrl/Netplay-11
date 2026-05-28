@@ -48,6 +48,8 @@ import ProviderViewWrapper from './views/ProviderViewWrapper';
 import { MovieDetailRouteWrapper, PlayerRouteWrapper } from './views/RouteWrappers';
 import { Loader2, Play, Pause, Square, Sparkles, Settings, List } from 'lucide-react';
 
+const MAIN_TABS = ['menu', 'novidades', 'filmes', 'series', 'novos-episodios', 'perfil'];
+
 function InviteRedirect() {
   const { inviteId } = useParams();
   const navigate = useNavigate();
@@ -157,6 +159,26 @@ export default function App() {
     if (path === 'provider') return 'home';
     return path as any;
   }, [location.pathname]);
+
+  // Caminho primário — quando um modal de filme está aberto, preserva o path de fundo
+  const activePrimaryPath = useMemo(() => {
+    const bgLoc = state?.backgroundLocation;
+    const primaryPath = bgLoc ? bgLoc.pathname : location.pathname;
+    return primaryPath.split('/')[1] || 'menu';
+  }, [location.pathname, state?.backgroundLocation]);
+
+  // Lazy-mount: cada tab monta só na primeira visita, depois fica sempre na memória
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set([activePrimaryPath || 'menu']));
+  useEffect(() => {
+    if (MAIN_TABS.includes(activePrimaryPath)) {
+      setMountedTabs(prev => {
+        if (prev.has(activePrimaryPath)) return prev;
+        const next = new Set(prev);
+        next.add(activePrimaryPath);
+        return next;
+      });
+    }
+  }, [activePrimaryPath]);
 
   const [activeFranchise, setActiveFranchise] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2360,11 +2382,13 @@ export default function App() {
       fetchContinueWatching();
       fetchNewOnPlatform();
 
-      // Adicionar listener em tempo real para a tabela de filmes
+      // Adicionar listener em tempo real — debounced para não re-fetchar em cascata
+      let realtimeTimer: ReturnType<typeof setTimeout> | null = null;
       const channel = supabase
         .channel('public:movies')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'movies' }, () => {
-          fetchMyMovies();
+          if (realtimeTimer) clearTimeout(realtimeTimer);
+          realtimeTimer = setTimeout(() => fetchMyMovies(), 4000);
         })
         .subscribe();
 
@@ -2377,6 +2401,7 @@ export default function App() {
         .subscribe();
 
       return () => {
+        if (realtimeTimer) clearTimeout(realtimeTimer);
         supabase.removeChannel(channel);
         supabase.removeChannel(listChannel);
       };
@@ -2623,19 +2648,34 @@ export default function App() {
     );
   }, [visibleMovies, loadingMoreCount]);
 
-  // Função auxiliar para agrupar por gênero
+  // Função auxiliar para agrupar por gênero — capado para performance com 22k filmes
   const groupByGenre = (movies: Movie[]) => {
+    const counts: Record<string, number> = {};
     const grouped: { [key: string]: Movie[] } = {};
+    // Primeira passagem: conta para selecionar gêneros relevantes
     movies.forEach(movie => {
-      if (!movie.genres) {
-        if (!grouped['Outros']) grouped['Outros'] = [];
-        grouped['Outros'].push(movie);
-        return;
-      }
-      const genres = movie.genres.split(',').map(g => g.trim());
-      genres.forEach(genre => {
+      if (!movie.genres) { counts['Outros'] = (counts['Outros'] || 0) + 1; return; }
+      movie.genres.split(',').forEach(g => {
+        const genre = g.trim();
+        if (genre) counts[genre] = (counts[genre] || 0) + 1;
+      });
+    });
+    // Seleciona até 25 gêneros com mais de 5 filmes, ordenados por contagem
+    const topGenres = new Set(
+      Object.entries(counts)
+        .filter(([, c]) => c >= 5)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 25)
+        .map(([g]) => g)
+    );
+    // Segunda passagem: preenche apenas os gêneros selecionados, cap de 30 por gênero
+    movies.forEach(movie => {
+      const genreList = movie.genres
+        ? movie.genres.split(',').map(g => g.trim()).filter(g => topGenres.has(g))
+        : (topGenres.has('Outros') ? ['Outros'] : []);
+      genreList.forEach(genre => {
         if (!grouped[genre]) grouped[genre] = [];
-        grouped[genre].push(movie);
+        if (grouped[genre].length < 30) grouped[genre].push(movie);
       });
     });
     return Object.keys(grouped).sort().reduce((acc, key) => {
@@ -3371,11 +3411,13 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={(tab) => {
           if (tab !== 'search') setSearchQuery('');
-          if (tab === 'search' && searchQuery) {
-            navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
-          } else {
-            navigate(`/${tab === 'home' ? 'menu' : tab === 'profile' ? 'perfil' : tab === 'novos-eps' ? 'novos-episodios' : tab}`);
-          }
+          startTransition(() => {
+            if (tab === 'search' && searchQuery) {
+              navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+            } else {
+              navigate(`/${tab === 'home' ? 'menu' : tab === 'profile' ? 'perfil' : tab === 'novos-eps' ? 'novos-episodios' : tab}`);
+            }
+          });
         }}
         searchQuery={searchQuery}
         onSearchChange={(q) => {
@@ -3392,6 +3434,99 @@ export default function App() {
       />
       
       <main className="relative pb-20 min-h-screen overscroll-none">
+        {/* Views lazy-mount: cada tab monta só na 1ª visita, depois fica sempre na memória */}
+        {/* Troca de tab = zero re-mount, zero freeze (padrão Netflix) */}
+        {profile && (<>
+          {mountedTabs.has('menu') && (
+            <div style={{ display: activePrimaryPath === 'menu' ? 'block' : 'none' }}>
+              <HomeView
+                myMovies={myMovies}
+                streamingProviders={streamingProviders}
+                continueWatching={continueWatching}
+                cinemaMovies={cinemaMovies}
+                newMovies={newMovies}
+                top10Movies={top10Movies}
+                top10Series={top10Series}
+                caraNovaMovies={caraNovaMovies}
+                moviesByGenre={moviesByGenre}
+                handleSelectMovie={handleSelectMovie}
+                handlePlayMovie={handlePlayMovie}
+                toggleMyList={toggleMyList}
+                toggleFavorite={toggleFavorite}
+                myListIds={myListIds}
+                favoriteIds={favoriteIds}
+                setViewAllGenre={(genre: string) => navigate(`/genre/${genre}`)}
+                setIsModalOpen={setIsModalOpen}
+                profile={profile}
+                searchQuery={searchQuery}
+                searchResults={searchResults}
+                episodeSearchResults={episodeSearchResults}
+                onEpisodePlay={handleSmartPlayEpisode}
+                categories={categories}
+                franchises={dynamicFranchises}
+                isGlobalSearching={isGlobalSearching}
+                personalizedMovies={personalizedMovies}
+              />
+            </div>
+          )}
+          {mountedTabs.has('novidades') && (
+            <div style={{ display: activePrimaryPath === 'novidades' ? 'block' : 'none' }}>
+              <NovidadesView
+                newMovies={newMovies}
+                top10Movies={top10Movies}
+                top10Series={top10Series}
+                myMovies={myMovies}
+                handleSelectMovie={handleSelectMovie}
+                toggleMyList={toggleMyList}
+                myListIds={myListIds}
+                profile={profile}
+              />
+            </div>
+          )}
+          {mountedTabs.has('filmes') && (
+            <div style={{ display: activePrimaryPath === 'filmes' ? 'block' : 'none' }}>
+              <ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} totalCount={totalMoviesCount} />
+            </div>
+          )}
+          {mountedTabs.has('series') && (
+            <div style={{ display: activePrimaryPath === 'series' ? 'block' : 'none' }}>
+              <ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} totalCount={totalSeriesCount} />
+            </div>
+          )}
+          {mountedTabs.has('novos-episodios') && (
+            <div style={{ display: activePrimaryPath === 'novos-episodios' ? 'block' : 'none' }}>
+              <NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />
+            </div>
+          )}
+          <Suspense fallback={null}>
+            {mountedTabs.has('perfil') && (
+              <div style={{ display: activePrimaryPath === 'perfil' ? 'block' : 'none' }}>
+                <ProfileDashboard
+                  profile={profile}
+                  favorites={favorites}
+                  myList={myList}
+                  myMovies={myMovies}
+                  handleSwitchProfile={handleSwitchProfile}
+                  setIsAdminModalOpen={setIsAdminModalOpen}
+                  handleLogout={handleLogout}
+                  handleLogoutAll={handleLogoutAll}
+                  navigate={navigate}
+                  sendTestNotification={sendTestNotification}
+                  continueWatching={continueWatching}
+                  appSettings={effectiveAppSettings}
+                  driveFiles={driveFiles}
+                  fetchDriveFiles={fetchDriveFiles}
+                  isFetchingDrive={isFetchingDrive}
+                  addDriveFileToLibrary={addDriveFileToLibrary}
+                  setIsSettingsOpen={setIsSettingsOpen}
+                  isAdmin={isAdmin}
+                  updateAppSettings={updateAppSettings}
+                />
+              </div>
+            )}
+          </Suspense>
+        </>)}
+
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}>
           <Routes location={state?.backgroundLocation || location}>
             <Route path="/" element={<Navigate to={`/menu${location.search}`} replace />} />
@@ -3401,37 +3536,7 @@ export default function App() {
           <Route path="/invite/:inviteId" element={
             <InviteRedirect />
           } />
-          <Route path="/menu" element={
-            <HomeView 
-              myMovies={myMovies} 
-              streamingProviders={streamingProviders}
-              continueWatching={continueWatching}
-              cinemaMovies={cinemaMovies}
-              newMovies={newMovies}
-              top10Movies={top10Movies}
-              top10Series={top10Series}
-              caraNovaMovies={caraNovaMovies}
-              moviesByGenre={moviesByGenre}
-              handleSelectMovie={handleSelectMovie}
-              handlePlayMovie={handlePlayMovie}
-              toggleMyList={toggleMyList}
-              toggleFavorite={toggleFavorite}
-              myListIds={myListIds}
-              favoriteIds={favoriteIds}
-              setViewAllGenre={(genre: string) => navigate(`/genre/${genre}`)}
-              setIsModalOpen={setIsModalOpen}
-              profile={profile}
-              searchQuery={searchQuery}
-              searchResults={searchResults}
-              episodeSearchResults={episodeSearchResults}
-              onEpisodePlay={handleSmartPlayEpisode}
-              categories={categories}
-              franchises={dynamicFranchises}
-              isGlobalSearching={isGlobalSearching}
-              personalizedMovies={personalizedMovies}
-            />
-          } />
-          
+
           <Route path="/genre/:genreName" element={
              <GenreViewWrapper 
                myMovies={myMovies} 
@@ -3468,9 +3573,6 @@ export default function App() {
               }}
             />
           } />
-          <Route path="/filmes" element={<ContentFilteredPage myMovies={visibleMovies} type="filmes" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformMovies} totalCount={totalMoviesCount} />} />
-          <Route path="/series" element={<ContentFilteredPage myMovies={visibleMovies} type="series" onSelectMovie={handleSelectMovie} isLoading={isLoadingMovies} newOnPlatform={newOnPlatformSeries} totalCount={totalSeriesCount} />} />
-          <Route path="/novos-episodios" element={<NewEpisodesView myMovies={myMovies} onEpisodeClick={handleSmartPlayEpisode} onSelectMovie={handleSelectMovie} />} />
           <Route path="/universe" element={
             <UniverseTabView
               franchises={dynamicFranchises}
@@ -3499,18 +3601,6 @@ export default function App() {
               watchHistory={watchHistory}
               handleSelectMovie={handleSelectMovie}
               toggleMyList={toggleMyList}
-              profile={profile}
-            />
-          } />
-          <Route path="/novidades" element={
-            <NovidadesView
-              newMovies={newMovies}
-              top10Movies={top10Movies}
-              top10Series={top10Series}
-              myMovies={myMovies}
-              handleSelectMovie={handleSelectMovie}
-              toggleMyList={toggleMyList}
-              myListIds={myListIds}
               profile={profile}
             />
           } />
@@ -3570,29 +3660,6 @@ export default function App() {
               : <Navigate to="/menu" replace />
           } />
 
-          <Route path="/perfil" element={
-             <ProfileDashboard 
-               profile={profile}
-               favorites={favorites}
-               myList={myList}
-               myMovies={myMovies}
-               handleSwitchProfile={handleSwitchProfile}
-               setIsAdminModalOpen={setIsAdminModalOpen}
-               handleLogout={handleLogout}
-               handleLogoutAll={handleLogoutAll}
-               navigate={navigate}
-               sendTestNotification={sendTestNotification}
-               continueWatching={continueWatching}
-               appSettings={effectiveAppSettings}
-               driveFiles={driveFiles}
-               fetchDriveFiles={fetchDriveFiles}
-               isFetchingDrive={isFetchingDrive}
-               addDriveFileToLibrary={addDriveFileToLibrary}
-               setIsSettingsOpen={setIsSettingsOpen}
-               isAdmin={isAdmin}
-               updateAppSettings={updateAppSettings}
-             />
-          } />
           </Routes>
         </Suspense>
 
