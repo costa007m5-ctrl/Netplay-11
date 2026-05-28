@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, Play, Plus, Info, Star, Bell, Flame, Zap,
   ChevronRight, Eye, Film, Tv, Radio, BookOpen, Swords,
-  Ghost, Rocket, Calendar, Heart, TrendingUp, Wifi,
+  Ghost, Rocket, Calendar, TrendingUp, Wifi,
   Baby, ChevronLeft, Check, Search, X, Clock, Users
 } from 'lucide-react';
 import { Movie, Profile } from '../types';
@@ -220,8 +220,8 @@ const UniverseCard = ({ universe, onClick }: { universe: typeof UNIVERSES[0]; on
   </motion.button>
 );
 
-// Channel card
-const ChannelCard = ({ movie, onSelect }: { movie: Movie; onSelect: (m: Movie) => void }) => {
+// Channel card — clica vai para /canais
+const ChannelCard = ({ movie, onNavigate }: { movie: Movie; onNavigate: () => void }) => {
   const backdrop = img(movie.backdrop_path, 'w500') || img(movie.poster_path, 'w342');
   const isLive = seededRandom(movie.id * 3) > 0.5;
   const viewers = Math.floor(seededRandom(movie.id * 7) * 8000 + 500);
@@ -231,7 +231,7 @@ const ChannelCard = ({ movie, onSelect }: { movie: Movie; onSelect: (m: Movie) =
       whileTap={{ scale: 0.96 }}
       className="relative cursor-pointer flex-none rounded-2xl overflow-hidden border border-white/[0.08] shadow-xl"
       style={{ width: 160, height: 100 }}
-      onClick={() => onSelect(movie)}
+      onClick={onNavigate}
     >
       {backdrop ? (
         <img src={backdrop} alt={movie.title || movie.name} className="w-full h-full object-cover" loading="lazy" />
@@ -321,11 +321,6 @@ const NovidadesView = React.memo(({
   const proximos = useMemo(() => [...newMovies]
     .filter(m => m.release_date && new Date(m.release_date) > new Date(Date.now() - 30 * 86400000))
     .slice(0, 8), [newMovies]);
-  const porqueGostou = useMemo(() => {
-    if (!myMovies.length) return [];
-    return [...myMovies].sort(() => 0.5 - Math.random()).slice(0, 10);
-  }, [myMovies]);
-
   const backdropUrl = img(hero?.backdrop_path, 'original');
   const heroTitle   = hero?.title || hero?.name || '';
   const heroRating  = hero && hero.vote_average > 0 ? hero.vote_average.toFixed(1) : null;
@@ -603,7 +598,11 @@ const NovidadesView = React.memo(({
         <SectionHeader icon={Rocket} title="Universos" />
         <HorizontalScroll>
           {UNIVERSES.map(u => (
-            <UniverseCard key={u.id} universe={u} onClick={() => {}} />
+            <UniverseCard
+              key={u.id}
+              universe={u}
+              onClick={() => navigate(`/search?q=${encodeURIComponent(u.query)}`)}
+            />
           ))}
         </HorizontalScroll>
       </section>
@@ -614,25 +613,103 @@ const NovidadesView = React.memo(({
           <SectionHeader icon={Radio} title="Nos Canais" onViewAll={() => navigate('/canais')} />
           <HorizontalScroll>
             {myMovies.filter(m => m.type === 'series').slice(0, 8).map(m => (
-              <ChannelCard key={m.id} movie={m} onSelect={handleSelectMovie} />
+              <ChannelCard key={m.id} movie={m} onNavigate={() => navigate('/canais')} />
             ))}
           </HorizontalScroll>
         </section>
       )}
 
-      {/* ── PORQUE VOCÊ GOSTOU ─────────────────────────────── */}
-      {porqueGostou.length > 0 && (
+      {/* ── BANNERS PROMOCIONAIS ────────────────────────────── */}
+      {myMovies.length > 0 && (
         <section className="mt-6 mb-4">
-          <SectionHeader
-            icon={Heart}
-            title="Porque Você Gostou"
-            badge="IA"
-          />
-          <HorizontalScroll>
-            {porqueGostou.map(m => (
-              <PosterCard key={m.id} movie={m} onSelect={handleSelectMovie} />
-            ))}
-          </HorizontalScroll>
+          <SectionHeader icon={Sparkles} title="Em Destaque" badge="HOT" />
+          <div className="flex flex-col gap-3 px-4">
+            {myMovies
+              .filter(m => m.backdrop_path)
+              .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0))
+              .slice(0, 4)
+              .map((m, i) => {
+                const backdrop = img(m.backdrop_path, 'w780');
+                const title    = m.title || m.name || '';
+                const year     = m.release_date ? new Date(m.release_date).getFullYear()
+                               : m.first_air_date ? new Date(m.first_air_date).getFullYear() : null;
+                const LABELS   = ['Exclusivo', 'Novo Episódio', 'Estreia', 'Imperdível'];
+                const COLORS   = [
+                  'from-red-700 to-red-500',
+                  'from-purple-700 to-purple-500',
+                  'from-blue-700 to-blue-500',
+                  'from-orange-700 to-orange-500',
+                ];
+                const GLOWS    = [
+                  'rgba(255,26,26,0.35)',
+                  'rgba(147,51,234,0.35)',
+                  'rgba(59,130,246,0.35)',
+                  'rgba(249,115,22,0.35)',
+                ];
+                return (
+                  <motion.div
+                    key={m.id}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => handleSelectMovie(m)}
+                    className="relative rounded-2xl overflow-hidden cursor-pointer border border-white/[0.07]"
+                    style={{
+                      height: 140,
+                      boxShadow: `0 8px 32px ${GLOWS[i % GLOWS.length]}`,
+                    }}
+                  >
+                    {/* backdrop */}
+                    {backdrop && (
+                      <img
+                        src={backdrop}
+                        alt={title}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{ objectPosition: 'center 30%' }}
+                        loading="lazy"
+                      />
+                    )}
+                    {/* gradient overlay */}
+                    <div className="absolute inset-0"
+                      style={{ background: 'linear-gradient(to right, rgba(5,5,5,0.92) 0%, rgba(5,5,5,0.55) 55%, rgba(5,5,5,0.1) 100%)' }}
+                    />
+                    {/* red accent line */}
+                    <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
+                      style={{ background: `linear-gradient(to bottom, ${GLOWS[i % GLOWS.length].replace('0.35', '1')}, transparent)` }}
+                    />
+                    {/* content */}
+                    <div className="absolute inset-0 flex flex-col justify-center px-4 gap-2">
+                      {/* label badge */}
+                      <span className={`inline-flex self-start items-center gap-1 text-[9px] font-black uppercase tracking-widest text-white px-2.5 py-1 rounded-full bg-gradient-to-r ${COLORS[i % COLORS.length]}`}>
+                        <Sparkles size={8} />
+                        {LABELS[i % LABELS.length]}
+                      </span>
+                      <h3 className="text-white font-black text-[18px] leading-tight line-clamp-1 drop-shadow-xl">
+                        {title}
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        {year && <span className="text-white/40 text-[11px] font-bold">{year}</span>}
+                        {m.vote_average > 0 && (
+                          <span className="flex items-center gap-1 text-yellow-400 text-[11px] font-black">
+                            <Star size={9} fill="currentColor" /> {m.vote_average.toFixed(1)}
+                          </span>
+                        )}
+                        {m.genres && (
+                          <span className="text-white/35 text-[10px] font-bold truncate max-w-[120px]">
+                            {m.genres.split(',')[0]?.trim()}
+                          </span>
+                        )}
+                      </div>
+                      <motion.button
+                        whileTap={{ scale: 0.93 }}
+                        onClick={e => { e.stopPropagation(); handleSelectMovie(m); }}
+                        className="self-start flex items-center gap-1.5 bg-white text-black font-black text-[10px] uppercase tracking-wide px-3 py-1.5 rounded-full shadow-lg"
+                      >
+                        <Play size={9} fill="currentColor" /> Assistir agora
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+          </div>
         </section>
       )}
     </div>
