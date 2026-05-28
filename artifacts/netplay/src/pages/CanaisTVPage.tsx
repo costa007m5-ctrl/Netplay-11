@@ -6,7 +6,7 @@ import {
   Maximize2, Eye, Bell, Share2, PlusCircle, Tv2, Clock,
   ChevronRight, Settings, Mic, Lock, Bookmark,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -857,6 +857,7 @@ function PiPPlayer({ channel, onRestore, onClose }: { channel: Channel; onRestor
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 const CanaisTVPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -867,6 +868,7 @@ const CanaisTVPage: React.FC = () => {
   const [view, setView] = useState<'home' | 'synopsis' | 'player'>('home');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [pipChannel, setPipChannel] = useState<Channel | null>(null);
+  const [autoPlayDone, setAutoPlayDone] = useState(false);
   const [myList, setMyList] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('netplay_tv_mylist') || '[]')); } catch { return new Set(); }
   });
@@ -908,6 +910,19 @@ const CanaisTVPage: React.FC = () => {
   }, []);
 
   useEffect(() => { fetchChannels(); fetchJogos(); }, [fetchChannels, fetchJogos]);
+
+  // auto-abre canal via ?channel=ID (vindo da aba Novidades)
+  useEffect(() => {
+    if (autoPlayDone || channels.length === 0) return;
+    const targetId = searchParams.get('channel');
+    if (!targetId) return;
+    const ch = channels.find(c => c.id === targetId);
+    if (ch) {
+      setSelectedChannel(ch);
+      setView('player');
+    }
+    setAutoPlayDone(true);
+  }, [channels, searchParams, autoPlayDone]);
 
   useEffect(() => {
     let cancelled = false;

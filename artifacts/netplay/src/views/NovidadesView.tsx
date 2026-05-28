@@ -30,15 +30,26 @@ const FILTERS = [
   { id: 'doc',    label: 'Docs',        icon: BookOpen },
 ];
 
+// IDs correspondem às franquias em /universe/:franchiseId
 const UNIVERSES = [
-  { id: 'marvel', label: 'Marvel', color: '#e23636', glow: '#e23636', emoji: '⚡', query: 'marvel' },
-  { id: 'dc',     label: 'DC',     color: '#1a73e8', glow: '#1a73e8', emoji: '🦇', query: 'batman' },
-  { id: 'anime',  label: 'Anime',  color: '#ff6b35', glow: '#ff6b35', emoji: '⛩️', query: 'anime' },
-  { id: 'terror', label: 'Terror', color: '#7c3aed', glow: '#7c3aed', emoji: '👻', query: 'horror' },
-  { id: 'scifi',  label: 'Sci-Fi', color: '#0ea5e9', glow: '#0ea5e9', emoji: '🚀', query: 'sci-fi' },
-  { id: 'acao',   label: 'Ação',   color: '#f59e0b', glow: '#f59e0b', emoji: '💥', query: 'action' },
-  { id: 'kids',   label: 'Infantil', color: '#10b981', glow: '#10b981', emoji: '🌈', query: 'animation' },
+  { id: 'marvel',    label: 'Marvel',    color: '#e62429', keywords: ['marvel', 'avenger', 'spider', 'iron man', 'thor', 'captain america', 'vingadores'] },
+  { id: 'dc',        label: 'DC',        color: '#0476f2', keywords: ['dc', 'batman', 'superman', 'wonder woman', 'aquaman', 'flash', 'coringa', 'joker'] },
+  { id: 'anime',     label: 'Anime',     color: '#ff6600', keywords: ['anime', 'dragon ball', 'naruto', 'one piece', 'attack on titan', 'demon slayer'] },
+  { id: 'horror',    label: 'Terror',    color: '#ff0000', keywords: ['terror', 'horror', 'medo', 'assombra', 'sobrenatural', 'evil', 'nightmare'] },
+  { id: 'star-wars', label: 'Star Wars', color: '#ffe81f', keywords: ['star wars', 'jedi', 'sith', 'mandalorian', 'skywalker', 'clone'] },
+  { id: 'adventure', label: 'Aventura',  color: '#22c55e', keywords: ['aventura', 'adventure', 'expedição', 'jungle', 'selva'] },
+  { id: 'disney',    label: 'Disney',    color: '#009dff', keywords: ['disney', 'pixar', 'frozen', 'lion king', 'moana', 'encanto', 'rei leão'] },
 ];
+
+// Tipo minimal de canal ao vivo (espelha o de CanaisTVPage)
+interface LiveChannel {
+  id: string;
+  nome?: string;  name?: string;
+  imagem?: string; image?: string;
+  url?: string;
+  categoria?: string; category?: string;
+  categories?: number[];
+}
 
 // ─── sub-components ────────────────────────────────────────────────────
 
@@ -198,58 +209,105 @@ const UpcomingCard = ({ movie, onSelect }: { movie: any; onSelect: (m: any) => v
   );
 };
 
-// Universe card
-const UniverseCard = ({ universe, onClick }: { universe: typeof UNIVERSES[0]; onClick: () => void }) => (
+// Universe card — banner com imagem de fundo, sem emojis
+const UniverseCard = ({
+  universe,
+  backdropUrl,
+  onClick,
+}: {
+  universe: typeof UNIVERSES[0];
+  backdropUrl?: string | null;
+  onClick: () => void;
+}) => (
   <motion.button
-    whileTap={{ scale: 0.92 }}
+    whileTap={{ scale: 0.93 }}
     onClick={onClick}
-    className="relative flex-none rounded-2xl overflow-hidden border border-white/[0.08] flex flex-col items-center justify-center gap-1"
+    className="relative flex-none rounded-2xl overflow-hidden cursor-pointer border border-white/[0.1]"
     style={{
-      width: 90,
+      width: 148,
       height: 90,
-      background: `radial-gradient(circle at 40% 40%, ${universe.color}22, #050505 70%)`,
-      boxShadow: `0 0 20px ${universe.glow}22`,
+      boxShadow: `0 4px 20px ${universe.color}30`,
     }}
   >
-    <span style={{ fontSize: 28 }}>{universe.emoji}</span>
-    <span className="text-white font-black text-[10px] uppercase tracking-wide">{universe.label}</span>
+    {/* imagem de fundo */}
+    {backdropUrl ? (
+      <img
+        src={backdropUrl}
+        alt={universe.label}
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ objectPosition: 'center 20%' }}
+        loading="lazy"
+      />
+    ) : (
+      <div
+        className="absolute inset-0"
+        style={{ background: `linear-gradient(135deg, ${universe.color}44 0%, #050505 100%)` }}
+      />
+    )}
+    {/* overlay gradiente de cor do universo */}
     <div
-      className="absolute inset-0 rounded-2xl opacity-0 hover:opacity-100 transition-opacity"
-      style={{ background: `radial-gradient(circle, ${universe.color}18, transparent 70%)` }}
+      className="absolute inset-0"
+      style={{
+        background: `linear-gradient(to top, ${universe.color}dd 0%, ${universe.color}66 40%, transparent 70%)`,
+      }}
     />
+    {/* borda de brilho lateral */}
+    <div
+      className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
+      style={{ background: universe.color }}
+    />
+    {/* label */}
+    <div className="absolute bottom-0 left-0 right-0 px-3 py-2.5">
+      <span
+        className="text-white font-black text-[13px] uppercase tracking-tight leading-none"
+        style={{ textShadow: '0 1px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.6)' }}
+      >
+        {universe.label}
+      </span>
+    </div>
   </motion.button>
 );
 
-// Channel card — clica vai para /canais
-const ChannelCard = ({ movie, onNavigate }: { movie: Movie; onNavigate: () => void }) => {
-  const backdrop = img(movie.backdrop_path, 'w500') || img(movie.poster_path, 'w342');
-  const isLive = seededRandom(movie.id * 3) > 0.5;
-  const viewers = Math.floor(seededRandom(movie.id * 7) * 8000 + 500);
+// Canal ao vivo — usa dados reais da API
+const LiveChannelCard = ({
+  channel,
+  onPlay,
+}: {
+  channel: LiveChannel;
+  onPlay: (ch: LiveChannel) => void;
+}) => {
+  const name  = channel.nome  || channel.name  || 'Canal';
+  const image = channel.imagem || channel.image || '';
 
   return (
     <motion.div
       whileTap={{ scale: 0.96 }}
-      className="relative cursor-pointer flex-none rounded-2xl overflow-hidden border border-white/[0.08] shadow-xl"
-      style={{ width: 160, height: 100 }}
-      onClick={onNavigate}
+      className="relative cursor-pointer flex-none rounded-2xl overflow-hidden border border-white/[0.08] shadow-xl bg-white/[0.04]"
+      style={{ width: 130, height: 85 }}
+      onClick={() => onPlay(channel)}
     >
-      {backdrop ? (
-        <img src={backdrop} alt={movie.title || movie.name} className="w-full h-full object-cover" loading="lazy" />
+      {/* logo do canal */}
+      {image ? (
+        <img
+          src={image}
+          alt={name}
+          className="absolute inset-0 w-full h-full object-contain p-3"
+          loading="lazy"
+        />
       ) : (
-        <div className="w-full h-full bg-gradient-to-br from-slate-900 to-black" />
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
-      {isLive && (
-        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full">
-          <Wifi size={7} className="animate-pulse" /> AO VIVO
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Radio size={28} className="text-white/20" />
         </div>
       )}
-      <div className="absolute bottom-2 left-2 right-2">
-        <p className="text-white font-black text-[11px] leading-tight truncate">{movie.title || movie.name}</p>
-        <div className="flex items-center gap-1 mt-0.5">
-          <Eye size={8} className="text-white/40" />
-          <span className="text-white/40 text-[9px]">{fmtViewers(viewers)}</span>
-        </div>
+      {/* overlay sutil no rodapé */}
+      <div className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-black/80 to-transparent" />
+      {/* badge AO VIVO */}
+      <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full">
+        <Wifi size={7} className="animate-pulse" /> AO VIVO
+      </div>
+      {/* nome */}
+      <div className="absolute bottom-1.5 left-2 right-2">
+        <p className="text-white font-bold text-[10px] leading-tight truncate drop-shadow">{name}</p>
       </div>
     </motion.div>
   );
@@ -282,6 +340,42 @@ const NovidadesView = React.memo(({
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroInList, setHeroInList] = useState(false);
   const heroTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // canais ao vivo reais
+  const [liveChannels, setLiveChannels] = useState<LiveChannel[]>([]);
+  useEffect(() => {
+    fetch('/api/betterflix/canais')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const raw: any[] = data.channels || (Array.isArray(data) ? data : []);
+        const catMap: Record<number, string> = {};
+        for (const c of (data.categories || [])) catMap[c.id] = c.name;
+        setLiveChannels(raw.slice(0, 12).map((ch: any) => ({
+          id: String(ch.id),
+          nome: ch.nome || ch.name || '',
+          imagem: ch.imagem || ch.image || '',
+          url: ch.url,
+          categoria: (ch.categories || []).filter((cid: number) => cid !== 0)
+            .map((cid: number) => catMap[cid]).filter(Boolean)[0] || ch.categoria || ch.category || '',
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
+  // backdrop representativo de cada universo usando os filmes já carregados
+  const universeBackdrops = useMemo(() => {
+    const result: Record<string, string | null> = {};
+    for (const u of UNIVERSES) {
+      const match = myMovies.find(m => {
+        if (!m.backdrop_path) return false;
+        const hay = `${m.title || ''} ${m.name || ''} ${m.genres || ''} ${m.overview || ''}`.toLowerCase();
+        return u.keywords.some(k => hay.includes(k));
+      });
+      result[u.id] = match ? img(match.backdrop_path, 'w780') : null;
+    }
+    return result;
+  }, [myMovies]);
 
   // hero movies = top 10 + new releases mixed
   const heroMovies = useMemo(() => {
@@ -601,19 +695,24 @@ const NovidadesView = React.memo(({
             <UniverseCard
               key={u.id}
               universe={u}
-              onClick={() => navigate(`/search?q=${encodeURIComponent(u.query)}`)}
+              backdropUrl={universeBackdrops[u.id]}
+              onClick={() => navigate(`/universe/${u.id}`)}
             />
           ))}
         </HorizontalScroll>
       </section>
 
-      {/* ── LANÇAMENTOS NOS CANAIS ─────────────────────────── */}
-      {myMovies.filter(m => m.type === 'series').length > 0 && (
+      {/* ── CANAIS AO VIVO ─────────────────────────────────── */}
+      {liveChannels.length > 0 && (
         <section className="mt-6">
-          <SectionHeader icon={Radio} title="Nos Canais" onViewAll={() => navigate('/canais')} />
+          <SectionHeader icon={Radio} title="Canais ao Vivo" badge="AO VIVO" onViewAll={() => navigate('/canais')} />
           <HorizontalScroll>
-            {myMovies.filter(m => m.type === 'series').slice(0, 8).map(m => (
-              <ChannelCard key={m.id} movie={m} onNavigate={() => navigate('/canais')} />
+            {liveChannels.map(ch => (
+              <LiveChannelCard
+                key={ch.id}
+                channel={ch}
+                onPlay={ch => navigate(`/canais?channel=${encodeURIComponent(ch.id)}`)}
+              />
             ))}
           </HorizontalScroll>
         </section>
