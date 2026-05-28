@@ -7,8 +7,8 @@ const isReplit = !!process.env.REPL_ID;
 const isProduction = process.env.NODE_ENV === "production";
 
 const rawPort = process.env.PORT;
-// Força porta 5000 em ambiente de desenvolvimento Replit para compatibilidade com proxy
-const port = 5000;
+// Usa a PORT injetada pelo Replit (ex: 25512) — o proxy do Replit roteia para essa porta
+const port = rawPort ? parseInt(rawPort, 10) : 5000;
 const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig(async () => {
