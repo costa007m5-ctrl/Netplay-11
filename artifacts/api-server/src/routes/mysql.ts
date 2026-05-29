@@ -173,6 +173,68 @@ router.post("/mysql/migrate", async (req, res) => {
   }
 });
 
+router.post("/mysql/import-to-pg", async (req, res) => {
+  const { batchSize = 500, offset = 0 } = req.body as { batchSize?: number; offset?: number };
+
+  try {
+    const pool = getMysqlPool();
+
+    const safeBatch = Math.min(Math.max(1, Number(batchSize)), 1000);
+    const safeOffset = Math.max(0, Number(offset));
+    const [rows] = await pool.execute(
+      `SELECT id, title, type, overview, poster_path, backdrop_path, release_date, first_air_date,
+              release_year, rating, runtime, genres, genre, video_url, logo_path, updated_at, created_at
+       FROM movies LIMIT ${safeBatch} OFFSET ${safeOffset}`
+    ) as any;
+
+    if (!rows || rows.length === 0) {
+      res.json({ success: true, imported: 0, done: true });
+      return;
+    }
+
+    let imported = 0;
+    for (const m of rows) {
+      await db.insert(moviesTable).values({
+        id: Number(m.id),
+        title: m.title,
+        type: m.type || "movie",
+        overview: m.overview ?? null,
+        poster_path: m.poster_path ?? null,
+        backdrop_path: m.backdrop_path ?? null,
+        release_date: m.release_date ?? null,
+        first_air_date: m.first_air_date ?? null,
+        release_year: m.release_year ? Number(m.release_year) : null,
+        rating: m.rating ? Number(m.rating) : null,
+        runtime: m.runtime ? Number(m.runtime) : null,
+        genres: m.genres ?? null,
+        genre: m.genre ?? null,
+        video_url: m.video_url ?? "",
+        logo_path: m.logo_path ?? null,
+        updated_at: m.updated_at ? new Date(m.updated_at) : new Date(),
+        created_at: m.created_at ? new Date(m.created_at) : new Date(),
+      }).onConflictDoUpdate({
+        target: moviesTable.id,
+        set: {
+          title: m.title,
+          type: m.type || "movie",
+          overview: m.overview ?? null,
+          poster_path: m.poster_path ?? null,
+          backdrop_path: m.backdrop_path ?? null,
+          video_url: m.video_url ?? "",
+          logo_path: m.logo_path ?? null,
+          rating: m.rating ? Number(m.rating) : null,
+          updated_at: new Date(),
+        },
+      });
+      imported++;
+    }
+
+    res.json({ success: true, imported, offset, done: rows.length < batchSize });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "Erro na importação" });
+  }
+});
+
 router.get("/mysql/stats", async (_req, res) => {
   try {
     const pool = getMysqlPool();
