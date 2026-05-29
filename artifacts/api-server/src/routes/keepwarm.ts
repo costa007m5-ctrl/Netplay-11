@@ -1,8 +1,8 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import axios from "axios";
 import { syncUrls, setConfig, runNow, getKeepwarmStatus } from "../lib/terabox-keepwarm";
 
-const router: IRouter = Router();
+const router = Router();
 
 type Source = "v1" | "v2" | "kingx" | "drive" | "direct" | "unknown";
 

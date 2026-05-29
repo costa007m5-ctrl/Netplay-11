@@ -1,9 +1,9 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import axios from "axios";
 import crypto from "node:crypto";
 import { trackUrl } from "../lib/terabox-keepwarm";
 
-const router: IRouter = Router();
+const router = Router();
 
 const cache = new Map<string, { data: any; expiresAt: number }>();
 const CACHE_TTL_MS = 30 * 60 * 1000;

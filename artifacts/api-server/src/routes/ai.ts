@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 
-const router: IRouter = Router();
+const router = Router();
 
 router.post("/ai/translate", async (req, res) => {
   const { text } = req.body;

@@ -1,11 +1,11 @@
-import express, { type Application, type Request, type Response, type NextFunction } from "express";
+import express from "express";
 import cors from "cors";
 import compression from "compression";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
-const app: Application = express();
+const app = express();
 
 // Compressão gzip/deflate automática via middleware padrão (mais robusto que implementação manual)
 app.use(compression({

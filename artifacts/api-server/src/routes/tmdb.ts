@@ -1,7 +1,7 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import axios from "axios";
 
-const router: IRouter = Router();
+const router = Router();
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 

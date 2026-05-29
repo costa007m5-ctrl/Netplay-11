@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import axios from "axios";
 import http from "http";
 import https from "https";
@@ -8,7 +8,7 @@ import https from "https";
 const noKeepAliveHttpAgent = new http.Agent({ keepAlive: false });
 const noKeepAliveHttpsAgent = new https.Agent({ keepAlive: false });
 
-const router: IRouter = Router();
+const router = Router();
 
 router.get("/proxy-stream", async (req, res) => {
   const { url, referer } = req.query;
