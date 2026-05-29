@@ -1,5 +1,6 @@
 import { Router } from "express";
 import axios from "axios";
+import { getMysqlPool } from "../lib/mysql.js";
 
 const router = Router();
 
@@ -425,7 +426,6 @@ async function checkMySQL(): Promise<ApiCheckResult> {
     };
   }
   try {
-    const { getMysqlPool } = await import("../lib/mysql.js");
     const pool = getMysqlPool();
     await withTimeout(() => (pool as any).execute("SELECT 1"), 5000);
     return {
@@ -488,36 +488,44 @@ function checkSupabase(): ApiCheckResult {
 }
 
 router.get("/api-diagnostics", async (_req, res) => {
-  const settled = await Promise.allSettled([
-    checkTmdb(),
-    checkTeraboxV1(),
-    checkTeraboxV2(),
-    checkTeraboxV3(),
-    checkBetterFlix(),
-    checkVidSrc(),
-    checkFlix3(),
-    checkGeminiAI(),
-    checkMySQL(),
-    Promise.resolve(checkSupabase()),
-  ]);
+  try {
+    const settled = await Promise.allSettled([
+      checkTmdb(),
+      checkTeraboxV1(),
+      checkTeraboxV2(),
+      checkTeraboxV3(),
+      checkBetterFlix(),
+      checkVidSrc(),
+      checkFlix3(),
+      checkGeminiAI(),
+      checkMySQL(),
+      Promise.resolve(checkSupabase()),
+    ]);
 
-  const checks: ApiCheckResult[] = settled.map((r) =>
-    r.status === "fulfilled"
-      ? r.value
-      : {
-          name: "Erro interno",
-          group: "metadata" as const,
-          status: "error" as const,
-          latencyMs: null,
-          reason: (r as PromiseRejectedResult).reason?.message || "Erro inesperado",
-        }
-  );
+    const checks: ApiCheckResult[] = settled.map((r) =>
+      r.status === "fulfilled"
+        ? r.value
+        : {
+            name: "Erro interno",
+            group: "metadata" as const,
+            status: "error" as const,
+            latencyMs: null,
+            reason: (r as PromiseRejectedResult).reason?.message || "Erro inesperado",
+          }
+    );
 
-  const ok = checks.filter((c) => c.status === "ok").length;
-  const errors = checks.filter((c) => c.status === "error").length;
-  const warnings = checks.filter((c) => c.status === "warning").length;
+    const ok = checks.filter((c) => c.status === "ok").length;
+    const errors = checks.filter((c) => c.status === "error").length;
+    const warnings = checks.filter((c) => c.status === "warning").length;
 
-  res.json({ checks, summary: { ok, errors, warnings, total: checks.length } });
+    res.json({ checks, summary: { ok, errors, warnings, total: checks.length } });
+  } catch (err: any) {
+    res.status(500).json({
+      checks: [],
+      summary: { ok: 0, errors: 0, warnings: 0, total: 0 },
+      error: err?.message || "Erro interno no diagnóstico",
+    });
+  }
 });
 
 export default router;
