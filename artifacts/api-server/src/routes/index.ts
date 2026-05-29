@@ -17,6 +17,7 @@ import settingsRouter from "./settings";
 import contentTrackerRouter from "./content-tracker";
 import adminDuplicatesRouter from "./admin-duplicates";
 import mysqlRouter from "./mysql";
+import mysqlAuthRouter from "./mysql-auth";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(settingsRouter);
 router.use(contentTrackerRouter);
 router.use(adminDuplicatesRouter);
 router.use(mysqlRouter);
+router.use(mysqlAuthRouter);
 
 export default router;

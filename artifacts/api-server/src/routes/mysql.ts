@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
   plan VARCHAR(32) DEFAULT 'free',
   is_admin BOOLEAN DEFAULT FALSE,
   referred_by VARCHAR(255),
+  password_hash VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -100,6 +101,21 @@ router.post("/mysql/create-tables", async (_req, res) => {
       const match = stmt.match(/CREATE TABLE IF NOT EXISTS (\w+)/i);
       if (match) results.push(match[1]);
     }
+
+    // Garante coluna password_hash na tabela users (retrocompatibilidade)
+    try {
+      await pool.execute(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)"
+      );
+    } catch {}
+
+    // Garante que video_url é VARCHAR e não TEXT (corrige criações antigas)
+    try {
+      await pool.execute(
+        "ALTER TABLE movies MODIFY COLUMN video_url VARCHAR(2048) DEFAULT ''"
+      );
+    } catch {}
+
     res.json({ success: true, tablesCreated: results });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "Erro ao criar tabelas" });
