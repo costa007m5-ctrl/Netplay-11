@@ -1,4 +1,4 @@
-const appPromise = import("../artifacts/api-server/src/app.js").then(
+const appPromise = import("../artifacts/api-server/dist/vercel/app.mjs").then(
   (m) => m.default,
 );
 
