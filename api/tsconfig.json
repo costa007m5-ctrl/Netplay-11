@@ -7,7 +7,6 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "strict": false,
-    "types": ["node"],
     "baseUrl": "..",
     "paths": {
       "@workspace/db": ["lib/db/src"],
