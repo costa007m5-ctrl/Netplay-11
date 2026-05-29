@@ -18,6 +18,7 @@ import contentTrackerRouter from "./content-tracker";
 import adminDuplicatesRouter from "./admin-duplicates";
 import mysqlRouter from "./mysql";
 import mysqlAuthRouter from "./mysql-auth";
+import apiDiagnosticsRouter from "./api-diagnostics";
 
 const router = Router();
 
@@ -40,5 +41,6 @@ router.use(contentTrackerRouter);
 router.use(adminDuplicatesRouter);
 router.use(mysqlRouter);
 router.use(mysqlAuthRouter);
+router.use(apiDiagnosticsRouter);
 
 export default router;
