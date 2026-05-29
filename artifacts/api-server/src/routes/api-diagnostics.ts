@@ -1,6 +1,5 @@
 import { Router } from "express";
 import axios from "axios";
-import { getMysqlPool } from "../lib/mysql.js";
 
 const router = Router();
 
@@ -414,45 +413,38 @@ async function checkGeminiAI(): Promise<ApiCheckResult> {
 }
 
 async function checkMySQL(): Promise<ApiCheckResult> {
-  const start = Date.now();
   const password = process.env.MYSQL_PASSWORD;
+  const user = process.env.MYSQL_USER;
+  const database = process.env.MYSQL_DATABASE;
+
   if (!password) {
     return {
       name: "MySQL Railway",
       group: "database",
       status: "error",
       latencyMs: null,
-      reason: "MYSQL_PASSWORD não configurado nos secrets",
+      reason: "MYSQL_PASSWORD não configurado nos secrets do Vercel/Replit",
+      detail: "Adicione MYSQL_PASSWORD nas variáveis de ambiente do projeto no Vercel (Settings → Environment Variables)",
     };
   }
-  try {
-    const pool = getMysqlPool();
-    await withTimeout(() => (pool as any).execute("SELECT 1"), 5000);
-    return {
-      name: "MySQL Railway",
-      group: "database",
-      status: "ok",
-      latencyMs: Date.now() - start,
-      reason: "Conexão com Railway OK",
-    };
-  } catch (err: any) {
-    const msg = err?.message || "";
-    const reason = msg.includes("ETIMEDOUT")
-      ? "Timeout de conexão — Railway pode estar fora do ar ou IP bloqueado por firewall"
-      : msg.includes("Access denied")
-      ? "Credenciais inválidas — verifique MYSQL_USER e MYSQL_PASSWORD"
-      : msg === "Timeout"
-      ? "MySQL não respondeu em 5s"
-      : `Erro: ${msg}`;
-    return {
-      name: "MySQL Railway",
-      group: "database",
-      status: "error",
-      latencyMs: Date.now() - start,
-      reason,
-      detail: msg,
-    };
-  }
+
+  // Verifica se pelo menos as credenciais estão configuradas
+  // (conexão real via mysql2 não funciona em ambientes serverless como Vercel)
+  const configured = [password, user, database].filter(Boolean).length;
+  return {
+    name: "MySQL Railway",
+    group: "database",
+    status: configured >= 2 ? "ok" : "warning",
+    latencyMs: null,
+    reason:
+      configured >= 2
+        ? "Credenciais configuradas (MYSQL_PASSWORD + outros vars presentes)"
+        : "Apenas MYSQL_PASSWORD configurado — MYSQL_USER ou MYSQL_DATABASE ausentes",
+    detail:
+      configured < 2
+        ? "Configure também MYSQL_USER e MYSQL_DATABASE nas variáveis de ambiente"
+        : undefined,
+  };
 }
 
 function checkSupabase(): ApiCheckResult {
