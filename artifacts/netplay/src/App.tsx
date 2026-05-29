@@ -107,6 +107,12 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [initialLoginMode, setInitialLoginMode] = useState<'login' | 'signup'>('login');
   const [user, setUser] = useState<User | null>(null);
+  const [mysqlUser, setMysqlUser] = useState<any>(() => {
+    try {
+      const d = sessionStorage.getItem('netplay_mysql_user');
+      return d ? JSON.parse(d) : null;
+    } catch { return null; }
+  });
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
@@ -267,6 +273,13 @@ export default function App() {
   const hasSupabase = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const handleLogout = async () => {
+    if (mysqlUser) {
+      sessionStorage.removeItem('netplay_mysql_user');
+      setMysqlUser(null);
+      setProfile(null);
+      navigate('/');
+      return;
+    }
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
@@ -274,6 +287,13 @@ export default function App() {
   };
 
   const handleLogoutAll = async () => {
+    if (mysqlUser) {
+      sessionStorage.removeItem('netplay_mysql_user');
+      setMysqlUser(null);
+      setProfile(null);
+      navigate('/');
+      return;
+    }
     await supabase.auth.signOut({ scope: 'global' });
     setUser(null);
     setProfile(null);
@@ -1903,10 +1923,35 @@ export default function App() {
     }
   };
 
+  // Auto-perfil para usuários MySQL — pula a tela de seleção de perfil
+  useEffect(() => {
+    if (mysqlUser && !profile) {
+      const saved = localStorage.getItem('active_profile');
+      if (saved) {
+        try { setProfile(JSON.parse(saved)); return; } catch {}
+      }
+      const autoProfile: Profile = {
+        id: mysqlUser.id || 'mysql-default',
+        user_id: mysqlUser.id || 'mysql-default',
+        name: mysqlUser.name || mysqlUser.email || 'Usuário',
+        avatar_url: '',
+        created_at: new Date().toISOString(),
+      };
+      setProfile(autoProfile);
+      localStorage.setItem('active_profile', JSON.stringify(autoProfile));
+    }
+  }, [mysqlUser]);
+
   // Verificação de chaves de API
 
   useEffect(() => {
     if (!hasSupabase) {
+      setLoading(false);
+      return;
+    }
+
+    // Se usuário MySQL já está autenticado, resolve loading imediatamente
+    if (mysqlUser) {
       setLoading(false);
       return;
     }
@@ -2012,6 +2057,24 @@ export default function App() {
       } catch {
         localStorage.removeItem('cached_my_movies_v6');
       }
+    }
+
+    // Usuário MySQL: busca do banco PostgreSQL via API local
+    if (!user && mysqlUser) {
+      try {
+        const res = await fetch('/api/movies?limit=10000');
+        if (res.ok) {
+          const data = await res.json();
+          const movies = (data.movies || []) as Movie[];
+          if (movies.length > 0) {
+            setMyMovies(movies);
+            setTotalMoviesCount(movies.filter((m: Movie) => m.type === 'movie').length);
+            setTotalSeriesCount(movies.filter((m: Movie) => m.type === 'series').length);
+          }
+        }
+      } catch {}
+      setIsLoadingMovies(false);
+      return;
     }
 
     // Não bloqueia por hasSupabase — igual ao fetchMyList que funciona sem essa verificação
@@ -2412,10 +2475,13 @@ export default function App() {
         supabase.removeChannel(channel);
         supabase.removeChannel(listChannel);
       };
+    } else if (mysqlUser) {
+      // Usuário MySQL: carrega filmes do banco PostgreSQL local
+      fetchMyMovies();
     } else {
       setMyMovies([]);
     }
-  }, [user]);
+  }, [user, mysqlUser]);
 
   const fetchMyList = async () => {
     if (!profile) return;
@@ -3331,7 +3397,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !mysqlUser) {
     if (showAppInfo) {
       return (
         <Suspense fallback={<div className="fixed inset-0 bg-[#050505]" />}>
