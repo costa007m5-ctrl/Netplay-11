@@ -7,20 +7,20 @@ const router = Router();
 const CREATE_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS movies (
   id INT PRIMARY KEY,
-  title TEXT NOT NULL,
-  type TEXT NOT NULL,
+  title VARCHAR(512) NOT NULL,
+  type VARCHAR(32) NOT NULL,
   overview TEXT,
-  poster_path TEXT,
-  backdrop_path TEXT,
-  release_date TEXT,
-  first_air_date TEXT,
+  poster_path VARCHAR(512),
+  backdrop_path VARCHAR(512),
+  release_date VARCHAR(32),
+  first_air_date VARCHAR(32),
   release_year INT,
   rating FLOAT,
   runtime INT,
-  genres TEXT,
-  genre TEXT,
-  video_url TEXT DEFAULT '',
-  logo_path TEXT,
+  genres VARCHAR(512),
+  genre VARCHAR(128),
+  video_url VARCHAR(2048) DEFAULT '',
+  logo_path VARCHAR(512),
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -33,22 +33,22 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS streaming_providers (
   id VARCHAR(255) PRIMARY KEY,
-  name TEXT NOT NULL,
-  logo_url TEXT,
-  url TEXT,
-  color TEXT,
+  name VARCHAR(255) NOT NULL,
+  logo_url VARCHAR(512),
+  url VARCHAR(512),
+  color VARCHAR(32),
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(255) PRIMARY KEY,
-  email TEXT,
-  name TEXT,
-  whatsapp TEXT,
-  plan TEXT DEFAULT 'free',
+  email VARCHAR(255),
+  name VARCHAR(255),
+  whatsapp VARCHAR(32),
+  plan VARCHAR(32) DEFAULT 'free',
   is_admin BOOLEAN DEFAULT FALSE,
-  referred_by TEXT,
+  referred_by VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS watch_parties (
   id VARCHAR(255) PRIMARY KEY,
   movie_id INT NOT NULL,
   host_id VARCHAR(255) NOT NULL,
-  current_time FLOAT DEFAULT 0,
+  current_pos FLOAT DEFAULT 0,
   is_playing BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
