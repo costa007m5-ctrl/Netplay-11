@@ -1936,7 +1936,10 @@ export default function App() {
       setLoading(false);
     });
 
-    // Ouvir mudanças na autenticação
+    // Ouvir mudanças na autenticação (login/logout após a verificação inicial)
+    // NÃO controla o loading — apenas o getSession() acima faz isso,
+    // para evitar que o onAuthStateChange dispare com null antes da sessão ser lida
+    // e mostre a tela de boas-vindas incorretamente ao usuário já logado.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
@@ -1944,7 +1947,6 @@ export default function App() {
         localStorage.removeItem('active_profile');
         setIsAdmin(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
