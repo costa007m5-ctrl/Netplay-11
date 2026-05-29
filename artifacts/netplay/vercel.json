@@ -5,20 +5,27 @@
   "outputDirectory": "dist/public",
   "installCommand": "npm install --legacy-peer-deps",
   "functions": {
-    "api/proxy-stream.ts": {
-      "maxDuration": 60,
-      "memory": 1024
-    },
-    "api/terabox-pro.ts": {
-      "maxDuration": 60
-    },
-    "api/terabox/convert.ts": {
-      "maxDuration": 60
-    },
-    "api/keepwarm-batch.ts": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
+    "api/proxy-stream.ts": { "maxDuration": 60, "memory": 1024 },
+    "api/terabox-pro.ts": { "maxDuration": 60 },
+    "api/terabox-v2.ts": { "maxDuration": 60 },
+    "api/terabox-v3.ts": { "maxDuration": 60 },
+    "api/terabox/convert.ts": { "maxDuration": 60 },
+    "api/keepwarm-batch.ts": { "maxDuration": 60, "memory": 1024 },
+    "api/probe-streams.ts": { "maxDuration": 30 },
+    "api/ai/translate.ts": { "maxDuration": 30 },
+    "api/tmdb/[...path].ts": { "maxDuration": 15 },
+    "api/betterflix/stream.ts": { "maxDuration": 30 },
+    "api/betterflix/canais.ts": { "maxDuration": 30 },
+    "api/betterflix/jogos.ts": { "maxDuration": 30 },
+    "api/betterflix/latest.ts": { "maxDuration": 30 },
+    "api/betterflix/recents.ts": { "maxDuration": 30 },
+    "api/epg/all.ts": { "maxDuration": 30 },
+    "api/epg/channel.ts": { "maxDuration": 15 },
+    "api/epg/schedule.ts": { "maxDuration": 15 },
+    "api/settings.ts": { "maxDuration": 15 },
+    "api/movies/upsert.ts": { "maxDuration": 15 },
+    "api/movies/check-existing.ts": { "maxDuration": 15 },
+    "api/flix3/[type].ts": { "maxDuration": 30 }
   },
   "rewrites": [
     {
@@ -31,8 +38,8 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization,X-Requested-With" }
       ]
     },
     {
