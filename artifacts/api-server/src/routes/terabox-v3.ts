@@ -178,7 +178,7 @@ async function handle(req: any, res: any) {
   trackUrl(url, "v2");
 
   try {
-    const data = await callV3Api({ url, dir_path: dirPath, page }, apiKey, apiSecret, { nocache });
+    const data = await callV3Api({ url, dir_path: dirPath, page }, apiKey, apiSecret ?? "", { nocache });
     res.json(data);
   } catch (error: unknown) {
     const err = error as { response?: { status?: number; data?: unknown }; message?: string; code?: string };

@@ -31,7 +31,7 @@ router.get("/admin/duplicates", async (_req, res) => {
       const url = `${SUPABASE_URL}/rest/v1/movies?select=${SELECT}&order=created_at.asc&limit=${PAGE}&offset=${offset}`;
       const resp = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
       if (!resp.ok) throw new Error(`Supabase error: ${resp.status}`);
-      const batch: any[] = await resp.json();
+      const batch = (await resp.json()) as any[];
       allItems = allItems.concat(batch);
       if (batch.length < PAGE) break;
       offset += PAGE;

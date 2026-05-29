@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router } from "express";
 import healthRouter from "./health";
 import teraboxRouter from "./terabox";
 import teraboxV2Router from "./terabox-v2";
@@ -19,7 +19,7 @@ import adminDuplicatesRouter from "./admin-duplicates";
 import mysqlRouter from "./mysql";
 import mysqlAuthRouter from "./mysql-auth";
 
-const router: IRouter = Router();
+const router = Router();
 
 router.use(healthRouter);
 router.use(teraboxRouter);

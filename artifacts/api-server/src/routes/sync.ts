@@ -64,7 +64,7 @@ async function supabaseCheckExisting(
         }
       );
       if (res.ok) {
-        const rows: { tmdb_id: number }[] = await res.json();
+        const rows = (await res.json()) as { tmdb_id: number }[];
         rows.forEach((r) => { if (r.tmdb_id) existingSet.add(r.tmdb_id); });
       }
     } catch {}
