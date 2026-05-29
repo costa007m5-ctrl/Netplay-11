@@ -12,7 +12,11 @@ export interface ApiCheckResult {
   detail?: string;
 }
 
-function withTimeout<T>(fn: () => Promise<T>, ms = 8000): Promise<T> {
+const AXIOS_TIMEOUT = 4000;
+const CHECK_TIMEOUT = 5000;
+const GLOBAL_DEADLINE = 9000;
+
+function withTimeout<T>(fn: () => Promise<T>, ms = CHECK_TIMEOUT): Promise<T> {
   return Promise.race([
     fn(),
     new Promise<T>((_, reject) =>
@@ -37,7 +41,7 @@ async function checkTmdb(): Promise<ApiCheckResult> {
     await withTimeout(() =>
       axios.get("https://api.themoviedb.org/3/movie/popular", {
         params: { api_key: apiKey, language: "pt-BR", page: 1 },
-        timeout: 7000,
+        timeout: AXIOS_TIMEOUT,
       })
     );
     return {
@@ -55,7 +59,7 @@ async function checkTmdb(): Promise<ApiCheckResult> {
         : status === 403
         ? "Acesso negado — chave sem permissão"
         : err?.message === "Timeout"
-        ? "Servidor TMDB não respondeu em 8s"
+        ? "Servidor TMDB não respondeu a tempo"
         : `Erro HTTP ${status ?? "desconhecido"}`;
     return {
       name: "TMDB",
@@ -84,7 +88,7 @@ async function checkTeraboxV1(): Promise<ApiCheckResult> {
     const res = await withTimeout(() =>
       axios.get("https://teraboxapp.xyz/api/get_download_links", {
         params: { url: "https://terabox.com/s/test", api_key: key },
-        timeout: 7000,
+        timeout: AXIOS_TIMEOUT,
         validateStatus: (s) => s < 500,
       })
     );
@@ -105,16 +109,14 @@ async function checkTeraboxV1(): Promise<ApiCheckResult> {
       reason: "Servidor online e chave aceita",
     };
   } catch (err: any) {
-    const reason =
-      err?.message === "Timeout"
-        ? "teraboxapp.xyz não respondeu em 8s — servidor fora do ar"
-        : `Erro de conexão: ${err?.message}`;
     return {
       name: "Terabox V1 (Pro)",
       group: "terabox",
       status: "error",
       latencyMs: Date.now() - start,
-      reason,
+      reason: err?.message === "Timeout"
+        ? "teraboxapp.xyz não respondeu a tempo — servidor fora do ar"
+        : `Erro de conexão: ${err?.message}`,
       detail: err?.message,
     };
   }
@@ -136,7 +138,7 @@ async function checkTeraboxV2(): Promise<ApiCheckResult> {
     const res = await withTimeout(() =>
       axios.get("https://xapiverse.com/api/terabox", {
         params: { url: "https://terabox.com/s/test", key },
-        timeout: 7000,
+        timeout: AXIOS_TIMEOUT,
         validateStatus: (s) => s < 500,
       })
     );
@@ -157,16 +159,14 @@ async function checkTeraboxV2(): Promise<ApiCheckResult> {
       reason: "Servidor online",
     };
   } catch (err: any) {
-    const reason =
-      err?.message === "Timeout"
-        ? "xapiverse.com não respondeu em 8s"
-        : `Erro: ${err?.message}`;
     return {
       name: "Terabox V2 (xapiverse)",
       group: "terabox",
       status: "error",
       latencyMs: Date.now() - start,
-      reason,
+      reason: err?.message === "Timeout"
+        ? "xapiverse.com não respondeu a tempo"
+        : `Erro: ${err?.message}`,
       detail: err?.message,
     };
   }
@@ -190,7 +190,7 @@ async function checkTeraboxV3(): Promise<ApiCheckResult> {
       axios.get("https://api.teraboxdl.site/v1/api", {
         params: { url: "https://terabox.com/s/test" },
         headers: { "x-api-key": key },
-        timeout: 7000,
+        timeout: AXIOS_TIMEOUT,
         validateStatus: (s) => s < 500,
       })
     );
@@ -211,16 +211,14 @@ async function checkTeraboxV3(): Promise<ApiCheckResult> {
       reason: "Servidor online e chave aceita",
     };
   } catch (err: any) {
-    const reason =
-      err?.message === "Timeout"
-        ? "api.teraboxdl.site não respondeu em 8s"
-        : `Erro: ${err?.message}`;
     return {
       name: "Terabox V3 (Premium)",
       group: "terabox",
       status: "error",
       latencyMs: Date.now() - start,
-      reason,
+      reason: err?.message === "Timeout"
+        ? "api.teraboxdl.site não respondeu a tempo"
+        : `Erro: ${err?.message}`,
       detail: err?.message,
     };
   }
@@ -231,11 +229,10 @@ async function checkBetterFlix(): Promise<ApiCheckResult> {
   try {
     const res = await withTimeout(() =>
       axios.get("https://betterflix.click/api/latest", {
-        timeout: 7000,
+        timeout: AXIOS_TIMEOUT,
         validateStatus: (s) => s < 600,
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           Referer: "https://betterflix.click/",
         },
       })
@@ -258,18 +255,16 @@ async function checkBetterFlix(): Promise<ApiCheckResult> {
       detail: `Status ${res.status} de betterflix.click`,
     };
   } catch (err: any) {
-    const reason =
-      err?.message === "Timeout"
-        ? "betterflix.click não respondeu em 8s — servidor fora do ar"
-        : err?.code === "ECONNREFUSED"
-        ? "Conexão recusada — betterflix.click fora do ar"
-        : `Erro de rede: ${err?.message}`;
     return {
       name: "BetterFlix",
       group: "flix",
       status: "error",
       latencyMs: Date.now() - start,
-      reason,
+      reason: err?.message === "Timeout"
+        ? "betterflix.click não respondeu a tempo"
+        : err?.code === "ECONNREFUSED"
+        ? "Conexão recusada — betterflix.click fora do ar"
+        : `Erro de rede: ${err?.message}`,
       detail: err?.message,
     };
   }
@@ -278,31 +273,32 @@ async function checkBetterFlix(): Promise<ApiCheckResult> {
 async function checkVidSrc(): Promise<ApiCheckResult> {
   const start = Date.now();
   const domains = ["vidsrc-embed.ru", "vidsrc-embed.su", "vidsrcme.su", "vsrc.su"];
-  let lastErr: any = null;
-  for (const domain of domains) {
-    try {
-      const res = await withTimeout(() =>
-        axios.get(`https://${domain}/movies/latest/page-1.json`, {
-          timeout: 6000,
-          validateStatus: (s) => s < 500,
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            Referer: `https://${domain}/`,
-          },
-        })
-      , 7000);
-      if (res.status === 200) {
-        return {
-          name: "VidSrc",
-          group: "flix",
-          status: "ok",
-          latencyMs: Date.now() - start,
-          reason: `Online via ${domain}`,
-        };
-      }
-    } catch (err: any) {
-      lastErr = err;
-    }
+
+  const results = await Promise.allSettled(
+    domains.map((domain) =>
+      axios.get(`https://${domain}/movies/latest/page-1.json`, {
+        timeout: AXIOS_TIMEOUT,
+        validateStatus: (s) => s < 500,
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Referer: `https://${domain}/`,
+        },
+      }).then((res) => ({ domain, status: res.status }))
+    )
+  );
+
+  const success = results.find(
+    (r) => r.status === "fulfilled" && r.value.status === 200
+  ) as PromiseFulfilledResult<{ domain: string; status: number }> | undefined;
+
+  if (success) {
+    return {
+      name: "VidSrc",
+      group: "flix",
+      status: "ok",
+      latencyMs: Date.now() - start,
+      reason: `Online via ${success.value.domain}`,
+    };
   }
   return {
     name: "VidSrc",
@@ -310,7 +306,6 @@ async function checkVidSrc(): Promise<ApiCheckResult> {
     status: "error",
     latencyMs: Date.now() - start,
     reason: "Todos os domínios VidSrc falharam — serviço fora do ar",
-    detail: lastErr?.message,
   };
 }
 
@@ -319,7 +314,7 @@ async function checkFlix3(): Promise<ApiCheckResult> {
   try {
     const res = await withTimeout(() =>
       axios.get("https://redeflixapi.store/list-movie-ids.txt", {
-        timeout: 7000,
+        timeout: AXIOS_TIMEOUT,
         validateStatus: (s) => s < 500,
         headers: { "User-Agent": "NetPlay/1.0" },
       })
@@ -341,16 +336,14 @@ async function checkFlix3(): Promise<ApiCheckResult> {
       reason: `redeflixapi.store retornou HTTP ${res.status}`,
     };
   } catch (err: any) {
-    const reason =
-      err?.message === "Timeout"
-        ? "redeflixapi.store não respondeu em 8s — servidor fora do ar"
-        : `Erro: ${err?.message}`;
     return {
       name: "Flix3 (RedeFlixAPI)",
       group: "flix",
       status: "error",
       latencyMs: Date.now() - start,
-      reason,
+      reason: err?.message === "Timeout"
+        ? "redeflixapi.store não respondeu a tempo — servidor fora do ar"
+        : `Erro: ${err?.message}`,
       detail: err?.message,
     };
   }
@@ -372,7 +365,7 @@ async function checkGeminiAI(): Promise<ApiCheckResult> {
     const res = await withTimeout(() =>
       axios.get(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
-        { timeout: 7000, validateStatus: (s) => s < 500 }
+        { timeout: AXIOS_TIMEOUT, validateStatus: (s) => s < 500 }
       )
     );
     if (res.status === 200) {
@@ -412,41 +405,6 @@ async function checkGeminiAI(): Promise<ApiCheckResult> {
   }
 }
 
-async function checkMySQL(): Promise<ApiCheckResult> {
-  const password = process.env.MYSQL_PASSWORD;
-  const user = process.env.MYSQL_USER;
-  const database = process.env.MYSQL_DATABASE;
-
-  if (!password) {
-    return {
-      name: "MySQL Railway",
-      group: "database",
-      status: "error",
-      latencyMs: null,
-      reason: "MYSQL_PASSWORD não configurado nos secrets do Vercel/Replit",
-      detail: "Adicione MYSQL_PASSWORD nas variáveis de ambiente do projeto no Vercel (Settings → Environment Variables)",
-    };
-  }
-
-  // Verifica se pelo menos as credenciais estão configuradas
-  // (conexão real via mysql2 não funciona em ambientes serverless como Vercel)
-  const configured = [password, user, database].filter(Boolean).length;
-  return {
-    name: "MySQL Railway",
-    group: "database",
-    status: configured >= 2 ? "ok" : "warning",
-    latencyMs: null,
-    reason:
-      configured >= 2
-        ? "Credenciais configuradas (MYSQL_PASSWORD + outros vars presentes)"
-        : "Apenas MYSQL_PASSWORD configurado — MYSQL_USER ou MYSQL_DATABASE ausentes",
-    detail:
-      configured < 2
-        ? "Configure também MYSQL_USER e MYSQL_DATABASE nas variáveis de ambiente"
-        : undefined,
-  };
-}
-
 function checkSupabase(): ApiCheckResult {
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -481,7 +439,11 @@ function checkSupabase(): ApiCheckResult {
 
 router.get("/api-diagnostics", async (_req, res) => {
   try {
-    const settled = await Promise.allSettled([
+    const deadline = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Deadline global atingido")), GLOBAL_DEADLINE)
+    );
+
+    const runChecks = Promise.allSettled([
       checkTmdb(),
       checkTeraboxV1(),
       checkTeraboxV2(),
@@ -490,9 +452,10 @@ router.get("/api-diagnostics", async (_req, res) => {
       checkVidSrc(),
       checkFlix3(),
       checkGeminiAI(),
-      checkMySQL(),
       Promise.resolve(checkSupabase()),
     ]);
+
+    const settled = await Promise.race([runChecks, deadline]);
 
     const checks: ApiCheckResult[] = settled.map((r) =>
       r.status === "fulfilled"
@@ -512,7 +475,7 @@ router.get("/api-diagnostics", async (_req, res) => {
 
     res.json({ checks, summary: { ok, errors, warnings, total: checks.length } });
   } catch (err: any) {
-    res.status(500).json({
+    res.status(200).json({
       checks: [],
       summary: { ok: 0, errors: 0, warnings: 0, total: 0 },
       error: err?.message || "Erro interno no diagnóstico",

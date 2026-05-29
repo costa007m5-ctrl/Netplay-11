@@ -334,7 +334,7 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
                 <Server size={20} /> Diagnóstico de APIs
               </h2>
               <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest mt-1">
-                TMDB · Terabox V1/V2/V3 · BetterFlix · VidSrc · Flix3 · Gemini AI · MySQL · Supabase
+                TMDB · Terabox V1/V2/V3 · BetterFlix · VidSrc · Flix3 · Gemini AI · Supabase
               </p>
             </div>
           </div>
