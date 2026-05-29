@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm --filter @workspace/netplay run build",
+  "outputDirectory": "artifacts/netplay/dist/public",
+  "functions": {
+    "api/server.ts": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/server" }
+  ]
+}

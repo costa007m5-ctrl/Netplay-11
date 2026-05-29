@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "types": ["node"],
+    "baseUrl": "..",
+    "paths": {
+      "@workspace/db": ["lib/db/src"],
+      "@workspace/api-zod": ["lib/api-zod/src"],
+      "@workspace/api-client-react": ["lib/api-client-react/src"]
+    }
+  },
+  "include": ["."]
+}

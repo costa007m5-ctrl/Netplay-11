@@ -1,13 +1,28 @@
 import { Router } from "express";
-import { db, settingsTable } from "@workspace/db";
+import { getMysqlPool } from "../lib/mysql";
 
 const router = Router();
 
+async function ensureSettingsTable() {
+  try {
+    const pool = getMysqlPool();
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS settings (
+        \`key\` VARCHAR(255) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+  } catch {}
+}
+
 router.get("/settings", async (_req, res) => {
   try {
-    const rows = await db.select().from(settingsTable);
+    await ensureSettingsTable();
+    const pool = getMysqlPool();
+    const [rows] = await pool.execute("SELECT `key`, value FROM settings") as any;
     const result: Record<string, string> = {};
-    for (const row of rows) {
+    for (const row of (rows as any[])) {
       result[row.key] = row.value;
     }
 
@@ -32,14 +47,13 @@ router.post("/settings", async (req, res) => {
     return;
   }
   try {
+    await ensureSettingsTable();
+    const pool = getMysqlPool();
     for (const [key, value] of Object.entries(updates)) {
-      await db
-        .insert(settingsTable)
-        .values({ key, value: String(value) })
-        .onConflictDoUpdate({
-          target: settingsTable.key,
-          set: { value: String(value), updated_at: new Date() },
-        });
+      await pool.execute(
+        "INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = NOW()",
+        [key, String(value)]
+      );
     }
     res.json({ success: true });
   } catch (err: any) {

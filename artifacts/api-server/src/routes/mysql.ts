@@ -2,6 +2,8 @@ import { Router } from "express";
 import { getMysqlPool, testMysqlConnection } from "../lib/mysql";
 import { db, moviesTable } from "@workspace/db";
 
+const pgAvailable = () => !!process.env.DATABASE_URL && db !== null;
+
 const router = Router();
 
 const CREATE_TABLES_SQL = `
@@ -123,12 +125,16 @@ router.post("/mysql/create-tables", async (_req, res) => {
 });
 
 router.post("/mysql/migrate", async (req, res) => {
+  if (!pgAvailable()) {
+    res.status(503).json({ error: "PostgreSQL não disponível neste ambiente (Vercel). Use apenas MySQL Railway." });
+    return;
+  }
   const { batchSize = 100, offset = 0 } = req.body as { batchSize?: number; offset?: number };
 
   try {
     const pool = getMysqlPool();
 
-    const pgMovies = await db
+    const pgMovies = await db!
       .select()
       .from(moviesTable)
       .limit(batchSize)
@@ -174,6 +180,10 @@ router.post("/mysql/migrate", async (req, res) => {
 });
 
 router.post("/mysql/import-to-pg", async (req, res) => {
+  if (!pgAvailable()) {
+    res.status(503).json({ error: "PostgreSQL não disponível neste ambiente (Vercel). Use apenas MySQL Railway." });
+    return;
+  }
   const { batchSize = 500, offset = 0 } = req.body as { batchSize?: number; offset?: number };
 
   try {
@@ -194,7 +204,7 @@ router.post("/mysql/import-to-pg", async (req, res) => {
 
     let imported = 0;
     for (const m of rows) {
-      await db.insert(moviesTable).values({
+      await db!.insert(moviesTable).values({
         id: Number(m.id),
         title: m.title,
         type: m.type || "movie",
