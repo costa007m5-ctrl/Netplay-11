@@ -3269,6 +3269,7 @@ export default function App() {
             try { sessionStorage.setItem('netplay_intro_shown', '1'); } catch {}
             if (mode) setInitialLoginMode(mode);
             setShowIntro(false);
+            setShowAppInfo(false);
           }}
           movies={myMovies}
         />

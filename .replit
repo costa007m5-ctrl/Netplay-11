@@ -33,8 +33,8 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=8080 pnpm --filter @workspace/api-server run dev"
-waitForPort = 8080
+args = "PORT=3001 pnpm --filter @workspace/api-server run dev"
+waitForPort = 3001
 
 [[workflows.workflow]]
 name = "Start application"
@@ -45,7 +45,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/netplay run dev"
+args = "PORT=5000 pnpm --filter @workspace/netplay run dev"
 waitForPort = 5000
 
 [agent]
@@ -63,16 +63,24 @@ timeoutMs = 20000
 PORT = "8080"
 
 [[ports]]
-localPort = 5000
-externalPort = 80
+localPort = 3001
+externalPort = 3001
 
 [[ports]]
-localPort = 25512
+localPort = 5000
 externalPort = 80
 
 [[ports]]
 localPort = 8080
 externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 25512
+externalPort = 80
 
 [nix]
 channel = "stable-25_05"

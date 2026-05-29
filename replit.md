@@ -4,8 +4,8 @@ A Netflix-style streaming platform that aggregates and streams content from Tera
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
-- `pnpm --filter @workspace/netplay run dev` — run the frontend (port 5000)
+- `PORT=3001 pnpm --filter @workspace/api-server run dev` — run the API server (port 3001)
+- `PORT=5000 pnpm --filter @workspace/netplay run dev` — run the frontend (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec

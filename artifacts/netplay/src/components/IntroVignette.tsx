@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Film, Radio, Download, Crown, Shield, ChevronRight } from 'lucide-react';
+import { Film, Radio, Download, Crown, Shield, ChevronRight, Sparkles, Users, Globe, ShieldCheck } from 'lucide-react';
 
 interface IntroVignetteProps {
   onComplete: (mode?: 'login' | 'signup') => void;
@@ -19,6 +19,12 @@ const DEFAULT_MOVIES = [
   { poster_path: 'https://image.tmdb.org/t/p/w500/A7uByuyGKE69uYv7SFF9vI9Ym96.jpg' },
   { poster_path: 'https://image.tmdb.org/t/p/w500/hZkgoQYus5vegHoetLkCJzVAzcn.jpg' },
   { poster_path: 'https://image.tmdb.org/t/p/w500/9n2tJBplPbgR2ca05hS5CKXwP2c.jpg' },
+  { poster_path: 'https://image.tmdb.org/t/p/w500/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg' },
+  { poster_path: 'https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg' },
+  { poster_path: 'https://image.tmdb.org/t/p/w500/NNxYkU70HPurnNCSiCjYAmacwm.jpg' },
+  { poster_path: 'https://image.tmdb.org/t/p/w500/7WsyChQLEftFiDOVTGkv3hFpyyt.jpg' },
+  { poster_path: 'https://image.tmdb.org/t/p/w500/1XDDXPXGiI8id7MrUxK36ke7gkX.jpg' },
+  { poster_path: 'https://image.tmdb.org/t/p/w500/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg' },
 ];
 
 const CARDS = [
@@ -29,8 +35,9 @@ const CARDS = [
     subtitle: 'ILIMITADOS',
     subtitleColor: '#ff1a1a',
     desc: 'Milhares de títulos em 4K e Ultra HD para você maratonar.',
-    image: 'https://image.tmdb.org/t/p/w500/8Gxv8ZiiQjLTVq9hlqU1Mv2U0qO.jpg',
-    overlay: 'linear-gradient(135deg, rgba(160,0,0,0.7) 0%, rgba(0,0,0,0.3) 100%)',
+    image: 'https://image.tmdb.org/t/p/w500/s16H6tpK2utvwDtzZ8Qy4qm5Emw.jpg',
+    bgGradient: 'linear-gradient(135deg, #7f0000 0%, #1a0000 100%)',
+    overlay: 'linear-gradient(135deg, rgba(160,0,0,0.55) 0%, rgba(0,0,0,0.25) 100%)',
     live: false,
   },
   {
@@ -40,8 +47,9 @@ const CARDS = [
     subtitle: 'AO VIVO',
     subtitleColor: '#ff1a1a',
     desc: 'Esportes, notícias, filmes e muito mais em tempo real.',
-    image: 'https://image.tmdb.org/t/p/w500/hZkgoQYus5vegHoetLkCJzVAzcn.jpg',
-    overlay: 'linear-gradient(135deg, rgba(0,20,100,0.7) 0%, rgba(0,0,0,0.3) 100%)',
+    image: 'https://image.tmdb.org/t/p/w500/rSPw7tgCH9c6NqICZef4kZjFOQ5.jpg',
+    bgGradient: 'linear-gradient(135deg, #00124a 0%, #002080 100%)',
+    overlay: 'linear-gradient(135deg, rgba(0,20,100,0.6) 0%, rgba(0,0,0,0.3) 100%)',
     live: true,
   },
   {
@@ -51,8 +59,9 @@ const CARDS = [
     subtitle: 'OFFLINE',
     subtitleColor: '#a855f7',
     desc: 'Baixe seus conteúdos favoritos e assista onde estiver.',
-    image: 'https://image.tmdb.org/t/p/w500/A7uByuyGKE69uYv7SFF9vI9Ym96.jpg',
-    overlay: 'linear-gradient(135deg, rgba(80,0,130,0.7) 0%, rgba(0,0,0,0.3) 100%)',
+    image: null,
+    bgGradient: 'linear-gradient(135deg, #3b0764 0%, #1e1b4b 100%)',
+    overlay: 'linear-gradient(90deg, rgba(5,5,5,0.85) 0%, rgba(80,0,130,0.3) 60%, rgba(0,0,0,0.1) 100%)',
     live: false,
   },
   {
@@ -62,8 +71,57 @@ const CARDS = [
     subtitle: 'PREMIUM',
     subtitleColor: '#f97316',
     desc: 'Sem anúncios, qualidade máxima e som imersivo Dolby.',
-    image: 'https://image.tmdb.org/t/p/w500/r2J0VzYnUEsIbiSSTSksvUo7mo1.jpg',
-    overlay: 'linear-gradient(135deg, rgba(120,50,0,0.7) 0%, rgba(0,0,0,0.3) 100%)',
+    image: null,
+    bgGradient: 'linear-gradient(135deg, #78350f 0%, #431407 100%)',
+    overlay: 'linear-gradient(90deg, rgba(5,5,5,0.85) 0%, rgba(120,50,0,0.3) 60%, rgba(0,0,0,0.1) 100%)',
+    live: false,
+  },
+  {
+    num: '05',
+    icon: Sparkles,
+    title: 'IA',
+    subtitle: 'RECOMENDAÇÕES',
+    subtitleColor: '#22d3ee',
+    desc: 'Inteligência artificial que aprende o que você ama.',
+    image: null,
+    bgGradient: 'linear-gradient(135deg, #083344 0%, #0e4a5a 100%)',
+    overlay: 'linear-gradient(90deg, rgba(5,5,5,0.85) 0%, rgba(0,70,90,0.3) 60%, rgba(0,0,0,0.1) 100%)',
+    live: false,
+  },
+  {
+    num: '06',
+    icon: Users,
+    title: 'PERFIS',
+    subtitle: 'MÚLTIPLOS',
+    subtitleColor: '#4ade80',
+    desc: 'Até 5 perfis por conta, cada um com seu gosto.',
+    image: null,
+    bgGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 100%)',
+    overlay: 'linear-gradient(90deg, rgba(5,5,5,0.85) 0%, rgba(0,80,20,0.3) 60%, rgba(0,0,0,0.1) 100%)',
+    live: false,
+  },
+  {
+    num: '07',
+    icon: Globe,
+    title: 'LEGENDAS',
+    subtitle: 'EM PORTUGUÊS',
+    subtitleColor: '#38bdf8',
+    desc: 'Legendas e dublagem em português brasileiro.',
+    image: null,
+    bgGradient: 'linear-gradient(135deg, #0c1a6e 0%, #1e3a8a 100%)',
+    overlay: 'linear-gradient(90deg, rgba(5,5,5,0.85) 0%, rgba(10,30,120,0.3) 60%, rgba(0,0,0,0.1) 100%)',
+    live: false,
+  },
+  {
+    num: '08',
+    icon: ShieldCheck,
+    title: 'CONTROLE',
+    subtitle: 'PARENTAL',
+    subtitleColor: '#fb923c',
+    desc: 'Proteja as crianças com filtros de conteúdo avançados.',
+    image: null,
+    bgGradient: 'linear-gradient(135deg, #431407 0%, #7c2d12 100%)',
+    overlay: 'linear-gradient(90deg, rgba(5,5,5,0.85) 0%, rgba(120,40,0,0.3) 60%, rgba(0,0,0,0.1) 100%)',
     live: false,
   },
 ];
@@ -100,7 +158,9 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
   const [activeCard, setActiveCard] = useState(0);
   const [pendingMode, setPendingMode] = useState<'login' | 'signup' | null>(null);
 
-  const displayMovies = movies.length > 8 ? movies : [...DEFAULT_MOVIES, ...movies];
+  const allPosters = movies.length > 8
+    ? movies.filter((m: any) => m.poster_path)
+    : [...DEFAULT_MOVIES, ...movies.filter((m: any) => m.poster_path)];
 
   useEffect(() => {
     const t = setTimeout(() => { setMounted(true); playIntroSound(); }, 200);
@@ -129,6 +189,12 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
     }
   };
 
+  const getRowPosters = (rowIndex: number) => {
+    const pool = [...allPosters, ...allPosters, ...allPosters, ...allPosters];
+    const offset = rowIndex * Math.max(6, Math.floor(allPosters.length / 3));
+    return pool.slice(offset, offset + 24);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -138,28 +204,30 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
     >
       {/* ── Fundo cinematográfico ── */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* Grade de posters em blur */}
+        {/* Grade de posters em blur — cada fileira com conjunto diferente */}
         <div className="absolute inset-0 opacity-[0.08] grayscale blur-sm scale-110">
-          {[0, 1, 2].map(row => (
-            <motion.div
-              key={row}
-              animate={{ x: row % 2 === 0 ? [0, -1400] : [-1400, 0] }}
-              transition={{ duration: 65 + row * 18, repeat: Infinity, ease: 'linear' }}
-              className="flex gap-3 mb-3 shrink-0"
-              style={{ marginTop: row === 0 ? 0 : 0 }}
-            >
-              {[...displayMovies, ...displayMovies, ...displayMovies].slice(0, 24).map((m, i) => (
-                <div key={i} className="w-32 h-48 rounded-xl overflow-hidden flex-shrink-0 border border-white/5">
-                  <img
-                    src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`}
-                    className="w-full h-full object-cover"
-                    alt=""
-                    loading="lazy"
-                  />
-                </div>
-              ))}
-            </motion.div>
-          ))}
+          {[0, 1, 2].map(row => {
+            const rowPosters = getRowPosters(row);
+            return (
+              <motion.div
+                key={row}
+                animate={{ x: row % 2 === 0 ? [0, -1400] : [-1400, 0] }}
+                transition={{ duration: 65 + row * 18, repeat: Infinity, ease: 'linear' }}
+                className="flex gap-3 mb-3 shrink-0"
+              >
+                {[...rowPosters, ...rowPosters].map((m, i) => (
+                  <div key={i} className="w-32 h-48 rounded-xl overflow-hidden flex-shrink-0 border border-white/5">
+                    <img
+                      src={m.poster_path?.startsWith('http') ? m.poster_path : `https://image.tmdb.org/t/p/w185${m.poster_path}`}
+                      className="w-full h-full object-cover"
+                      alt=""
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* Gradientes */}
@@ -263,7 +331,7 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
                 key={card.num}
                 initial={{ opacity: 0, x: -24 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 + idx * 0.12, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ delay: 0.5 + idx * 0.1, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
                 className="relative rounded-2xl overflow-hidden flex items-stretch"
                 style={{
                   background: 'rgba(255,255,255,0.04)',
@@ -296,9 +364,24 @@ const IntroVignette: React.FC<IntroVignetteProps> = ({ onComplete, isLoading = f
                   <p className="text-gray-400 text-[11px] mt-1.5 leading-relaxed">{card.desc}</p>
                 </div>
 
-                {/* Imagem cinematográfica */}
-                <div className="w-28 h-[88px] relative flex-shrink-0 self-stretch overflow-hidden rounded-l-none rounded-r-2xl">
-                  <img src={card.image} className="w-full h-full object-cover" alt="" loading="lazy" />
+                {/* Imagem / gradiente representativo */}
+                <div
+                  className="w-28 h-[88px] relative flex-shrink-0 self-stretch overflow-hidden rounded-l-none rounded-r-2xl"
+                  style={{ background: card.bgGradient }}
+                >
+                  {card.image && (
+                    <img
+                      src={card.image}
+                      className="w-full h-full object-cover"
+                      alt=""
+                      loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  {/* Ícone representativo no fundo */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Icon size={32} style={{ color: card.subtitleColor, opacity: card.image ? 0 : 0.35 }} />
+                  </div>
                   <div className="absolute inset-0" style={{ background: card.overlay }} />
                   {/* Brilho de borda */}
                   <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#050505]/80 to-transparent" />

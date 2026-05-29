@@ -114,26 +114,6 @@ export const MovieDetailRouteWrapper = ({
     return undefined;
   }, [movie, top10Movies, top10Series]);
 
-  if (notFound) {
-    return (
-      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
-        <p className="text-white text-xl font-bold uppercase tracking-widest">Conteúdo Não Localizado</p>
-        <button onClick={closeMovieDetails} className="mt-8 px-8 py-3 bg-red-600 font-bold tracking-widest hover:bg-white hover:text-black uppercase text-white rounded-xl transition-all shadow-xl">Voltar</button>
-      </div>
-    );
-  }
-
-  if (!movie) {
-    return (
-      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
-        <div className="w-20 h-20 bg-red-600 rounded-3xl flex items-center justify-center animate-bounce shadow-[0_0_50px_rgba(220,38,38,0.5)]">
-          <Play size={40} fill="white" className="text-white ml-2" />
-        </div>
-        <p className="mt-8 text-white font-black uppercase tracking-[0.3em] text-sm animate-pulse italic">Carregando detalhes...</p>
-      </div>
-    );
-  }
-
   const genreBasedSimilar = useMemo(() => {
     if (!movie) return [];
     const movieGenres = (movie.genres || movie.genre || '').split(',').map((g: string) => g.trim().toLowerCase()).filter(Boolean);
@@ -157,6 +137,26 @@ export const MovieDetailRouteWrapper = ({
     }
     return top;
   }, [movie, myMovies]);
+
+  if (notFound) {
+    return (
+      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
+        <p className="text-white text-xl font-bold uppercase tracking-widest">Conteúdo Não Localizado</p>
+        <button onClick={closeMovieDetails} className="mt-8 px-8 py-3 bg-red-600 font-bold tracking-widest hover:bg-white hover:text-black uppercase text-white rounded-xl transition-all shadow-xl">Voltar</button>
+      </div>
+    );
+  }
+
+  if (!movie) {
+    return (
+      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
+        <div className="w-20 h-20 bg-red-600 rounded-3xl flex items-center justify-center animate-bounce shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+          <Play size={40} fill="white" className="text-white ml-2" />
+        </div>
+        <p className="mt-8 text-white font-black uppercase tracking-[0.3em] text-sm animate-pulse italic">Carregando detalhes...</p>
+      </div>
+    );
+  }
 
   return (
     <MovieDetailsModal
