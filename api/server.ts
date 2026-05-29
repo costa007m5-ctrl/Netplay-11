@@ -2,7 +2,12 @@ const appPromise = import("../artifacts/api-server/src/app.js").then(
   (m) => m.default,
 );
 
-export default async function handler(req: any, res: any) {
-  const app = await appPromise;
-  return app(req, res);
+export default function handler(req: any, res: any) {
+  appPromise
+    .then((app) => app(req, res))
+    .catch((err: any) => {
+      res
+        .status(500)
+        .json({ error: "Falha ao inicializar servidor", message: err?.message });
+    });
 }
