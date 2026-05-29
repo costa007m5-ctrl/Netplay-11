@@ -2527,21 +2527,32 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
 
       {isIframeMode ? (
         <>
-          <iframe
-            src={forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || activeSrc || src) : (activeSrc || src)}
-            className="relative z-[10] w-full h-full border-0"
-            {...(!sandboxDisabled && { sandbox: `allow-scripts allow-same-origin allow-presentation allow-forms${!popupsBlocked ? ' allow-popups allow-popups-to-escape-sandbox' : ''}` })}
-            allowFullScreen
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share; clipboard-write"
-            referrerPolicy="origin"
-            onLoad={() => {
-              setIsLoading(false);
-              setLoadingProgress(100);
-              setShowLogoOverlay(false);
-              setIsPlaying(true);
-              hasStartedPlayedRef.current = true;
-            }}
-          />
+          {(() => {
+            const iframeSrc = forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || activeSrc || src) : (activeSrc || src);
+            const isRedeflixEmbed = !!(iframeSrc?.includes('redeflixapi.store'));
+            const sandboxAttr = sandboxDisabled
+              ? undefined
+              : isRedeflixEmbed
+                ? 'allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
+                : `allow-scripts allow-same-origin allow-presentation allow-forms${!popupsBlocked ? ' allow-popups allow-popups-to-escape-sandbox' : ''}`;
+            return (
+              <iframe
+                src={iframeSrc}
+                className="relative z-[10] w-full h-full border-0"
+                {...(sandboxAttr ? { sandbox: sandboxAttr } : {})}
+                allowFullScreen
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share; clipboard-write"
+                referrerPolicy={isRedeflixEmbed ? 'no-referrer' : 'origin'}
+                onLoad={() => {
+                  setIsLoading(false);
+                  setLoadingProgress(100);
+                  setShowLogoOverlay(false);
+                  setIsPlaying(true);
+                  hasStartedPlayedRef.current = true;
+                }}
+              />
+            );
+          })()}
 
           {/* Botões flutuantes sempre visíveis no modo iframe */}
           {/* Contador de auto-próximo episódio (canto inferior direito) */}
