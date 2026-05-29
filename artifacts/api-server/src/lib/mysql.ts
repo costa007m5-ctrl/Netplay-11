@@ -6,7 +6,7 @@ export function getMysqlPool(): mysql.Pool {
   if (!pool) {
     // Usa sempre o proxy público do Railway (funciona de qualquer ambiente externo)
     const host = "zephyr.proxy.rlwy.net";
-    const port = 47257;
+    const port = 31896;
     const user = process.env.MYSQL_USER || "root";
     const password = process.env.MYSQL_PASSWORD;
     const database = process.env.MYSQL_DATABASE || "railway";
