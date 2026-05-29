@@ -2530,11 +2530,9 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
           {(() => {
             const iframeSrc = forcedIframeMode ? (iframeFallbackUrl || finalVerificationUrl || activeSrc || src) : (activeSrc || src);
             const isRedeflixEmbed = !!(iframeSrc?.includes('redeflixapi.store'));
-            const sandboxAttr = sandboxDisabled
+            const sandboxAttr = (sandboxDisabled || isRedeflixEmbed)
               ? undefined
-              : isRedeflixEmbed
-                ? 'allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
-                : `allow-scripts allow-same-origin allow-presentation allow-forms${!popupsBlocked ? ' allow-popups allow-popups-to-escape-sandbox' : ''}`;
+              : `allow-scripts allow-same-origin allow-presentation allow-forms${!popupsBlocked ? ' allow-popups allow-popups-to-escape-sandbox' : ''}`;
             return (
               <iframe
                 src={iframeSrc}
@@ -2542,7 +2540,7 @@ const NetflixPlayer: React.FC<NetflixPlayerProps> = ({
                 {...(sandboxAttr ? { sandbox: sandboxAttr } : {})}
                 allowFullScreen
                 allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share; clipboard-write"
-                referrerPolicy={isRedeflixEmbed ? 'no-referrer' : 'origin'}
+                referrerPolicy={isRedeflixEmbed ? 'no-referrer-when-downgrade' : 'origin'}
                 onLoad={() => {
                   setIsLoading(false);
                   setLoadingProgress(100);
