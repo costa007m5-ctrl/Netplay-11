@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Image, Tv2, CheckCircle2, Loader2, RotateCcw, Zap, Pause, Play, X, RefreshCcw, ToggleLeft, ToggleRight, Clock } from 'lucide-react';
+import { ArrowLeft, Image, Tv2, CheckCircle2, Loader2, RotateCcw, Zap, Pause, Play, X, RefreshCcw, ToggleLeft, ToggleRight, Clock, Database } from 'lucide-react';
 import { useSyncContext, SyncJob } from '../contexts/SyncContext';
 import AdminFlix3Tab from '../components/admin/AdminFlix3Tab';
 import { AdminPlayerAPIsTab } from '../components/admin/AdminPlayerAPIsTab';
 import { AdminFlixAPITab } from '../components/admin/AdminFlixAPITab';
+import AdminMysqlMigrationTab from '../components/admin/AdminMysqlMigrationTab';
 
 const AUTO_SYNC_KEY = 'netplay_admin2_autosync';
 const LAST_FLIX3_SYNC_KEY = 'netplay_last_flix3_sync';
@@ -164,6 +165,24 @@ export default function Admin2Page({ navigate }: { navigate: (to: any) => void }
           </div>
           <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8">
             <AdminPlayerAPIsTab />
+          </div>
+        </section>
+
+        {/* ── MySQL Railway ── */}
+        <section className="mb-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-2 h-6 bg-purple-500 rounded-full" />
+            <div>
+              <h2 className="text-xl font-black uppercase italic tracking-tighter text-purple-400 flex items-center gap-2">
+                <Database size={20} /> MySQL Railway — Banco Secundário
+              </h2>
+              <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest mt-1">
+                Migração automática de todo o conteúdo · zephyr.proxy.rlwy.net:47257
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8">
+            <AdminMysqlMigrationTab />
           </div>
         </section>
 
