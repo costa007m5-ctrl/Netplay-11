@@ -163,10 +163,13 @@ export default function App() {
   }, [location.pathname]);
 
   // Caminho primário — quando um modal de filme está aberto, preserva o path de fundo
+  // backgroundLocation pode ser string (pathname) ou objeto Location — trata ambos
   const activePrimaryPath = useMemo(() => {
     const bgLoc = state?.backgroundLocation;
-    const primaryPath = bgLoc ? bgLoc.pathname : location.pathname;
-    return primaryPath.split('/')[1] || 'menu';
+    const primaryPath = bgLoc
+      ? (typeof bgLoc === 'string' ? bgLoc : (bgLoc.pathname ?? location.pathname))
+      : location.pathname;
+    return (primaryPath || location.pathname).split('/')[1] || 'menu';
   }, [location.pathname, state?.backgroundLocation]);
 
   // Lazy-mount: cada tab monta só na primeira visita, depois fica sempre na memória
