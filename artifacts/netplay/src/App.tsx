@@ -12,6 +12,7 @@ const SettingsModal = React.lazy(() => import('./components/SettingsModal'));
 const IntroVignette = React.lazy(() => import('./components/IntroVignette'));
 const FlixNovitiesPage = React.lazy(() => import('./pages/FlixNovitiesPage'));
 const AppInfo = React.lazy(() => import('./components/AppInfo'));
+const OnboardingFlow = React.lazy(() => import('./components/OnboardingFlow'));
 const AdminPanel = React.lazy(() => import('./components/admin/AdminPanel'));
 const CanaisTVPage = React.lazy(() => import('./pages/CanaisTVPage'));
 const ProfileDashboard = React.lazy(() => import('./components/ProfileDashboard'));
@@ -103,6 +104,7 @@ export default function App() {
     try { return !sessionStorage.getItem('netplay_intro_shown'); } catch { return true; }
   });
   const [showAppInfo, setShowAppInfo] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [initialLoginMode, setInitialLoginMode] = useState<'login' | 'signup'>('login');
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -2649,18 +2651,21 @@ export default function App() {
   }, [visibleMovies, loadingMoreCount]);
 
   // Função auxiliar para agrupar por gênero — capado para performance com 22k filmes
+  const parseGenreString = (g: any): string[] => {
+    if (!g) return [];
+    if (Array.isArray(g)) return g.map((s: any) => String(s).trim()).filter(Boolean);
+    if (typeof g === 'string') return g.split(',').map(s => s.trim()).filter(Boolean);
+    return [];
+  };
+
   const groupByGenre = (movies: Movie[]) => {
     const counts: Record<string, number> = {};
     const grouped: { [key: string]: Movie[] } = {};
-    // Primeira passagem: conta para selecionar gêneros relevantes
     movies.forEach(movie => {
-      if (!movie.genres) { counts['Outros'] = (counts['Outros'] || 0) + 1; return; }
-      movie.genres.split(',').forEach(g => {
-        const genre = g.trim();
-        if (genre) counts[genre] = (counts[genre] || 0) + 1;
-      });
+      const genres = parseGenreString(movie.genres);
+      if (!genres.length) { counts['Outros'] = (counts['Outros'] || 0) + 1; return; }
+      genres.forEach(genre => { if (genre) counts[genre] = (counts[genre] || 0) + 1; });
     });
-    // Seleciona até 25 gêneros com mais de 5 filmes, ordenados por contagem
     const topGenres = new Set(
       Object.entries(counts)
         .filter(([, c]) => c >= 5)
@@ -2668,10 +2673,10 @@ export default function App() {
         .slice(0, 25)
         .map(([g]) => g)
     );
-    // Segunda passagem: preenche apenas os gêneros selecionados, cap de 30 por gênero
     movies.forEach(movie => {
-      const genreList = movie.genres
-        ? movie.genres.split(',').map(g => g.trim()).filter(g => topGenres.has(g))
+      const genres = parseGenreString(movie.genres);
+      const genreList = genres.length
+        ? genres.filter(g => topGenres.has(g))
         : (topGenres.has('Outros') ? ['Outros'] : []);
       genreList.forEach(genre => {
         if (!grouped[genre]) grouped[genre] = [];
@@ -3128,15 +3133,21 @@ export default function App() {
       return visibleMovies.filter(m => m.id?.toString() !== movie.id?.toString()).slice(0, 12);
     }
 
-    const currentGenres = movie.genres.split(',').map(g => g.trim());
+    const parseGenres = (g: any): string[] => {
+      if (!g) return [];
+      if (Array.isArray(g)) return g.map((s: any) => String(s).trim()).filter(Boolean);
+      if (typeof g === 'string') return g.split(',').map(s => s.trim()).filter(Boolean);
+      return [];
+    };
+
+    const currentGenres = parseGenres(movie.genres);
     
-    // Calcular pontuação de similaridade baseada em gêneros comuns
     const scoredMovies = visibleMovies
       .filter(m => m.id?.toString() !== movie.id?.toString())
       .map(m => {
         let score = 0;
         if (m.genres) {
-          const mGenres = m.genres.split(',').map(g => g.trim());
+          const mGenres = parseGenres(m.genres);
           score = currentGenres.filter(g => mGenres.includes(g)).length;
         }
         return { movie: m, score };
@@ -3317,10 +3328,35 @@ export default function App() {
 
   if (!user) {
     if (showAppInfo) {
-      return <AppInfo onContinue={(mode) => {
-        if (mode) setInitialLoginMode(mode);
-        setShowAppInfo(false);
-      }} movies={myMovies} />;
+      return (
+        <Suspense fallback={<div className="fixed inset-0 bg-[#050505]" />}>
+          <AppInfo onContinue={(mode) => {
+            if (mode === 'signup') {
+              setShowAppInfo(false);
+              setShowOnboarding(true);
+            } else {
+              if (mode) setInitialLoginMode(mode);
+              setShowAppInfo(false);
+            }
+          }} movies={myMovies} />
+        </Suspense>
+      );
+    }
+    if (showOnboarding) {
+      return (
+        <Suspense fallback={<div className="fixed inset-0 bg-[#050505]" />}>
+          <OnboardingFlow
+            onComplete={() => {
+              setShowOnboarding(false);
+              setInitialLoginMode('login');
+            }}
+            onBack={() => {
+              setShowOnboarding(false);
+              setShowAppInfo(true);
+            }}
+          />
+        </Suspense>
+      );
     }
     return <Login initialMode={initialLoginMode} movies={myMovies} />;
   }
